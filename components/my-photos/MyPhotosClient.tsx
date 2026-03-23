@@ -289,12 +289,7 @@ export default function MyPhotosClient({
           <div className="ph-title">{drillColl ? drillColl.name : 'My Photos'}</div>
           <div className="ph-sub">
             {!drillColl && tab === 'downloads' ? (
-              <>
-                {downloadedPhotos.length} photo{downloadedPhotos.length !== 1 ? 's' : ''} you&apos;ve downloaded
-                <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-                  From the team library · newest saves first
-                </span>
-              </>
+              `${downloadedPhotos.length} photo${downloadedPhotos.length !== 1 ? 's' : ''} you've downloaded`
             ) : (
               <>
                 {photos.length} in Library · {totalDownloads} uses by the team
@@ -590,7 +585,7 @@ export default function MyPhotosClient({
           </span>
           <span className="mp-select-bar-hint">
             {tab === 'downloads'
-              ? `Delete removes them from this list only (Library unchanged; Browse checkmark clears) · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS}`
+              ? `Remove from downloads only clears your list (Library unchanged; Browse checkmark clears) · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS}`
               : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} photos`}
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
@@ -607,12 +602,12 @@ export default function MyPhotosClient({
           </button>
           <button
             type="button"
-            className="btn-del-sm"
+            className={tab === 'downloads' ? 'btn-remove-downloads' : 'btn-del-sm'}
             disabled={!selectedIds.length || bulkDeleting || zipBusy || removeDownloadsBusy}
             onClick={tab === 'downloads' ? handleRemoveFromDownloads : handleBulkDelete}
           >
             {tab === 'downloads'
-              ? (removeDownloadsBusy ? 'Removing…' : 'Delete')
+              ? (removeDownloadsBusy ? 'Removing…' : 'Remove from downloads')
               : (bulkDeleting ? 'Deleting…' : 'Delete')}
           </button>
         </div>

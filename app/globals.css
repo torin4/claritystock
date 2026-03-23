@@ -681,6 +681,28 @@ body {
 .modal-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
 .btn-del-sm { background: none; border: 1px solid rgba(181,64,64,0.3); color: var(--red); padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: var(--font-body); display: flex; align-items: center; gap: 4px; }
 .btn-del-sm:hover { background: rgba(181,64,64,0.08); border-color: var(--red); }
+/* My downloads selection bar — explicit red CTA */
+.btn-remove-downloads {
+  background: rgba(181, 64, 64, 0.14);
+  border: 1px solid var(--red);
+  color: var(--red);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+.btn-remove-downloads:hover:not(:disabled) {
+  background: rgba(181, 64, 64, 0.22);
+  border-color: #c94a4a;
+  color: #e07070;
+}
+.btn-remove-downloads:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .btn-save { background: var(--accent); color: #fff; border: none; padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: var(--font-body); }
 
 /* ── My Photos — context bar, toolbar, tabs, collections grid ── */
