@@ -29,6 +29,28 @@ export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) 
   revalidatePath('/my-photos')
 }
 
+/** Set the same collection (or null to leave no collection) for many of your photos. */
+export async function updatePhotosCollectionIds(photoIds: string[], collectionId: string | null) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  const unique = Array.from(new Set(photoIds)).filter(Boolean)
+  if (!unique.length) return { updated: 0 }
+
+  const { data, error } = await supabase
+    .from('photos')
+    .update({ collection_id: collectionId })
+    .in('id', unique)
+    .eq('photographer_id', user.id)
+    .select('id')
+
+  if (error) throw error
+  revalidatePath('/')
+  revalidatePath('/my-photos')
+  return { updated: data?.length ?? 0 }
+}
+
 export async function deletePhoto(
   id: string,
   storagePath: string | null,

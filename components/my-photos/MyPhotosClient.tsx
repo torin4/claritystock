@@ -11,7 +11,7 @@ import CreateCollectionModal from '@/components/my-photos/CreateCollectionModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { deleteCollection } from '@/lib/actions/collections.actions'
-import { deletePhotos } from '@/lib/actions/photos.actions'
+import { deletePhotos, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
 import { PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
@@ -47,6 +47,8 @@ export default function MyPhotosClient({
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [zipBusy, setZipBusy] = useState(false)
   const [removeDownloadsBusy, setRemoveDownloadsBusy] = useState(false)
+  const [bulkCollBusy, setBulkCollBusy] = useState(false)
+  const [bulkAssignCollId, setBulkAssignCollId] = useState('')
   const { openUpload, openEdit } = useUIStore()
 
   const beginSelection = useCallback((id: string) => {
@@ -126,6 +128,80 @@ export default function MyPhotosClient({
       )
     } finally {
       setRemoveDownloadsBusy(false)
+    }
+  }
+
+  const selectedIdsWithCollection = useMemo(() => {
+    if (!selectedIds.length) return [] as string[]
+    return selectedIds.filter(id => {
+      const p = photos.find(x => x.id === id)
+      return !!p?.collection_id
+    })
+  }, [selectedIds, photos])
+
+  const selectedIdsInDrillCollection = useMemo(() => {
+    if (!drillColl || !selectedIds.length) return [] as string[]
+    return selectedIds.filter(id => {
+      const p = photos.find(x => x.id === id)
+      return p?.collection_id === drillColl.id
+    })
+  }, [selectedIds, photos, drillColl])
+
+  useEffect(() => {
+    if (!selectionMode) setBulkAssignCollId('')
+  }, [selectionMode])
+
+  const handleBulkAddToCollection = async () => {
+    if (!selectedIds.length || !bulkAssignCollId || bulkCollBusy) return
+    setBulkCollBusy(true)
+    try {
+      const { updated } = await updatePhotosCollectionIds(selectedIds, bulkAssignCollId)
+      if (updated < selectedIds.length) {
+        alert(
+          `Updated ${updated} of ${selectedIds.length} photo(s). You can only assign photos you uploaded.`,
+        )
+      }
+      setPhotos(prev =>
+        prev.map(p =>
+          selectedIds.includes(p.id) && p.photographer_id === userId
+            ? { ...p, collection_id: bulkAssignCollId }
+            : p,
+        ),
+      )
+      useUIStore.getState().bumpSidebarCollections()
+      exitSelection()
+      await refresh()
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+      alert(e instanceof Error ? e.message : 'Could not update collection')
+    } finally {
+      setBulkCollBusy(false)
+    }
+  }
+
+  const handleBulkRemoveFromCollection = async () => {
+    const ids = drillColl ? selectedIdsInDrillCollection : selectedIdsWithCollection
+    if (!ids.length || bulkCollBusy) return
+    const msg = drillColl
+      ? `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from “${drillColl.name}”? They stay in your library.`
+      : `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from their collection(s)? They stay in your library.`
+    if (!confirm(msg)) return
+    setBulkCollBusy(true)
+    try {
+      await updatePhotosCollectionIds(ids, null)
+      setPhotos(prev =>
+        prev.map(p => (ids.includes(p.id) ? { ...p, collection_id: null } : p)),
+      )
+      useUIStore.getState().bumpSidebarCollections()
+      exitSelection()
+      await refresh()
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+      alert(e instanceof Error ? e.message : 'Could not remove from collection')
+    } finally {
+      setBulkCollBusy(false)
     }
   }
 
@@ -598,15 +674,55 @@ export default function MyPhotosClient({
           <span className="mp-select-bar-hint">
             {tab === 'downloads'
               ? `Remove from downloads only clears your list (Library unchanged; Browse checkmark clears) · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS}`
-              : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} photos`}
+              : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · choose a collection to assign`}
           </span>
+          {tab !== 'downloads' && (tab === 'photos' || drillColl) && (
+            <>
+              <select
+                className="ui mp-select-bar-coll"
+                value={bulkAssignCollId}
+                onChange={e => setBulkAssignCollId(e.target.value)}
+                disabled={bulkCollBusy}
+                aria-label="Collection to add selected photos to"
+              >
+                <option value="">Add to collection…</option>
+                {localCollections.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!selectedIds.length || !bulkAssignCollId || bulkCollBusy || zipBusy || bulkDeleting}
+                onClick={() => void handleBulkAddToCollection()}
+              >
+                {bulkCollBusy ? 'Saving…' : 'Add to collection'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={
+                  !selectedIds.length ||
+                  bulkCollBusy ||
+                  zipBusy ||
+                  bulkDeleting ||
+                  (drillColl ? !selectedIdsInDrillCollection.length : !selectedIdsWithCollection.length)
+                }
+                onClick={() => void handleBulkRemoveFromCollection()}
+              >
+                Remove from collection
+              </button>
+            </>
+          )}
           <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
             Cancel
           </button>
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={!selectedIds.length || zipBusy || bulkDeleting || removeDownloadsBusy}
+            disabled={!selectedIds.length || zipBusy || bulkDeleting || removeDownloadsBusy || bulkCollBusy}
             title={selectedIds.length > ZIP_DOWNLOAD_MAX_PHOTOS ? `Max ${ZIP_DOWNLOAD_MAX_PHOTOS} photos per ZIP` : undefined}
             onClick={handleDownloadZip}
           >
@@ -615,7 +731,7 @@ export default function MyPhotosClient({
           <button
             type="button"
             className={tab === 'downloads' ? 'btn-remove-downloads' : 'btn-del-sm'}
-            disabled={!selectedIds.length || bulkDeleting || zipBusy || removeDownloadsBusy}
+            disabled={!selectedIds.length || bulkDeleting || zipBusy || removeDownloadsBusy || bulkCollBusy}
             onClick={tab === 'downloads' ? handleRemoveFromDownloads : handleBulkDelete}
           >
             {tab === 'downloads'

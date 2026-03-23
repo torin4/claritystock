@@ -73,6 +73,19 @@ export default function EditModal({ userId, onSuccess }: Props) {
     }
   }
 
+  const handleRemoveFromCollection = async () => {
+    if (!photo?.collection_id) return
+    setSaving(true)
+    try {
+      await updatePhoto(photo.id, { collection_id: null })
+      setCollectionId(null)
+      onSuccess()
+      closeEdit()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!photo || !confirm('Remove this photo from the library?')) return
     setDeleting(true)
@@ -142,6 +155,20 @@ export default function EditModal({ userId, onSuccess }: Props) {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
+              {photo?.collection_id ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginTop: 8, padding: 0, fontSize: 11 }}
+                  onClick={() => {
+                    if (!confirm('Remove this photo from its collection? It stays in your library.')) return
+                    void handleRemoveFromCollection()
+                  }}
+                  disabled={saving}
+                >
+                  Remove from collection
+                </button>
+              ) : null}
             </div>
           </div>
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { useNotificationsStore } from '@/stores/notifications.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import NotificationPopover from '@/components/modals/NotificationPopover'
 import SettingsPanel from '@/components/modals/SettingsPanel'
 import BrandTitle from '@/components/layout/BrandTitle'
@@ -61,6 +62,26 @@ interface SidebarProps {
   userInitials: string
   userRole: string
   userId: string
+}
+
+function RecentCollectionThumb({ collection }: { collection: Collection }) {
+  const path = collection.photos?.[0]?.thumbnail_path ?? collection.photos?.[0]?.storage_path ?? null
+  const url = useSignedPhotoUrl(path)
+
+  if (!url) {
+    return <div style={{ width: '100%', height: '100%', background: 'var(--surface-2)' }} />
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt=""
+      decoding="async"
+      loading="lazy"
+      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+    />
+  )
 }
 
 export default function Sidebar({ userName, userInitials, userRole, userId }: SidebarProps) {
@@ -206,9 +227,7 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
                     flexShrink: 0,
                     overflow: 'hidden',
                   }}>
-                    {c.photos?.[0]?.storage_path && (
-                      <div style={{ width: '100%', height: '100%', background: 'var(--surface-2)' }} />
-                    )}
+                    <RecentCollectionThumb collection={c} />
                   </div>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>
                     {c.name}

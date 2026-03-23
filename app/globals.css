@@ -53,6 +53,9 @@ body {
   .btn-ghost {
     @apply bg-transparent text-text-2 border-border hover:border-border-hi hover:text-text;
   }
+  .btn-secondary {
+    @apply bg-surface-2 text-text border-border hover:border-border-hi;
+  }
   .btn-with-icon {
     display: inline-flex;
     align-items: center;
@@ -467,6 +470,12 @@ body {
 .mp-select-bar-hint { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); width: 100%; order: 3; }
 @media (min-width: 769px) {
   .mp-select-bar-hint { width: auto; order: 0; margin-right: 12px; }
+}
+.mp-select-bar-coll {
+  min-width: 140px;
+  max-width: min(220px, 40vw);
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 /* ── Filter drawer ── */
