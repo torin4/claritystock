@@ -416,20 +416,22 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .browse-coll-back {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-3);
+  background: var(--surface-2);
+  color: var(--text-2);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 .browse-coll-back:hover {
-  color: var(--text-2);
+  color: var(--text);
   border-color: var(--border-hi);
+  background: var(--surface);
 }
 .browse-coll-title {
   color: var(--text);
