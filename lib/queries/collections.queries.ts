@@ -1,11 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export async function getCollections(supabase: SupabaseClient) {
+export async function getCollections(supabase: SupabaseClient, excludeCreatedBy?: string | null) {
   /** `photos(count)` = one aggregate row per collection — avoids loading every photo id (was very slow at scale). */
-  const { data, error } = await supabase
+  let query = supabase
     .from('collections')
     .select('*, photos(count)')
     .order('created_at', { ascending: false })
+
+  if (excludeCreatedBy) {
+    query = query.neq('created_by', excludeCreatedBy)
+  }
+
+  const { data, error } = await query
 
   if (error) throw error
 

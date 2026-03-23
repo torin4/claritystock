@@ -274,7 +274,10 @@ export default function MyPhotosClient({
   }, [collections])
 
   useEffect(() => {
-    if (tab !== 'downloads') return
+    if (tab !== 'downloads') {
+      if (downloadsStatus === 'loading') setDownloadsStatus('idle')
+      return
+    }
     if (downloadsStatus !== 'idle') return
     let cancelled = false
     setDownloadsStatus('loading')
@@ -283,10 +286,11 @@ export default function MyPhotosClient({
       .then(data => {
         if (cancelled) return
         setDownloadedPhotos(data)
-        setDownloadsStatus('done')
       })
       .catch(err => {
         console.error(err)
+      })
+      .finally(() => {
         if (!cancelled) setDownloadsStatus('done')
       })
     return () => {

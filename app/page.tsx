@@ -15,7 +15,7 @@ export default async function BrowsePage() {
       .select(PHOTO_CARD_SELECT)
       .order('created_at', { ascending: false })
       .limit(BROWSE_PAGE_SIZE),
-    getCollections(supabase),
+    getCollections(supabase, uid ?? null),
   ])
 
   const initialIds = (photosRes.data ?? []).map((p: { id: string }) => p.id)
