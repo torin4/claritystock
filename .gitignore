@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+
+# Env (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel
+
+# Debug / OS
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+*.pem
+
+# TypeScript
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
