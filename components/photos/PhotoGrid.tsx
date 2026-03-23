@@ -11,6 +11,8 @@ interface Props {
   onFavoriteToggle: (id: string, val: boolean) => void
   onDownload: (id: string) => void
   showEdit?: boolean
+  /** When set, overrides `showEdit` per tile (e.g. only your uploads in “My downloads”). */
+  canEditPhoto?: (photo: Photo) => boolean
   onEdit?: (id: string) => void
   /** My Photos: long-press / right-click to select & bulk-delete */
   selectable?: boolean
@@ -26,6 +28,7 @@ export default function PhotoGrid({
   onFavoriteToggle,
   onDownload,
   showEdit,
+  canEditPhoto,
   onEdit,
   selectable,
   selectionMode,
@@ -91,6 +94,7 @@ export default function PhotoGrid({
           onFavoriteToggle={onFavoriteToggle}
           onDownload={onDownload}
           showEdit={showEdit}
+          canEditPhoto={canEditPhoto}
           onEdit={onEdit}
           selectable={selectable}
           selectionMode={selectionMode}

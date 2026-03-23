@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { BrowseFilters } from '@/lib/types/database.types'
+import type { BrowseFilters, Photo } from '@/lib/types/database.types'
 
 export async function getPhotos(
   supabase: SupabaseClient,
@@ -71,6 +71,57 @@ export async function getMyPhotos(supabase: SupabaseClient, userId: string) {
 
   if (error) throw error
   return data ?? []
+}
+
+/** Photos you’ve downloaded from the library (any photographer), most recently saved first; deduped per photo. */
+export async function getMyDownloadedPhotos(supabase: SupabaseClient, userId: string) {
+  const { data: dls, error: dErr } = await supabase
+    .from('downloads')
+    .select('photo_id, created_at')
+    .eq('downloaded_by', userId)
+    .order('created_at', { ascending: false })
+
+  if (dErr) throw dErr
+
+  const seen = new Set<string>()
+  const orderedIds: string[] = []
+  for (const row of dls ?? []) {
+    const pid = row.photo_id as string
+    if (seen.has(pid)) continue
+    seen.add(pid)
+    orderedIds.push(pid)
+  }
+
+  if (!orderedIds.length) return []
+
+  const { data: photos, error: pErr } = await supabase
+    .from('photos')
+    .select(`
+      *,
+      photographer:users!photographer_id(id, name, initials, avatar_url),
+      collection:collections!collection_id(id, name, category)
+    `)
+    .in('id', orderedIds)
+
+  if (pErr) throw pErr
+
+  const { data: favs } = await supabase
+    .from('favorites')
+    .select('photo_id')
+    .eq('user_id', userId)
+  const favSet = new Set((favs ?? []).map((f: { photo_id: string }) => f.photo_id))
+
+  const byId = new Map((photos ?? []).map((p: { id: string }) => [p.id, p]))
+
+  const ordered = orderedIds
+    .map(id => byId.get(id))
+    .filter((p): p is NonNullable<typeof p> => p != null)
+
+  return ordered.map(p => ({
+    ...p,
+    is_downloaded_by_me: true,
+    is_favorited: favSet.has(p.id),
+  })) as Photo[]
 }
 
 export async function getPhotoById(supabase: SupabaseClient, id: string) {

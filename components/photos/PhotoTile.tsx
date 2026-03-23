@@ -21,6 +21,7 @@ interface Props {
   onFavoriteToggle: (id: string, val: boolean) => void
   onDownload: (id: string) => void
   showEdit?: boolean
+  canEditPhoto?: (photo: Photo) => boolean
   onEdit?: (id: string) => void
   imageUrl?: string | null
   selectable?: boolean
@@ -36,6 +37,7 @@ export default function PhotoTile({
   onFavoriteToggle,
   onDownload,
   showEdit,
+  canEditPhoto,
   onEdit,
   imageUrl,
   selectable,
@@ -44,6 +46,7 @@ export default function PhotoTile({
   onBeginSelection,
   onToggleSelected,
 }: Props) {
+  const allowEdit = canEditPhoto ? canEditPhoto(photo) : Boolean(showEdit)
   const { openLightbox } = useUIStore()
   const [favLoading, setFavLoading] = useState(false)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -206,7 +209,7 @@ export default function PhotoTile({
             {photo.is_favorited ? '♥' : '♡'}
           </button>
 
-          {showEdit && onEdit ? (
+          {allowEdit && onEdit ? (
             <button
               className="ptile-dl"
               onClick={e => { e.stopPropagation(); onEdit(photo.id) }}

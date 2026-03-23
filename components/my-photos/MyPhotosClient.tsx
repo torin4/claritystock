@@ -13,6 +13,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { deleteCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
+import { removeMyDownloads } from '@/lib/actions/downloads.actions'
 import { useInView } from '@/lib/hooks/useInView'
 import type { Photo, Collection } from '@/lib/types/database.types'
 
@@ -22,15 +23,22 @@ interface CollectionWithPhotos extends Collection {
 
 interface Props {
   initialPhotos: Photo[]
+  initialDownloadedPhotos: Photo[]
   collections: CollectionWithPhotos[]
   userId: string
 }
 
-export default function MyPhotosClient({ initialPhotos, collections, userId }: Props) {
+export default function MyPhotosClient({
+  initialPhotos,
+  initialDownloadedPhotos,
+  collections,
+  userId,
+}: Props) {
   const router = useRouter()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
+  const [downloadedPhotos, setDownloadedPhotos] = useState<Photo[]>(initialDownloadedPhotos)
   const [localCollections, setLocalCollections] = useState(collections)
-  const [tab, setTab] = useState<'collections' | 'photos'>('collections')
+  const [tab, setTab] = useState<'collections' | 'photos' | 'downloads'>('collections')
   const [search, setSearch] = useState('')
   const [drillColl, setDrillColl] = useState<CollectionWithPhotos | null>(null)
   const [deletingColl, setDeletingColl] = useState(false)
@@ -39,6 +47,7 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [zipBusy, setZipBusy] = useState(false)
+  const [removeDownloadsBusy, setRemoveDownloadsBusy] = useState(false)
   const { openUpload, openEdit } = useUIStore()
 
   const beginSelection = useCallback((id: string) => {
@@ -75,10 +84,12 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
     setZipBusy(true)
     try {
       await downloadPhotosZip(selectedIds)
-      setPhotos(prev =>
-        prev.map(p => (selectedIds.includes(p.id) ? { ...p, is_downloaded_by_me: true } : p)),
-      )
+      const mark = (p: Photo) =>
+        selectedIds.includes(p.id) ? { ...p, is_downloaded_by_me: true as const } : p
+      setPhotos(prev => prev.map(mark))
+      setDownloadedPhotos(prev => prev.map(mark))
       exitSelection()
+      router.refresh()
     } catch (e) {
       if (e instanceof Error && e.message === 'Cancelled') return
       console.error(e)
@@ -88,16 +99,79 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
     }
   }
 
+  const handleRemoveFromDownloads = async () => {
+    if (!selectedIds.length || removeDownloadsBusy) return
+    const ids = [...selectedIds]
+    if (
+      !confirm(
+        `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from your downloads? They stay in the Library, and Browse will no longer show the downloaded checkmark for you.`,
+      )
+    ) {
+      return
+    }
+    setRemoveDownloadsBusy(true)
+    try {
+      await removeMyDownloads(ids)
+      exitSelection()
+      setPhotos(prev =>
+        prev.map(p => (ids.includes(p.id) ? { ...p, is_downloaded_by_me: false } : p)),
+      )
+      setDownloadedPhotos(prev => prev.filter(p => !ids.includes(p.id)))
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+      alert(
+        e instanceof Error
+          ? e.message
+          : 'Could not remove downloads. Run latest DB migration (remove_my_downloads).',
+      )
+    } finally {
+      setRemoveDownloadsBusy(false)
+    }
+  }
+
   const handleBulkDelete = async () => {
     if (!selectedIds.length) return
-    if (!confirm(
-      `Remove ${selectedIds.length} photo${selectedIds.length === 1 ? '' : 's'} from the library? This cannot be undone.`,
-    )) return
+    const sourceList =
+      tab === 'downloads'
+        ? downloadedPhotos
+        : drillColl || tab === 'photos'
+          ? filteredPhotos
+          : photos
+    const ownedIds = selectedIds.filter(sid => {
+      const p = sourceList.find(x => x.id === sid)
+      return p?.photographer_id === userId
+    })
+    if (!ownedIds.length) {
+      alert(
+        'None of the selected photos are yours to remove from the library. You can only delete photos you uploaded.',
+      )
+      return
+    }
+    if (ownedIds.length < selectedIds.length) {
+      if (
+        !confirm(
+          `Only ${ownedIds.length} selected photo${ownedIds.length === 1 ? '' : 's'} ${ownedIds.length === 1 ? 'is' : 'are'} yours and will be removed from the library. Continue?`,
+        )
+      ) {
+        return
+      }
+    } else {
+      if (
+        !confirm(
+          `Remove ${ownedIds.length} photo${ownedIds.length === 1 ? '' : 's'} from the library? This cannot be undone.`,
+        )
+      ) {
+        return
+      }
+    }
     setBulkDeleting(true)
     try {
-      await deletePhotos(selectedIds)
+      await deletePhotos(ownedIds)
       useUIStore.getState().bumpSidebarCollections()
       exitSelection()
+      setDownloadedPhotos(prev => prev.filter(p => !ownedIds.includes(p.id)))
+      setPhotos(prev => prev.filter(p => !ownedIds.includes(p.id)))
       await refresh()
       router.refresh()
     } catch (e) {
@@ -111,6 +185,10 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
   useEffect(() => {
     setPhotos(initialPhotos)
   }, [initialPhotos])
+
+  useEffect(() => {
+    setDownloadedPhotos(initialDownloadedPhotos)
+  }, [initialDownloadedPhotos])
 
   useEffect(() => {
     setLocalCollections(collections)
@@ -138,7 +216,39 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
     )
   }, [photos, drillColl, search])
 
+  const filteredDownloadedPhotos = useMemo(() => {
+    if (!search) return downloadedPhotos
+    const q = search.toLowerCase()
+    return downloadedPhotos.filter(
+      p =>
+        p.title.toLowerCase().includes(q) ||
+        (p.neighborhood ?? '').toLowerCase().includes(q) ||
+        (p.photographer?.name ?? '').toLowerCase().includes(q),
+    )
+  }, [downloadedPhotos, search])
+
+  const lightboxPhotos = useMemo(() => {
+    if (!drillColl && tab === 'downloads') return filteredDownloadedPhotos
+    return filteredPhotos
+  }, [drillColl, tab, filteredDownloadedPhotos, filteredPhotos])
+
   const totalDownloads = photos.reduce((sum, p) => sum + (p.downloads_count ?? 0), 0)
+
+  const handleFavoriteToggleDownloads = useCallback((photoId: string, val: boolean) => {
+    setDownloadedPhotos(prev => prev.map(p => (p.id === photoId ? { ...p, is_favorited: val } : p)))
+  }, [])
+
+  const handleDownloadRecorded = useCallback((photoId: string) => {
+    setPhotos(prev => prev.map(p => (p.id === photoId ? { ...p, is_downloaded_by_me: true } : p)))
+    setDownloadedPhotos(prev => {
+      const exists = prev.some(p => p.id === photoId)
+      if (exists) {
+        return prev.map(p => (p.id === photoId ? { ...p, is_downloaded_by_me: true } : p))
+      }
+      return prev
+    })
+    router.refresh()
+  }, [router])
 
   const handleDeleteCollection = async () => {
     if (!drillColl) return
@@ -176,18 +286,31 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
           )}
           <div className="ph-title">{drillColl ? drillColl.name : 'My Photos'}</div>
           <div className="ph-sub">
-            {photos.length} in Library · {totalDownloads} uses by the team
-            {drillColl && (
-              <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-                Adds go to “{drillColl.name}”
-              </span>
+            {!drillColl && tab === 'downloads' ? (
+              <>
+                {downloadedPhotos.length} photo{downloadedPhotos.length !== 1 ? 's' : ''} you&apos;ve downloaded
+                <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+                  From the team library · newest saves first
+                </span>
+              </>
+            ) : (
+              <>
+                {photos.length} in Library · {totalDownloads} uses by the team
+                {drillColl && (
+                  <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+                    Adds go to “{drillColl.name}”
+                  </span>
+                )}
+              </>
             )}
           </div>
         </div>
-        <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={() => openUpload()}>
-          <PlusIcon size={15} />
-          {drillColl ? 'Add to collection' : 'Add Photos'}
-        </button>
+        {(!drillColl && tab === 'downloads') ? null : (
+          <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={() => openUpload()}>
+            <PlusIcon size={15} />
+            {drillColl ? 'Add to collection' : 'Add Photos'}
+          </button>
+        )}
       </div>
 
       {/* Tabs — only show when not drilling into a collection */}
@@ -201,6 +324,10 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
             className={`my-tab ${tab === 'photos' ? 'active' : ''}`}
             onClick={() => setTab('photos')}
           >All photos</button>
+          <button
+            className={`my-tab ${tab === 'downloads' ? 'active' : ''}`}
+            onClick={() => setTab('downloads')}
+          >My downloads</button>
         </div>
       )}
 
@@ -355,7 +482,7 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
               photos={filteredPhotos}
               userId={userId}
               onFavoriteToggle={() => {}}
-              onDownload={() => {}}
+              onDownload={handleDownloadRecorded}
               showEdit
               onEdit={openEdit}
               selectable
@@ -368,8 +495,75 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
         </div>
       )}
 
-      <Lightbox photos={filteredPhotos} userId={userId} onDownload={() => {}} />
-      <EditModal userId={userId} onSuccess={refresh} />
+      {/* My downloads tab */}
+      {tab === 'downloads' && !drillColl && (
+        <div style={{ paddingBottom: selectionMode ? 88 : undefined }}>
+          <div className="mp-toolbar">
+            <div className="si-wrap" style={{ maxWidth: 280 }}>
+              <span className="si-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </span>
+              <input
+                className="si"
+                placeholder="Search downloads…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
+              {filteredDownloadedPhotos.length} photos
+            </span>
+          </div>
+
+          {filteredDownloadedPhotos.length === 0 ? (
+            downloadedPhotos.length === 0 ? (
+              <div className="mp-empty-block">
+                <h3 className="mp-empty-title">No downloads yet</h3>
+                <p className="mp-empty-sub">
+                  When you download photos from the Library, they&apos;ll show up here for quick access.
+                </p>
+              </div>
+            ) : (
+              <div className="mp-empty-block">
+                <h3 className="mp-empty-title">No matches</h3>
+                <p className="mp-empty-sub">Try another search or clear the box.</p>
+                <div className="mp-empty-actions">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch('')}>
+                    Clear search
+                  </button>
+                </div>
+              </div>
+            )
+          ) : (
+            <PhotoGrid
+              photos={filteredDownloadedPhotos}
+              userId={userId}
+              onFavoriteToggle={handleFavoriteToggleDownloads}
+              onDownload={handleDownloadRecorded}
+              showEdit
+              canEditPhoto={p => p.photographer_id === userId}
+              onEdit={openEdit}
+              selectable
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              onBeginSelection={beginSelection}
+              onToggleSelected={toggleSelected}
+            />
+          )}
+        </div>
+      )}
+
+      <Lightbox photos={lightboxPhotos} userId={userId} onDownload={handleDownloadRecorded} />
+      <EditModal
+        userId={userId}
+        onSuccess={async () => {
+          await refresh()
+          router.refresh()
+        }}
+      />
       <UploadModal
         userId={userId}
         onSuccess={async () => {
@@ -393,15 +587,27 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
             {selectedIds.length} selected
           </span>
           <span className="mp-select-bar-hint">
-            Long-press or right-click to add · tap to toggle · ZIP up to {ZIP_DOWNLOAD_MAX_PHOTOS} photos
+            {tab === 'downloads'
+              ? `Remove from downloads clears your checkmark in Browse · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · Delete only removes photos you uploaded`
+              : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} photos`}
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
             Cancel
           </button>
+          {tab === 'downloads' && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={!selectedIds.length || removeDownloadsBusy || zipBusy || bulkDeleting}
+              onClick={handleRemoveFromDownloads}
+            >
+              {removeDownloadsBusy ? 'Removing…' : 'Remove from downloads'}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={!selectedIds.length || zipBusy || bulkDeleting}
+            disabled={!selectedIds.length || zipBusy || bulkDeleting || removeDownloadsBusy}
             title={selectedIds.length > ZIP_DOWNLOAD_MAX_PHOTOS ? `Max ${ZIP_DOWNLOAD_MAX_PHOTOS} photos per ZIP` : undefined}
             onClick={handleDownloadZip}
           >
@@ -410,7 +616,7 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
           <button
             type="button"
             className="btn-del-sm"
-            disabled={!selectedIds.length || bulkDeleting || zipBusy}
+            disabled={!selectedIds.length || bulkDeleting || zipBusy || removeDownloadsBusy}
             onClick={handleBulkDelete}
           >
             {bulkDeleting ? 'Deleting…' : 'Delete'}
