@@ -437,15 +437,7 @@ export default function MyPhotosClient({
       {/* Page header */}
       <div className="ph">
         <div>
-          {drillColl && (
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-3)', cursor: 'pointer', marginBottom: 6 }}
-              onClick={() => setDrillColl(null)}
-            >
-              ← All collections
-            </div>
-          )}
-          <div className="ph-title">{drillColl ? drillColl.name : 'My Photos'}</div>
+          <div className="ph-title">My Photos</div>
           <div className="ph-sub">
             {!drillColl && tab === 'downloads' ? (
               downloadsStatus === 'loading'
@@ -528,15 +520,25 @@ export default function MyPhotosClient({
         <div style={{ paddingBottom: selectionMode ? 88 : undefined }}>
           {/* Drill header */}
           {drillColl && (
-            <div className="drill-hdr">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-                <button className="drill-back" onClick={() => { setDrillColl(null); setTab('collections') }}>
-                  ← All collections
+            <div
+              className="browse-coll-hdr my-photos-coll-hdr"
+              aria-label={`Collection ${drillColl.name}`}
+            >
+              <div className="browse-coll-lead">
+                <button
+                  type="button"
+                  className="browse-coll-back"
+                  onClick={() => { setDrillColl(null); setTab('collections') }}
+                  aria-label="Back to all collections"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M10 3.5L5.5 8L10 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{drillColl.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-                    {filteredPhotos.length} photos
+                <div style={{ minWidth: 0 }}>
+                  <div className="browse-coll-title">{drillColl.name}</div>
+                  <div className="browse-coll-sub">
+                    {filteredPhotos.length} photo{filteredPhotos.length !== 1 ? 's' : ''}
                   </div>
                 </div>
               </div>

@@ -439,6 +439,26 @@ body {
   font-family: var(--font-body);
   font-size: 13px;
 }
+/* My Photos collection drill: back + title + actions on one bar (matches browse header + actions). */
+.my-photos-coll-hdr {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.my-photos-coll-hdr .browse-coll-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.my-photos-coll-hdr .browse-coll-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
 
 /* ── Collections strip ── */
 .coll-strip { display: flex; gap: 6px; padding: 8px 20px; overflow-x: auto; border-bottom: 1px solid var(--border); }
@@ -837,9 +857,6 @@ body {
   outline-offset: 2px;
   border-radius: 4px;
 }
-.drill-hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.drill-back { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); cursor: pointer; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); background: none; font-family: var(--font-body); transition: all 0.12s; }
-.drill-back:hover { color: var(--text-2); border-color: var(--border-hi); background: var(--surface-2); }
 .drill-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* My Photos — empty collection / no search results */
 .mp-empty-block { padding: 48px 24px 56px; text-align: center; max-width: 400px; margin: 0 auto; }
