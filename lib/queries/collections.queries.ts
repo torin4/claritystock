@@ -1,11 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export async function getCollections(supabase: SupabaseClient, userId: string) {
+export async function getCollections(supabase: SupabaseClient) {
   /** `photos(count)` = one aggregate row per collection — avoids loading every photo id (was very slow at scale). */
   const { data, error } = await supabase
     .from('collections')
     .select('*, photos(count)')
-    .eq('created_by', userId)
     .order('created_at', { ascending: false })
 
   if (error) throw error

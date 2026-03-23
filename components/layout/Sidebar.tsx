@@ -95,16 +95,34 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
     ;(async () => {
-      // User-private collections only.
+      // Prefer RPC: all users’ collections, ordered by latest photo activity (or collection created_at).
+      const { data: rpcRows, error } = await supabase.rpc('recent_collections_nav', { p_limit: 8 })
+      if (!error && Array.isArray(rpcRows)) {
+        setCollections(
+          (rpcRows as {
+            id: string
+            name: string
+            thumb_storage_path: string | null
+            thumb_thumbnail_path: string | null
+          }[]).map(row => ({
+            id: row.id,
+            name: row.name,
+            photos: row.thumb_storage_path
+              ? [{ storage_path: row.thumb_storage_path, thumbnail_path: row.thumb_thumbnail_path }]
+              : [],
+          })),
+        )
+        return
+      }
+      // Fallback if RPC not deployed yet: all collections, newest created first
       const { data } = await supabase
         .from('collections')
         .select('id, name, photos(storage_path, thumbnail_path)')
-        .eq('created_by', userId)
         .order('created_at', { ascending: false })
         .limit(8)
       setCollections((data as Collection[]) ?? [])
     })()
-  }, [sidebarCollectionsEpoch, userId])
+  }, [sidebarCollectionsEpoch])
 
   const navItems: NavItem[] = [
     { href: '/', label: 'Browse', icon: <BrowseIcon /> },

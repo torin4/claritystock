@@ -159,7 +159,7 @@ CREATE POLICY "photos_delete"
 DROP POLICY IF EXISTS "collections_read" ON public.collections;
 CREATE POLICY "collections_read"
   ON public.collections FOR SELECT
-  USING (auth.uid() = created_by);
+  USING (auth.uid() IS NOT NULL);
 
 DROP POLICY IF EXISTS "collections_insert" ON public.collections;
 CREATE POLICY "collections_insert"
@@ -333,7 +333,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.remove_my_downloads(uuid[]) TO authenticated;
 
 -- ---------------------------------------------------------------------------
--- RPC — recent collections for nav (current user's collections, by last activity)
+-- RPC — recent collections for nav (all users’ collections, by last activity)
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.recent_collections_nav(p_limit integer DEFAULT 8)
@@ -365,7 +365,6 @@ AS $$
         WHERE p.collection_id = c.id
         ORDER BY p.created_at DESC NULLS LAST LIMIT 1)
   FROM public.collections c
-  WHERE c.created_by = auth.uid()
   ORDER BY last_activity_at DESC NULLS LAST
   LIMIT COALESCE(NULLIF(p_limit, 0), 8);
 $$;

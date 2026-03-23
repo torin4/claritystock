@@ -385,6 +385,30 @@ body {
 .qchip:hover { border-color: var(--border-hi); color: var(--text-2); }
 .qchip.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
 
+/* ── Browse mode toggle ── */
+.browse-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.browse-mode-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+}
+.browse-mode-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ── Collections strip ── */
 .coll-strip { display: flex; gap: 6px; padding: 8px 20px; overflow-x: auto; border-bottom: 1px solid var(--border); }
 .coll-strip::-webkit-scrollbar { height: 0; }
@@ -392,6 +416,42 @@ body {
 .coll-chip:hover { border-color: var(--border-hi); color: var(--text-2); }
 .coll-chip.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
 .coll-chip-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Browse collections grid ── */
+.browse-coll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 14px 20px 20px;
+}
+.browse-coll-card {
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 12px;
+  cursor: pointer;
+}
+.browse-coll-card:hover {
+  border-color: var(--border-hi);
+}
+.browse-coll-card.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.browse-coll-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.browse-coll-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
 
 /* ── Photo grid & tiles ── */
 .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); padding: var(--gap); }

@@ -6,7 +6,6 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
 import SearchBar from '@/components/browse/SearchBar'
 import QuickFilterRow from '@/components/browse/QuickFilterRow'
-import CollectionsStrip from '@/components/browse/CollectionsStrip'
 import PhotoGrid from '@/components/photos/PhotoGrid'
 import FilterDrawer from '@/components/modals/FilterDrawer'
 import Lightbox from '@/components/modals/Lightbox'
@@ -25,6 +24,7 @@ const DEFAULT_FILTER_KEY = ['', '', '', 'new', 'all', ''].join('\0')
 
 export default function BrowseClient({ initialPhotos, collections, userId }: BrowseClientProps) {
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
+  const [browseMode, setBrowseMode] = useState<'photos' | 'collections'>('photos')
   const [loading, setLoading] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -35,6 +35,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
   const sort = useFilterStore((s) => s.sort)
   const quickFilter = useFilterStore((s) => s.quickFilter)
   const collectionId = useFilterStore((s) => s.collectionId)
+  const setCollection = useFilterStore((s) => s.setCollection)
   const openUpload = useUIStore((s) => s.openUpload)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const didRunInitialFetch = useRef(false)
@@ -178,12 +179,18 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       didRunInitialFetch.current = true
       if (filterKey === DEFAULT_FILTER_KEY) return
     }
+    if (browseMode === 'collections') return
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(fetchPhotos, search ? 400 : 0)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [fetchPhotos, filterKey, search])
+  }, [fetchPhotos, filterKey, search, browseMode])
+
+  useEffect(() => {
+    if (browseMode !== 'collections') return
+    exitSelection()
+  }, [browseMode, exitSelection])
 
   const handleFavoriteToggle = useCallback((photoId: string, val: boolean) => {
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, is_favorited: val } : p))
@@ -194,6 +201,14 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
   }, [])
 
   const hasActiveFilters = !!(category || neighborhood || (search && search.length > 0))
+  const filteredCollections = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return collections.filter((c) => {
+      if (category && c.category !== category) return false
+      if (q && !c.name.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [collections, category, search])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -201,7 +216,11 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       <div className="ph">
         <div>
           <div className="ph-title">Library</div>
-          <div className="ph-sub">{photos.length} photos in Library</div>
+          <div className="ph-sub">
+            {browseMode === 'collections'
+              ? `${filteredCollections.length} collection${filteredCollections.length !== 1 ? 's' : ''} in Library`
+              : `${photos.length} photos in Library`}
+          </div>
         </div>
         <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={openUpload}>
           <PlusIcon size={15} />
@@ -215,12 +234,52 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       {/* Quick filter chips */}
       <QuickFilterRow />
 
-      {/* Collections strip */}
-      <CollectionsStrip collections={collections} />
+      <div className="browse-mode-row">
+        <button
+          type="button"
+          className={`browse-mode-btn ${browseMode === 'photos' ? 'active' : ''}`}
+          onClick={() => setBrowseMode('photos')}
+        >
+          Photos
+        </button>
+        <button
+          type="button"
+          className={`browse-mode-btn ${browseMode === 'collections' ? 'active' : ''}`}
+          onClick={() => setBrowseMode('collections')}
+        >
+          Collections
+        </button>
+      </div>
 
       {/* Photo grid */}
       <div style={{ flex: 1, paddingBottom: selectionMode ? 88 : undefined }}>
-        {loading ? (
+        {browseMode === 'collections' ? (
+          filteredCollections.length === 0 ? (
+            <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: '13px' }}>
+              No collections found
+            </div>
+          ) : (
+            <div className="browse-coll-grid">
+              {filteredCollections.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`browse-coll-card ${collectionId === c.id ? 'active' : ''}`}
+                  onClick={() => {
+                    setCollection(c.id)
+                    setBrowseMode('photos')
+                  }}
+                >
+                  <div className="browse-coll-name">{c.name}</div>
+                  <div className="browse-coll-meta">
+                    <span>{c.photo_count ?? 0} photos</span>
+                    {c.category ? <span>{c.category}</span> : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        ) : loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-3)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
             Loading...
           </div>
@@ -243,7 +302,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
         )}
       </div>
 
-      {selectionMode && (
+      {browseMode === 'photos' && selectionMode && (
         <div className="mp-select-bar">
           <span className="mp-select-bar-count">{selectedIds.length} selected</span>
           <span className="mp-select-bar-hint">
