@@ -5,14 +5,20 @@ export async function getInsightsStats(
   supabase: SupabaseClient,
   userId: string
 ): Promise<InsightsStats> {
-  const [photosRes, downloadsRes, monthRes, favsRes] = await Promise.all([
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+  const [photosRes, photoIdsRes, favsRes] = await Promise.all([
     supabase.from('photos').select('id', { count: 'exact', head: true }).eq('photographer_id', userId),
-    supabase.from('downloads').select('id', { count: 'exact', head: true })
-      .in('photo_id', (await supabase.from('photos').select('id').eq('photographer_id', userId)).data?.map((p: {id: string}) => p.id) ?? []),
-    supabase.from('downloads').select('id', { count: 'exact', head: true })
-      .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+    supabase.from('photos').select('id').eq('photographer_id', userId),
     supabase.from('favorites').select('id', { count: 'exact', head: true }).eq('user_id', userId),
   ])
+
+  const ids = (photoIdsRes.data ?? []).map((p: { id: string }) => p.id)
+  const [downloadsRes, monthRes] = ids.length
+    ? await Promise.all([
+        supabase.from('downloads').select('id', { count: 'exact', head: true }).in('photo_id', ids),
+        supabase.from('downloads').select('id', { count: 'exact', head: true }).in('photo_id', ids).gte('created_at', monthStart),
+      ])
+    : [{ count: 0 }, { count: 0 }]
 
   return {
     totalPhotos: photosRes.count ?? 0,
@@ -38,11 +44,12 @@ export async function getDownloadsByUser(
   supabase: SupabaseClient,
   userId: string
 ): Promise<DownloadByUser[]> {
-  // Get all photo IDs for this photographer
-  const { data: photoIds } = await supabase
+  const { data: photoIds, error: idsErr } = await supabase
     .from('photos')
     .select('id')
     .eq('photographer_id', userId)
+
+  if (idsErr) throw idsErr
 
   if (!photoIds?.length) return []
 

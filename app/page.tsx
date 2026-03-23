@@ -1,27 +1,30 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCollections } from '@/lib/queries/collections.queries'
+import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
+import { getServerUser } from '@/lib/supabase/request-context'
 import BrowseClient from '@/components/browse/BrowseClient'
 
 export default async function BrowsePage() {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getServerUser()
   const uid = user?.id
 
-  // One round-trip batch: photos + collections + downloads + favorites (was: photos+collections, then downloads+favorites)
-  const [photosRes, collections, downloadsRes, favoritesRes] = await Promise.all([
+  const [photosRes, collections] = await Promise.all([
     supabase
       .from('photos')
-      .select('*, photographer:users!photographer_id(id, name, initials), collection:collections!collection_id(id, name, category)')
+      .select(PHOTO_CARD_SELECT)
       .order('created_at', { ascending: false })
-      .limit(60),
+      .limit(BROWSE_PAGE_SIZE),
     getCollections(supabase),
-    uid
-      ? supabase.from('downloads').select('photo_id').eq('downloaded_by', uid)
-      : Promise.resolve({ data: [] as { photo_id: string }[], error: null }),
-    uid
-      ? supabase.from('favorites').select('photo_id').eq('user_id', uid)
-      : Promise.resolve({ data: [] as { photo_id: string }[], error: null }),
   ])
+
+  const initialIds = (photosRes.data ?? []).map((p: { id: string }) => p.id)
+  const [downloadsRes, favoritesRes] = uid && initialIds.length
+    ? await Promise.all([
+        supabase.from('downloads').select('photo_id').eq('downloaded_by', uid).in('photo_id', initialIds),
+        supabase.from('favorites').select('photo_id').eq('user_id', uid).in('photo_id', initialIds),
+      ])
+    : [{ data: [] as { photo_id: string }[] }, { data: [] as { photo_id: string }[] }]
 
   const myDownloadIds = new Set((downloadsRes.data ?? []).map((d: { photo_id: string }) => d.photo_id))
   const myFavIds = new Set((favoritesRes.data ?? []).map((f: { photo_id: string }) => f.photo_id))

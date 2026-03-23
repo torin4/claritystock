@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BrowseFilters, Photo } from '@/lib/types/database.types'
+import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT, PHOTO_DETAIL_SELECT } from '@/lib/queries/photoSelects'
 
 export async function getPhotos(
   supabase: SupabaseClient,
@@ -8,11 +9,7 @@ export async function getPhotos(
 ) {
   let query = supabase
     .from('photos')
-    .select(`
-      *,
-      photographer:users!photographer_id(id, name, initials, avatar_url),
-      collection:collections!collection_id(id, name, category)
-    `)
+    .select(PHOTO_CARD_SELECT)
 
   if (filters.search) {
     query = query.textSearch('fts', filters.search, { type: 'websearch' })
@@ -57,7 +54,7 @@ export async function getPhotos(
     query = query.order('created_at', { ascending: false })
   }
 
-  const { data, error } = await query
+  const { data, error } = await query.limit(BROWSE_PAGE_SIZE)
   if (error) throw error
   return data ?? []
 }
@@ -65,7 +62,7 @@ export async function getPhotos(
 export async function getMyPhotos(supabase: SupabaseClient, userId: string) {
   const { data, error } = await supabase
     .from('photos')
-    .select(`*, collection:collections!collection_id(id, name, category)`)
+    .select(PHOTO_CARD_SELECT)
     .eq('photographer_id', userId)
     .order('created_at', { ascending: false })
 
@@ -94,21 +91,19 @@ export async function getMyDownloadedPhotos(supabase: SupabaseClient, userId: st
 
   if (!orderedIds.length) return []
 
-  const { data: photos, error: pErr } = await supabase
-    .from('photos')
-    .select(`
-      *,
-      photographer:users!photographer_id(id, name, initials, avatar_url),
-      collection:collections!collection_id(id, name, category)
-    `)
-    .in('id', orderedIds)
+  const [{ data: photos, error: pErr }, { data: favs, error: fErr }] = await Promise.all([
+    supabase
+      .from('photos')
+      .select(PHOTO_CARD_SELECT)
+      .in('id', orderedIds),
+    supabase
+      .from('favorites')
+      .select('photo_id')
+      .eq('user_id', userId),
+  ])
 
   if (pErr) throw pErr
-
-  const { data: favs } = await supabase
-    .from('favorites')
-    .select('photo_id')
-    .eq('user_id', userId)
+  if (fErr) throw fErr
   const favSet = new Set((favs ?? []).map((f: { photo_id: string }) => f.photo_id))
 
   const byId = new Map((photos ?? []).map((p: { id: string }) => [p.id, p]))
@@ -127,11 +122,7 @@ export async function getMyDownloadedPhotos(supabase: SupabaseClient, userId: st
 export async function getPhotoById(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from('photos')
-    .select(`
-      *,
-      photographer:users!photographer_id(id, name, initials, avatar_url),
-      collection:collections!collection_id(id, name, category)
-    `)
+    .select(PHOTO_DETAIL_SELECT)
     .eq('id', id)
     .single()
 

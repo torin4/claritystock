@@ -1,12 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { getMyPhotos, getMyDownloadedPhotos } from '@/lib/queries/photos.queries'
 import { getMyCollections } from '@/lib/queries/collections.queries'
+import { getServerUser } from '@/lib/supabase/request-context'
 import MyPhotosClient from '@/components/my-photos/MyPhotosClient'
 import { redirect } from 'next/navigation'
 
 export default async function MyPhotosPage() {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getServerUser()
   if (!user) redirect('/login')
 
   const [photos, downloadedPhotos, collections] = await Promise.all([

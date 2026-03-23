@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { createClient } from '@/lib/supabase/server'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileTopBar from '@/components/layout/MobileTopBar'
 import SidebarOverlay from '@/components/layout/SidebarOverlay'
 import NotificationProvider from '@/components/providers/NotificationProvider'
+import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
 
 export const metadata: Metadata = {
   title: 'Clarity Stock',
@@ -12,18 +12,7 @@ export const metadata: Metadata = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  let profile = null
-  if (user) {
-    const { data } = await supabase
-      .from('users')
-      .select('name, initials, role, avatar_url')
-      .eq('id', user.id)
-      .single()
-    profile = data
-  }
+  const [user, profile] = await Promise.all([getServerUser(), getServerProfile()])
 
   return (
     <html lang="en">

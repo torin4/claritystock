@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { memo, useState, useRef, useCallback, useEffect } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { toggleFavorite } from '@/lib/actions/favorites.actions'
 import { recordDownload } from '@/lib/actions/downloads.actions'
@@ -31,7 +31,7 @@ interface Props {
   onToggleSelected?: (photoId: string) => void
 }
 
-export default function PhotoTile({
+function PhotoTile({
   photo,
   userId,
   onFavoriteToggle,
@@ -255,3 +255,5 @@ export default function PhotoTile({
     </div>
   )
 }
+
+export default memo(PhotoTile)

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { recordDownload, updateJobRef } from '@/lib/actions/downloads.actions'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
@@ -35,7 +35,6 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
   const prevId = currentIndex > 0 ? photos[currentIndex - 1].id : null
   const nextId = currentIndex < photos.length - 1 && currentIndex >= 0 ? photos[currentIndex + 1].id : null
 
-  const [photo, setPhoto] = useState<Photo | null>(null)
   const [downloadId, setDownloadId] = useState<string | null>(null)
   const [jobRef, setJobRef] = useState('')
   const [jobLogOpen, setJobLogOpen] = useState(false)
@@ -43,17 +42,19 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
   const [histOpen, setHistOpen] = useState(false)
   const [usageHistory, setUsageHistory] = useState<DownloadRow[]>([])
 
+  const photo = useMemo(
+    () => (lightboxPhotoId ? photos.find(p => p.id === lightboxPhotoId) ?? null : null),
+    [lightboxPhotoId, photos],
+  )
+
   useEffect(() => {
-    if (!lightboxPhotoId) { setPhoto(null); return }
-    const found = photos.find(p => p.id === lightboxPhotoId) ?? null
-    setPhoto(found)
     setDownloadId(null)
     setJobRef('')
     setJobLogOpen(false)
     setJobSaved(false)
     setHistOpen(false)
     setUsageHistory([])
-  }, [lightboxPhotoId, photos])
+  }, [lightboxPhotoId])
 
   const fetchHistory = useCallback(async (photoId: string) => {
     const supabase = getSupabaseBrowserClient()
@@ -108,7 +109,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [lightboxOpen, closeLightbox, prevId, nextId, openLightbox])
 
-  const imageUrl = useSignedPhotoUrl(photo?.storage_path)
+  const imageUrl = useSignedPhotoUrl(photo?.storage_path, { enabled: lightboxOpen && !!photo?.storage_path })
   const isDone = !!downloadId
 
   if (!lightboxOpen) return null

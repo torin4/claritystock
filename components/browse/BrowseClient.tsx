@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
 import SearchBar from '@/components/browse/SearchBar'
 import QuickFilterRow from '@/components/browse/QuickFilterRow'
 import CollectionsStrip from '@/components/browse/CollectionsStrip'
@@ -20,33 +21,41 @@ interface BrowseClientProps {
   userId: string
 }
 
+const DEFAULT_FILTER_KEY = ['', '', '', 'new', 'all', ''].join('\0')
+
 export default function BrowseClient({ initialPhotos, collections, userId }: BrowseClientProps) {
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [loading, setLoading] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [zipBusy, setZipBusy] = useState(false)
-  const filters = useFilterStore()
-  const { openUpload } = useUIStore()
+  const search = useFilterStore((s) => s.search)
+  const category = useFilterStore((s) => s.category)
+  const neighborhood = useFilterStore((s) => s.neighborhood)
+  const sort = useFilterStore((s) => s.sort)
+  const quickFilter = useFilterStore((s) => s.quickFilter)
+  const collectionId = useFilterStore((s) => s.collectionId)
+  const openUpload = useUIStore((s) => s.openUpload)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const didRunInitialFetch = useRef(false)
 
   const filterKey = useMemo(
     () =>
       [
-        filters.search,
-        filters.category,
-        filters.neighborhood,
-        filters.sort,
-        filters.quickFilter,
-        filters.collectionId,
+        search,
+        category ?? '',
+        neighborhood ?? '',
+        sort,
+        quickFilter,
+        collectionId ?? '',
       ].join('\0'),
     [
-      filters.search,
-      filters.category,
-      filters.neighborhood,
-      filters.sort,
-      filters.quickFilter,
-      filters.collectionId,
+      search,
+      category,
+      neighborhood,
+      sort,
+      quickFilter,
+      collectionId,
     ],
   )
 
@@ -103,34 +112,51 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       const supabase = getSupabaseBrowserClient()
       let query = supabase
         .from('photos')
-        .select('*, photographer:users!photographer_id(id, name, initials), collection:collections!collection_id(id, name, category)')
+        .select(PHOTO_CARD_SELECT)
 
-      if (filters.search) {
-        query = query.textSearch('fts', filters.search, { type: 'websearch' })
+      if (search) {
+        query = query.textSearch('fts', search, { type: 'websearch' })
       }
-      if (filters.category) query = query.eq('category', filters.category)
-      if (filters.neighborhood) query = query.eq('neighborhood', filters.neighborhood)
-      if (filters.collectionId) query = query.eq('collection_id', filters.collectionId)
+      if (category) query = query.eq('category', category)
+      if (neighborhood) query = query.eq('neighborhood', neighborhood)
+      if (collectionId) query = query.eq('collection_id', collectionId)
 
-      if (filters.sort === 'used') {
+      if (sort === 'used') {
         query = query.order('downloads_count', { ascending: false })
       } else {
         query = query.order('created_at', { ascending: false })
       }
 
-      // Quick filter: favorites
-      if (filters.quickFilter === 'fav') {
+      if (quickFilter === 'fav') {
         const { data: favs } = await supabase.from('favorites').select('photo_id').eq('user_id', userId)
         const ids = (favs ?? []).map((f: { photo_id: string }) => f.photo_id)
         query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
       }
+      if (quickFilter === 'mine') {
+        const { data: downloads } = await supabase.from('downloads').select('photo_id').eq('downloaded_by', userId)
+        const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
+        query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
+      }
+      if (quickFilter === 'new') {
+        const { data: downloads } = await supabase.from('downloads').select('photo_id').eq('downloaded_by', userId)
+        const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
+        if (ids.length) query = query.not('id', 'in', `(${ids.join(',')})`)
+      }
 
-      const { data } = await query.limit(120)
+      const { data } = await query.limit(BROWSE_PAGE_SIZE)
+      const photoIds = (data ?? []).map((p: { id: string }) => p.id)
+      if (!photoIds.length) {
+        setPhotos([])
+        return
+      }
 
-      // Fetch my downloads/favs for badges
       const [dlRes, favRes] = await Promise.all([
-        supabase.from('downloads').select('photo_id').eq('downloaded_by', userId),
-        supabase.from('favorites').select('photo_id').eq('user_id', userId),
+        quickFilter === 'mine'
+          ? Promise.resolve({ data: photoIds.map((photo_id) => ({ photo_id })) })
+          : supabase.from('downloads').select('photo_id').eq('downloaded_by', userId).in('photo_id', photoIds),
+        quickFilter === 'fav'
+          ? Promise.resolve({ data: photoIds.map((photo_id) => ({ photo_id })) })
+          : supabase.from('favorites').select('photo_id').eq('user_id', userId).in('photo_id', photoIds),
       ])
       const dlIds = new Set((dlRes.data ?? []).map((d: { photo_id: string }) => d.photo_id))
       const favIds = new Set((favRes.data ?? []).map((f: { photo_id: string }) => f.photo_id))
@@ -141,29 +167,33 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
         is_favorited: favIds.has(p.id as string),
       })) as Photo[]
 
-      if (filters.quickFilter === 'mine') result = result.filter(p => p.is_downloaded_by_me)
-      if (filters.quickFilter === 'new') result = result.filter(p => !p.is_downloaded_by_me)
-
       setPhotos(result)
     } finally {
       setLoading(false)
     }
-  }, [filters, userId])
+  }, [search, category, neighborhood, collectionId, sort, quickFilter, userId])
 
   useEffect(() => {
+    if (!didRunInitialFetch.current) {
+      didRunInitialFetch.current = true
+      if (filterKey === DEFAULT_FILTER_KEY) return
+    }
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(fetchPhotos, filters.search ? 400 : 0)
-  }, [fetchPhotos, filters.search, filters.category, filters.neighborhood, filters.sort, filters.quickFilter, filters.collectionId])
+    debounceRef.current = setTimeout(fetchPhotos, search ? 400 : 0)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [fetchPhotos, filterKey, search])
 
-  const handleFavoriteToggle = (photoId: string, val: boolean) => {
+  const handleFavoriteToggle = useCallback((photoId: string, val: boolean) => {
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, is_favorited: val } : p))
-  }
+  }, [])
 
-  const handleDownload = (photoId: string) => {
+  const handleDownload = useCallback((photoId: string) => {
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, is_downloaded_by_me: true } : p))
-  }
+  }, [])
 
-  const hasActiveFilters = !!(filters.category || filters.neighborhood || (filters.search && filters.search.length > 0))
+  const hasActiveFilters = !!(category || neighborhood || (search && search.length > 0))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

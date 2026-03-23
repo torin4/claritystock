@@ -36,7 +36,7 @@ export default function PhotoGrid({
   onBeginSelection,
   onToggleSelected,
 }: Props) {
-  const displayPaths = useMemo(
+  const displayPathsKey = useMemo(
     () =>
       Array.from(
         new Set(
@@ -44,10 +44,14 @@ export default function PhotoGrid({
             .map((photo) => photo.thumbnail_path ?? photo.storage_path)
             .filter((path): path is string => Boolean(path)),
         ),
-      ),
+      ).join('\n'),
     [photos],
   )
-  const displayKey = displayPaths.join('|')
+  const displayPaths = useMemo(
+    () => (displayPathsKey ? displayPathsKey.split('\n') : []),
+    [displayPathsKey],
+  )
+  const selectedSet = useMemo(() => new Set(selectedIds ?? []), [selectedIds])
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       displayPaths
@@ -62,26 +66,34 @@ export default function PhotoGrid({
       return
     }
 
-    setSignedUrls(
-      Object.fromEntries(
-        displayPaths
-          .map((path) => [path, peekCachedSignedUrl(path)] as const)
-          .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
-      ),
-    )
+    const active = new Set(displayPaths)
+    setSignedUrls((prev) => {
+      const next: Record<string, string> = {}
+      for (const path of displayPaths) {
+        const cached = peekCachedSignedUrl(path)
+        if (cached) {
+          next[path] = cached
+          continue
+        }
+        if (prev[path] && active.has(path)) {
+          next[path] = prev[path]
+        }
+      }
+      return next
+    })
 
     let cancelled = false
     ;(async () => {
       const supabase = getSupabaseBrowserClient()
       const urls = await getOrCreateSignedUrls(supabase, displayPaths, 3600)
       if (cancelled) return
-      setSignedUrls(urls)
+      setSignedUrls((prev) => ({ ...prev, ...urls }))
     })()
 
     return () => {
       cancelled = true
     }
-  }, [displayKey, displayPaths])
+  }, [displayPaths, displayPathsKey])
 
   return (
     <div className={`photo-grid${selectionMode ? ' photo-grid-selecting' : ''}`}>
@@ -98,7 +110,7 @@ export default function PhotoGrid({
           onEdit={onEdit}
           selectable={selectable}
           selectionMode={selectionMode}
-          selected={selectedIds?.includes(photo.id) ?? false}
+          selected={selectedSet.has(photo.id)}
           onBeginSelection={onBeginSelection}
           onToggleSelected={onToggleSelected}
         />

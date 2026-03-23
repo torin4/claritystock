@@ -20,7 +20,7 @@ export async function getCollections(supabase: SupabaseClient) {
 export async function getMyCollections(supabase: SupabaseClient, userId: string) {
   const { data, error } = await supabase
     .from('collections')
-    .select('*, photos(id, storage_path, thumbnail_path)')
+    .select('id, name, category, created_by, created_at')
     .eq('created_by', userId)
     .order('created_at', { ascending: false })
 

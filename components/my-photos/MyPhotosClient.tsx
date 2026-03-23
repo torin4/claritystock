@@ -14,17 +14,16 @@ import { deleteCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
+import { PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
 import { useInView } from '@/lib/hooks/useInView'
 import type { Photo, Collection } from '@/lib/types/database.types'
 
-interface CollectionWithPhotos extends Collection {
-  photos: Photo[]
-}
+type CollectionSummary = Collection
 
 interface Props {
   initialPhotos: Photo[]
   initialDownloadedPhotos: Photo[]
-  collections: CollectionWithPhotos[]
+  collections: CollectionSummary[]
   userId: string
 }
 
@@ -40,7 +39,7 @@ export default function MyPhotosClient({
   const [localCollections, setLocalCollections] = useState(collections)
   const [tab, setTab] = useState<'collections' | 'photos' | 'downloads'>('collections')
   const [search, setSearch] = useState('')
-  const [drillColl, setDrillColl] = useState<CollectionWithPhotos | null>(null)
+  const [drillColl, setDrillColl] = useState<CollectionSummary | null>(null)
   const [deletingColl, setDeletingColl] = useState(false)
   const [createCollOpen, setCreateCollOpen] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -200,7 +199,7 @@ export default function MyPhotosClient({
     const supabase = getSupabaseBrowserClient()
     const { data } = await supabase
       .from('photos')
-      .select('*, collection:collections!collection_id(id, name, category)')
+      .select(PHOTO_CARD_SELECT)
       .eq('photographer_id', userId)
       .order('created_at', { ascending: false })
     setPhotos((data as Photo[]) ?? [])
@@ -234,7 +233,20 @@ export default function MyPhotosClient({
     return filteredPhotos
   }, [drillColl, tab, filteredDownloadedPhotos, filteredPhotos])
 
+  const photosByCollection = useMemo(() => {
+    const grouped = new Map<string, Photo[]>()
+    for (const photo of photos) {
+      if (!photo.collection_id) continue
+      const existing = grouped.get(photo.collection_id)
+      if (existing) existing.push(photo)
+      else grouped.set(photo.collection_id, [photo])
+    }
+    return grouped
+  }, [photos])
+
   const totalDownloads = photos.reduce((sum, p) => sum + (p.downloads_count ?? 0), 0)
+
+  const noopFavoriteToggle = useCallback(() => {}, [])
 
   const handleFavoriteToggleDownloads = useCallback((photoId: string, val: boolean) => {
     setDownloadedPhotos(prev => prev.map(p => (p.id === photoId ? { ...p, is_favorited: val } : p)))
@@ -353,7 +365,7 @@ export default function MyPhotosClient({
                 <CollectionTile
                   key={coll.id}
                   collection={coll}
-                  photos={photos.filter(p => p.collection_id === coll.id)}
+                  photos={photosByCollection.get(coll.id) ?? []}
                   onClick={() => { setDrillColl(coll); setTab('photos') }}
                 />
               ))}
@@ -478,7 +490,7 @@ export default function MyPhotosClient({
             <PhotoGrid
               photos={filteredPhotos}
               userId={userId}
-              onFavoriteToggle={() => {}}
+              onFavoriteToggle={noopFavoriteToggle}
               onDownload={handleDownloadRecorded}
               showEdit
               onEdit={openEdit}
