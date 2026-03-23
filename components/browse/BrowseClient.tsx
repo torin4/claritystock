@@ -221,6 +221,10 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       return true
     })
   }, [collections, category, search])
+  const activeCollection = useMemo(
+    () => collections.find((c) => c.id === collectionId) ?? null,
+    [collections, collectionId],
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -277,6 +281,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
                   key={c.id}
                   collection={c}
                   photos={c.photos ?? []}
+                  active={collectionId === c.id}
                   onClick={() => {
                     setCollection(c.id)
                     setBrowseMode('photos')
@@ -290,21 +295,47 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
             Loading...
           </div>
         ) : photos.length === 0 ? (
-          <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: '13px' }}>
-            No photos found
-          </div>
+          <>
+            {activeCollection && (
+              <div className="browse-coll-hdr">
+                <div className="browse-coll-pill" aria-label={`Viewing ${activeCollection.name}`}>
+                  <span>Collection</span>
+                  <strong>{activeCollection.name}</strong>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCollection(null)}>
+                  Clear
+                </button>
+              </div>
+            )}
+            <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: '13px' }}>
+              No photos found
+            </div>
+          </>
         ) : (
-          <PhotoGrid
-            photos={photos}
-            userId={userId}
-            onFavoriteToggle={handleFavoriteToggle}
-            onDownload={handleDownload}
-            selectable
-            selectionMode={selectionMode}
-            selectedIds={selectedIds}
-            onBeginSelection={beginSelection}
-            onToggleSelected={toggleSelected}
-          />
+          <>
+            {activeCollection && (
+              <div className="browse-coll-hdr">
+                <div className="browse-coll-pill" aria-label={`Viewing ${activeCollection.name}`}>
+                  <span>Collection</span>
+                  <strong>{activeCollection.name}</strong>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCollection(null)}>
+                  Clear
+                </button>
+              </div>
+            )}
+            <PhotoGrid
+              photos={photos}
+              userId={userId}
+              onFavoriteToggle={handleFavoriteToggle}
+              onDownload={handleDownload}
+              selectable
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              onBeginSelection={beginSelection}
+              onToggleSelected={toggleSelected}
+            />
+          </>
         )}
       </div>
 
@@ -365,17 +396,19 @@ function MosaicCell({
 function CollectionTile({
   collection,
   photos,
+  active,
   onClick,
 }: {
   collection: Collection
   photos: Array<{ storage_path: string | null; thumbnail_path: string | null }>
+  active?: boolean
   onClick: () => void
 }) {
   const topPhotos = photos.slice(0, 3)
   const single = photos.length === 1
 
   return (
-    <div className="coll-tile" onClick={onClick}>
+    <div className={`coll-tile${active ? ' active' : ''}`} onClick={onClick}>
       <div className={`coll-mosaic${single ? ' coll-mosaic--single' : ''}`}>
         {single ? (
           <MosaicCell photo={topPhotos[0]} />

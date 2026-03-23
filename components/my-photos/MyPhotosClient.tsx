@@ -43,7 +43,7 @@ export default function MyPhotosClient({
   /** Fetched only when the My downloads tab is opened (keeps Collections / All photos fast). */
   const [downloadsStatus, setDownloadsStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const [localCollections, setLocalCollections] = useState(collections)
-  const [tab, setTab] = useState<'collections' | 'photos' | 'downloads'>('collections')
+  const [tab, setTab] = useState<'collections' | 'photos' | 'downloads'>('photos')
   const [search, setSearch] = useState('')
   const [drillColl, setDrillColl] = useState<CollectionSummary | null>(null)
   const [deletingColl, setDeletingColl] = useState(false)
@@ -446,13 +446,13 @@ export default function MyPhotosClient({
       {!drillColl && (
         <div className="my-tabs">
           <button
-            className={`my-tab ${tab === 'collections' ? 'active' : ''}`}
-            onClick={() => setTab('collections')}
-          >Collections</button>
-          <button
             className={`my-tab ${tab === 'photos' ? 'active' : ''}`}
             onClick={() => setTab('photos')}
           >All photos</button>
+          <button
+            className={`my-tab ${tab === 'collections' ? 'active' : ''}`}
+            onClick={() => setTab('collections')}
+          >Collections</button>
           <button
             className={`my-tab ${tab === 'downloads' ? 'active' : ''}`}
             onClick={() => setTab('downloads')}

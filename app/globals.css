@@ -408,6 +408,32 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
+.browse-coll-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.browse-coll-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.browse-coll-pill strong {
+  color: var(--text);
+  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
 
 /* ── Collections strip ── */
 .coll-strip { display: flex; gap: 6px; padding: 8px 20px; overflow-x: auto; border-bottom: 1px solid var(--border); }
@@ -817,6 +843,7 @@ body {
 .mp-empty-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
 .coll-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); padding: var(--gap); }
 .coll-tile { position: relative; overflow: hidden; cursor: pointer; aspect-ratio: 1; background: var(--surface-2); }
+.coll-tile.active { box-shadow: inset 0 0 0 1px var(--accent); }
 .coll-tile:hover .coll-ov { opacity: 1; }
 .coll-mosaic { width: 100%; height: 100%; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; }
 .coll-mosaic-cell:first-child { grid-row: span 2; }
