@@ -4,10 +4,26 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { PhotoFormValues } from '@/lib/types/database.types'
 
+async function assertOwnedCollectionId(
+  collectionId: string | null | undefined,
+  userId: string,
+) {
+  if (!collectionId) return
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('collections')
+    .select('id')
+    .eq('id', collectionId)
+    .eq('created_by', userId)
+    .single()
+  if (error || !data) throw new Error('Invalid collection')
+}
+
 export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  await assertOwnedCollectionId(values.collection_id, user.id)
 
   const { error } = await supabase
     .from('photos')
@@ -34,6 +50,7 @@ export async function updatePhotosCollectionIds(photoIds: string[], collectionId
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  await assertOwnedCollectionId(collectionId, user.id)
 
   const unique = Array.from(new Set(photoIds)).filter(Boolean)
   if (!unique.length) return { updated: 0 }
@@ -167,6 +184,9 @@ export async function publishPhoto(
   thumbnailPath?: string | null,
 ) {
   const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || user.id !== photographerId) throw new Error('Unauthorized')
+  await assertOwnedCollectionId(formValues.collection_id, photographerId)
 
   // If creating a new collection
   let collectionId = formValues.collection_id

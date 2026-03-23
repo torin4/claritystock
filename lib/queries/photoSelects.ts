@@ -22,6 +22,27 @@ export const PHOTO_CARD_SELECT = `
   collection:collections!collection_id(id, name, category)
 `
 
+/**
+ * My Photos library only: same as {@link PHOTO_CARD_SELECT} but omits the per-row `photographer` join
+ * (always your own uploads). Merge one profile object on the server/client instead.
+ */
+export const PHOTO_MY_LIBRARY_CARD_SELECT = `
+  id,
+  title,
+  photographer_id,
+  collection_id,
+  category,
+  neighborhood,
+  subarea,
+  captured_date,
+  tags,
+  storage_path,
+  thumbnail_path,
+  downloads_count,
+  created_at,
+  collection:collections!collection_id(id, name, category)
+`
+
 /** Full row for edit/detail views that actually need the entire photo payload. */
 export const PHOTO_DETAIL_SELECT = `
   *,

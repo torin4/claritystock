@@ -14,28 +14,34 @@ import { deleteCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
-import { PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
+import { PHOTO_MY_LIBRARY_CARD_SELECT } from '@/lib/queries/photoSelects'
+import { getMyDownloadedPhotos } from '@/lib/queries/photos.queries'
 import { useInView } from '@/lib/hooks/useInView'
-import type { Photo, Collection } from '@/lib/types/database.types'
+import type { Photo, Collection, User } from '@/lib/types/database.types'
 
 type CollectionSummary = Collection
 
+type LibraryPhotographer = Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'>
+
 interface Props {
   initialPhotos: Photo[]
-  initialDownloadedPhotos: Photo[]
   collections: CollectionSummary[]
   userId: string
+  /** Merged onto each library photo (avoids per-row photographer join). */
+  libraryPhotographer: LibraryPhotographer | null
 }
 
 export default function MyPhotosClient({
   initialPhotos,
-  initialDownloadedPhotos,
   collections,
   userId,
+  libraryPhotographer,
 }: Props) {
   const router = useRouter()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
-  const [downloadedPhotos, setDownloadedPhotos] = useState<Photo[]>(initialDownloadedPhotos)
+  const [downloadedPhotos, setDownloadedPhotos] = useState<Photo[]>([])
+  /** Fetched only when the My downloads tab is opened (keeps Collections / All photos fast). */
+  const [downloadsStatus, setDownloadsStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const [localCollections, setLocalCollections] = useState(collections)
   const [tab, setTab] = useState<'collections' | 'photos' | 'downloads'>('collections')
   const [search, setSearch] = useState('')
@@ -264,21 +270,46 @@ export default function MyPhotosClient({
   }, [initialPhotos])
 
   useEffect(() => {
-    setDownloadedPhotos(initialDownloadedPhotos)
-  }, [initialDownloadedPhotos])
-
-  useEffect(() => {
     setLocalCollections(collections)
   }, [collections])
+
+  useEffect(() => {
+    if (tab !== 'downloads') return
+    if (downloadsStatus !== 'idle') return
+    let cancelled = false
+    setDownloadsStatus('loading')
+    const supabase = getSupabaseBrowserClient()
+    getMyDownloadedPhotos(supabase, userId)
+      .then(data => {
+        if (cancelled) return
+        setDownloadedPhotos(data)
+        setDownloadsStatus('done')
+      })
+      .catch(err => {
+        console.error(err)
+        if (!cancelled) setDownloadsStatus('done')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tab, downloadsStatus, userId])
+
+  const mergeLibraryRows = useCallback(
+    (rows: Photo[]) =>
+      libraryPhotographer
+        ? rows.map(p => ({ ...p, photographer: libraryPhotographer }))
+        : rows,
+    [libraryPhotographer],
+  )
 
   const refresh = async () => {
     const supabase = getSupabaseBrowserClient()
     const { data } = await supabase
       .from('photos')
-      .select(PHOTO_CARD_SELECT)
+      .select(PHOTO_MY_LIBRARY_CARD_SELECT)
       .eq('photographer_id', userId)
       .order('created_at', { ascending: false })
-    setPhotos((data as Photo[]) ?? [])
+    setPhotos(mergeLibraryRows((data as Photo[]) ?? []) as Photo[])
   }
 
   const filteredPhotos = useMemo(() => {
@@ -377,7 +408,9 @@ export default function MyPhotosClient({
           <div className="ph-title">{drillColl ? drillColl.name : 'My Photos'}</div>
           <div className="ph-sub">
             {!drillColl && tab === 'downloads' ? (
-              `${downloadedPhotos.length} photo${downloadedPhotos.length !== 1 ? 's' : ''} you've downloaded`
+              downloadsStatus === 'loading'
+                ? 'Loading downloads…'
+                : `${downloadedPhotos.length} photo${downloadedPhotos.length !== 1 ? 's' : ''} you've downloaded`
             ) : (
               <>
                 {photos.length} in Library · {totalDownloads} uses by the team
@@ -599,11 +632,15 @@ export default function MyPhotosClient({
               />
             </div>
             <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
-              {filteredDownloadedPhotos.length} photos
+              {downloadsStatus === 'loading' ? '…' : `${filteredDownloadedPhotos.length} photos`}
             </span>
           </div>
 
-          {filteredDownloadedPhotos.length === 0 ? (
+          {downloadsStatus === 'loading' ? (
+            <div className="mp-empty-block" style={{ paddingTop: 48 }}>
+              <p className="mp-empty-sub" style={{ margin: 0 }}>Loading your downloads…</p>
+            </div>
+          ) : filteredDownloadedPhotos.length === 0 ? (
             downloadedPhotos.length === 0 ? (
               <div className="mp-empty-block">
                 <h3 className="mp-empty-title">No downloads yet</h3>

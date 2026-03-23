@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { BrowseFilters, Photo } from '@/lib/types/database.types'
-import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT, PHOTO_DETAIL_SELECT } from '@/lib/queries/photoSelects'
+import type { BrowseFilters, Photo, User } from '@/lib/types/database.types'
+import {
+  BROWSE_PAGE_SIZE,
+  PHOTO_CARD_SELECT,
+  PHOTO_DETAIL_SELECT,
+  PHOTO_MY_LIBRARY_CARD_SELECT,
+} from '@/lib/queries/photoSelects'
 
 export async function getPhotos(
   supabase: SupabaseClient,
@@ -59,15 +64,37 @@ export async function getPhotos(
   return data ?? []
 }
 
-export async function getMyPhotos(supabase: SupabaseClient, userId: string) {
-  const { data, error } = await supabase
+type LibraryPhotographer = Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'>
+
+/**
+ * Your uploads for My Photos. Uses {@link PHOTO_MY_LIBRARY_CARD_SELECT} (no per-row photographer join).
+ * Pass `photographer` from {@link getServerProfile} to avoid an extra `users` round-trip.
+ */
+export async function getMyPhotos(
+  supabase: SupabaseClient,
+  userId: string,
+  photographer?: LibraryPhotographer | null,
+) {
+  const { data: rows, error } = await supabase
     .from('photos')
-    .select(PHOTO_CARD_SELECT)
+    .select(PHOTO_MY_LIBRARY_CARD_SELECT)
     .eq('photographer_id', userId)
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return data ?? []
+
+  let prof: LibraryPhotographer | undefined = photographer ?? undefined
+  if (!prof) {
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('id, name, initials, avatar_url')
+      .eq('id', userId)
+      .single()
+    prof = userRow ?? undefined
+  }
+
+  const list = rows ?? []
+  return (prof ? list.map(p => ({ ...p, photographer: prof })) : list) as unknown as Photo[]
 }
 
 /** Photos you’ve downloaded from the library (any photographer), most recently saved first; deduped per photo. */

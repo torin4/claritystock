@@ -27,9 +27,13 @@ export default function EditModal({ userId, onSuccess }: Props) {
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
-    supabase.from('collections').select('*').order('created_at', { ascending: false })
+    supabase
+      .from('collections')
+      .select('*')
+      .eq('created_by', userId)
+      .order('created_at', { ascending: false })
       .then(({ data }) => setCollections((data as Collection[]) ?? []))
-  }, [])
+  }, [userId])
 
   useEffect(() => {
     if (!editModalPhotoId) { setPhoto(null); return }

@@ -37,9 +37,13 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   useEffect(() => {
     if (!uploadModalOpen) return
     const supabase = getSupabaseBrowserClient()
-    supabase.from('collections').select('*').order('created_at', { ascending: false })
+    supabase
+      .from('collections')
+      .select('*')
+      .eq('created_by', userId)
+      .order('created_at', { ascending: false })
       .then(({ data }) => setCollections((data as Collection[]) ?? []))
-  }, [uploadModalOpen])
+  }, [uploadModalOpen, userId])
 
   const targetCollectionName = useMemo(
     () =>
