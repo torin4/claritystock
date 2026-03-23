@@ -19,6 +19,7 @@ export interface Collection {
   created_by: string | null
   created_at: string
   photo_count?: number
+  photos?: Array<{ storage_path: string | null; thumbnail_path: string | null }>
 }
 
 export interface Photo {

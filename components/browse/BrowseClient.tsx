@@ -1,9 +1,12 @@
 'use client'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
+import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
+import { useInView } from '@/lib/hooks/useInView'
 import SearchBar from '@/components/browse/SearchBar'
 import QuickFilterRow from '@/components/browse/QuickFilterRow'
 import PhotoGrid from '@/components/photos/PhotoGrid'
@@ -23,6 +26,7 @@ interface BrowseClientProps {
 const DEFAULT_FILTER_KEY = ['', '', '', 'new', 'all', ''].join('\0')
 
 export default function BrowseClient({ initialPhotos, collections, userId }: BrowseClientProps) {
+  const searchParams = useSearchParams()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [browseMode, setBrowseMode] = useState<'photos' | 'collections'>('photos')
   const [loading, setLoading] = useState(false)
@@ -192,6 +196,14 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
     exitSelection()
   }, [browseMode, exitSelection])
 
+  useEffect(() => {
+    const collectionFromUrl = searchParams.get('collection')
+    if (!collectionFromUrl) return
+    if (collectionId === collectionFromUrl) return
+    setCollection(collectionFromUrl)
+    setBrowseMode('photos')
+  }, [searchParams, collectionId, setCollection])
+
   const handleFavoriteToggle = useCallback((photoId: string, val: boolean) => {
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, is_favorited: val } : p))
   }, [])
@@ -259,23 +271,17 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
               No collections found
             </div>
           ) : (
-            <div className="browse-coll-grid">
+            <div className="coll-grid">
               {filteredCollections.map((c) => (
-                <button
+                <CollectionTile
                   key={c.id}
-                  type="button"
-                  className={`browse-coll-card ${collectionId === c.id ? 'active' : ''}`}
+                  collection={c}
+                  photos={c.photos ?? []}
                   onClick={() => {
                     setCollection(c.id)
                     setBrowseMode('photos')
                   }}
-                >
-                  <div className="browse-coll-name">{c.name}</div>
-                  <div className="browse-coll-meta">
-                    <span>{c.photo_count ?? 0} photos</span>
-                    {c.category ? <span>{c.category}</span> : null}
-                  </div>
-                </button>
+                />
               ))}
             </div>
           )
@@ -331,6 +337,58 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
 
       {/* Upload modal */}
       <UploadModal userId={userId} onSuccess={fetchPhotos} />
+    </div>
+  )
+}
+
+function MosaicCell({
+  photo,
+}: {
+  photo: { storage_path: string | null; thumbnail_path: string | null } | undefined
+}) {
+  const cellRef = useRef<HTMLDivElement>(null)
+  const inView = useInView(cellRef, { rootMargin: '120px' })
+  const path = photo?.thumbnail_path ?? photo?.storage_path ?? null
+  const url = useSignedPhotoUrl(path, { enabled: inView })
+  return (
+    <div ref={cellRef} className="coll-mosaic-cell">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <div style={{ width: '100%', height: '100%', background: 'var(--surface-2)' }} />
+      )}
+    </div>
+  )
+}
+
+function CollectionTile({
+  collection,
+  photos,
+  onClick,
+}: {
+  collection: Collection
+  photos: Array<{ storage_path: string | null; thumbnail_path: string | null }>
+  onClick: () => void
+}) {
+  const topPhotos = photos.slice(0, 3)
+  const single = photos.length === 1
+
+  return (
+    <div className="coll-tile" onClick={onClick}>
+      <div className={`coll-mosaic${single ? ' coll-mosaic--single' : ''}`}>
+        {single ? (
+          <MosaicCell photo={topPhotos[0]} />
+        ) : (
+          [0, 1, 2].map(i => (
+            <MosaicCell key={i} photo={topPhotos[i]} />
+          ))
+        )}
+      </div>
+      <div className="coll-ov">
+        <div className="coll-name">{collection.name}</div>
+        <div className="coll-count">{collection.photo_count ?? 0} photo{(collection.photo_count ?? 0) !== 1 ? 's' : ''}</div>
+      </div>
     </div>
   )
 }

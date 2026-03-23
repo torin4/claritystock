@@ -55,6 +55,7 @@ export default function MyPhotosClient({
   const [removeDownloadsBusy, setRemoveDownloadsBusy] = useState(false)
   const [bulkCollBusy, setBulkCollBusy] = useState(false)
   const [bulkAssignCollId, setBulkAssignCollId] = useState('')
+  const downloadsLoadedRef = useRef(false)
   const { openUpload, openEdit } = useUIStore()
 
   const beginSelection = useCallback((id: string) => {
@@ -274,13 +275,13 @@ export default function MyPhotosClient({
   }, [collections])
 
   useEffect(() => {
-    if (tab !== 'downloads') {
-      if (downloadsStatus === 'loading') setDownloadsStatus('idle')
-      return
-    }
-    if (downloadsStatus !== 'idle') return
+    if (tab !== 'downloads') return
+    if (downloadsLoadedRef.current) return
+
+    downloadsLoadedRef.current = true
     let cancelled = false
     setDownloadsStatus('loading')
+
     const supabase = getSupabaseBrowserClient()
     getMyDownloadedPhotos(supabase, userId)
       .then(data => {
@@ -291,12 +292,18 @@ export default function MyPhotosClient({
         console.error(err)
       })
       .finally(() => {
-        if (!cancelled) setDownloadsStatus('done')
+        if (cancelled) {
+          setDownloadsStatus('idle')
+          downloadsLoadedRef.current = false
+        } else {
+          setDownloadsStatus('done')
+        }
       })
+
     return () => {
       cancelled = true
     }
-  }, [tab, downloadsStatus, userId])
+  }, [tab, userId])
 
   const mergeLibraryRows = useCallback(
     (rows: Photo[]) =>
