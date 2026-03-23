@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -11,6 +11,7 @@ import FilterDrawer from '@/components/modals/FilterDrawer'
 import Lightbox from '@/components/modals/Lightbox'
 import UploadModal from '@/components/modals/UploadModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
+import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import type { Photo, Collection } from '@/lib/types/database.types'
 
 interface BrowseClientProps {
@@ -22,9 +23,79 @@ interface BrowseClientProps {
 export default function BrowseClient({ initialPhotos, collections, userId }: BrowseClientProps) {
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [loading, setLoading] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [zipBusy, setZipBusy] = useState(false)
   const filters = useFilterStore()
   const { openUpload } = useUIStore()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+
+  const filterKey = useMemo(
+    () =>
+      [
+        filters.search,
+        filters.category,
+        filters.neighborhood,
+        filters.sort,
+        filters.quickFilter,
+        filters.collectionId,
+      ].join('\0'),
+    [
+      filters.search,
+      filters.category,
+      filters.neighborhood,
+      filters.sort,
+      filters.quickFilter,
+      filters.collectionId,
+    ],
+  )
+
+  const beginSelection = useCallback((id: string) => {
+    setSelectionMode(true)
+    setSelectedIds(prev => (prev.includes(id) ? prev : [...prev, id]))
+  }, [])
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    )
+  }, [])
+
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false)
+    setSelectedIds([])
+  }, [])
+
+  useEffect(() => {
+    exitSelection()
+  }, [filterKey, exitSelection])
+
+  useEffect(() => {
+    if (!selectionMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitSelection()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectionMode, exitSelection])
+
+  const handleDownloadZip = async () => {
+    if (!selectedIds.length || zipBusy) return
+    setZipBusy(true)
+    try {
+      await downloadPhotosZip(selectedIds)
+      setPhotos(prev =>
+        prev.map(p => (selectedIds.includes(p.id) ? { ...p, is_downloaded_by_me: true } : p)),
+      )
+      exitSelection()
+    } catch (e) {
+      if (e instanceof Error && e.message === 'Cancelled') return
+      console.error(e)
+      alert(e instanceof Error ? e.message : 'Could not build ZIP')
+    } finally {
+      setZipBusy(false)
+    }
+  }
 
   const fetchPhotos = useCallback(async () => {
     setLoading(true)
@@ -118,7 +189,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       <CollectionsStrip collections={collections} />
 
       {/* Photo grid */}
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, paddingBottom: selectionMode ? 88 : undefined }}>
         {loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-3)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
             Loading...
@@ -133,9 +204,35 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
             userId={userId}
             onFavoriteToggle={handleFavoriteToggle}
             onDownload={handleDownload}
+            selectable
+            selectionMode={selectionMode}
+            selectedIds={selectedIds}
+            onBeginSelection={beginSelection}
+            onToggleSelected={toggleSelected}
           />
         )}
       </div>
+
+      {selectionMode && (
+        <div className="mp-select-bar">
+          <span className="mp-select-bar-count">{selectedIds.length} selected</span>
+          <span className="mp-select-bar-hint">
+            Long-press or right-click to add · tap to toggle · ZIP up to {ZIP_DOWNLOAD_MAX_PHOTOS} photos
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={!selectedIds.length || zipBusy}
+            title={selectedIds.length > ZIP_DOWNLOAD_MAX_PHOTOS ? `Max ${ZIP_DOWNLOAD_MAX_PHOTOS} photos per ZIP` : undefined}
+            onClick={handleDownloadZip}
+          >
+            {zipBusy ? 'Zipping…' : 'Download ZIP'}
+          </button>
+        </div>
+      )}
 
       {/* Filter drawer */}
       <FilterDrawer />

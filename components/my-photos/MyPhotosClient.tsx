@@ -12,6 +12,7 @@ import { PlusIcon } from '@/components/icons/PlusIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { deleteCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos } from '@/lib/actions/photos.actions'
+import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { useInView } from '@/lib/hooks/useInView'
 import type { Photo, Collection } from '@/lib/types/database.types'
 
@@ -37,6 +38,7 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [zipBusy, setZipBusy] = useState(false)
   const { openUpload, openEdit } = useUIStore()
 
   const beginSelection = useCallback((id: string) => {
@@ -67,6 +69,24 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectionMode, exitSelection])
+
+  const handleDownloadZip = async () => {
+    if (!selectedIds.length || zipBusy) return
+    setZipBusy(true)
+    try {
+      await downloadPhotosZip(selectedIds)
+      setPhotos(prev =>
+        prev.map(p => (selectedIds.includes(p.id) ? { ...p, is_downloaded_by_me: true } : p)),
+      )
+      exitSelection()
+    } catch (e) {
+      if (e instanceof Error && e.message === 'Cancelled') return
+      console.error(e)
+      alert(e instanceof Error ? e.message : 'Could not build ZIP')
+    } finally {
+      setZipBusy(false)
+    }
+  }
 
   const handleBulkDelete = async () => {
     if (!selectedIds.length) return
@@ -373,15 +393,24 @@ export default function MyPhotosClient({ initialPhotos, collections, userId }: P
             {selectedIds.length} selected
           </span>
           <span className="mp-select-bar-hint">
-            Long-press or right-click to add · tap to toggle
+            Long-press or right-click to add · tap to toggle · ZIP up to {ZIP_DOWNLOAD_MAX_PHOTOS} photos
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
             Cancel
           </button>
           <button
             type="button"
+            className="btn btn-primary btn-sm"
+            disabled={!selectedIds.length || zipBusy || bulkDeleting}
+            title={selectedIds.length > ZIP_DOWNLOAD_MAX_PHOTOS ? `Max ${ZIP_DOWNLOAD_MAX_PHOTOS} photos per ZIP` : undefined}
+            onClick={handleDownloadZip}
+          >
+            {zipBusy ? 'Zipping…' : 'Download ZIP'}
+          </button>
+          <button
+            type="button"
             className="btn-del-sm"
-            disabled={!selectedIds.length || bulkDeleting}
+            disabled={!selectedIds.length || bulkDeleting || zipBusy}
             onClick={handleBulkDelete}
           >
             {bulkDeleting ? 'Deleting…' : 'Delete'}
