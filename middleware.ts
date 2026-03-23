@@ -1,16 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback', '/error']
 
 export async function middleware(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error(
-      '[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY (set them in Vercel → Project → Settings → Environment Variables)',
-    )
+  let supabaseUrl: string
+  let supabaseAnonKey: string
+  try {
+    supabaseUrl = getSupabaseUrl()
+    supabaseAnonKey = getSupabaseAnonKey()
+  } catch (e) {
+    console.error('[middleware]', e)
     return new NextResponse('Application configuration error', { status: 500 })
   }
 
