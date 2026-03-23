@@ -41,3 +41,22 @@ export async function deleteCollection(id: string) {
   revalidatePath('/')
   revalidatePath('/my-photos')
 }
+
+export async function renameCollection(id: string, name: string) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  const nextName = name.trim()
+  if (!nextName) throw new Error('Name is required')
+
+  const { error } = await supabase
+    .from('collections')
+    .update({ name: nextName })
+    .eq('id', id)
+    .eq('created_by', user.id)
+
+  if (error) throw error
+  revalidatePath('/')
+  revalidatePath('/my-photos')
+}

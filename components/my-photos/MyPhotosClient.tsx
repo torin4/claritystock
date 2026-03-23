@@ -10,7 +10,7 @@ import UploadModal from '@/components/modals/UploadModal'
 import CreateCollectionModal from '@/components/my-photos/CreateCollectionModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-import { deleteCollection } from '@/lib/actions/collections.actions'
+import { deleteCollection, renameCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
@@ -47,6 +47,7 @@ export default function MyPhotosClient({
   const [search, setSearch] = useState('')
   const [drillColl, setDrillColl] = useState<CollectionSummary | null>(null)
   const [deletingColl, setDeletingColl] = useState(false)
+  const [renamingColl, setRenamingColl] = useState(false)
   const [createCollOpen, setCreateCollOpen] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -403,6 +404,34 @@ export default function MyPhotosClient({
     }
   }
 
+  const handleRenameCollection = async () => {
+    if (!drillColl || renamingColl) return
+    const next = prompt('Rename collection', drillColl.name)
+    if (next == null) return
+    const trimmed = next.trim()
+    if (!trimmed) {
+      alert('Collection name is required')
+      return
+    }
+    if (trimmed === drillColl.name) return
+
+    setRenamingColl(true)
+    try {
+      await renameCollection(drillColl.id, trimmed)
+      setDrillColl(prev => (prev ? { ...prev, name: trimmed } : prev))
+      setLocalCollections(prev =>
+        prev.map(c => (c.id === drillColl.id ? { ...c, name: trimmed } : c)),
+      )
+      useUIStore.getState().bumpSidebarCollections()
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+      alert(e instanceof Error ? e.message : 'Could not rename collection')
+    } finally {
+      setRenamingColl(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Page header */}
@@ -522,8 +551,16 @@ export default function MyPhotosClient({
                 </button>
                 <button
                   type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={renamingColl || deletingColl}
+                  onClick={handleRenameCollection}
+                >
+                  {renamingColl ? 'Renaming…' : 'Rename'}
+                </button>
+                <button
+                  type="button"
                   className="btn-del-sm"
-                  disabled={deletingColl}
+                  disabled={deletingColl || renamingColl}
                   onClick={handleDeleteCollection}
                 >
                   {deletingColl ? 'Deleting…' : 'Delete collection'}

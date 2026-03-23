@@ -297,14 +297,18 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
         ) : photos.length === 0 ? (
           <>
             {activeCollection && (
-              <div className="browse-coll-hdr">
-                <div className="browse-coll-pill" aria-label={`Viewing ${activeCollection.name}`}>
-                  <span>Collection</span>
-                  <strong>{activeCollection.name}</strong>
-                </div>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCollection(null)}>
-                  Clear
+              <div className="browse-coll-hdr" aria-label={`Viewing collection ${activeCollection.name}`}>
+                <button
+                  type="button"
+                  className="browse-coll-back"
+                  onClick={() => setCollection(null)}
+                  aria-label="Back to all collections"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M10 3.5L5.5 8L10 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
+                <div className="browse-coll-title">{activeCollection.name}</div>
               </div>
             )}
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: '13px' }}>
@@ -314,14 +318,18 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
         ) : (
           <>
             {activeCollection && (
-              <div className="browse-coll-hdr">
-                <div className="browse-coll-pill" aria-label={`Viewing ${activeCollection.name}`}>
-                  <span>Collection</span>
-                  <strong>{activeCollection.name}</strong>
-                </div>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCollection(null)}>
-                  Clear
+              <div className="browse-coll-hdr" aria-label={`Viewing collection ${activeCollection.name}`}>
+                <button
+                  type="button"
+                  className="browse-coll-back"
+                  onClick={() => setCollection(null)}
+                  aria-label="Back to all collections"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M10 3.5L5.5 8L10 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
+                <div className="browse-coll-title">{activeCollection.name}</div>
               </div>
             )}
             <PhotoGrid

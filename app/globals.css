@@ -410,29 +410,32 @@ body {
 }
 .browse-coll-hdr {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: baseline;
+  gap: 12px;
   padding: 10px 20px;
   border-bottom: 1px solid var(--border);
 }
-.browse-coll-pill {
+.browse-coll-back {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-3);
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border: 1px solid var(--accent);
-  background: var(--accent-dim);
-  color: var(--accent);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  justify-content: center;
 }
-.browse-coll-pill strong {
+.browse-coll-back:hover {
+  color: var(--text-2);
+  border-color: var(--border-hi);
+}
+.browse-coll-title {
   color: var(--text);
   font-weight: 600;
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* ── Collections strip ── */
