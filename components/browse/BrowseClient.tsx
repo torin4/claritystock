@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -26,6 +26,8 @@ interface BrowseClientProps {
 const DEFAULT_FILTER_KEY = ['', '', '', 'new', 'all', ''].join('\0')
 
 export default function BrowseClient({ initialPhotos, collections, userId }: BrowseClientProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [browseMode, setBrowseMode] = useState<'photos' | 'collections'>('photos')
@@ -225,6 +227,13 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
     () => collections.find((c) => c.id === collectionId) ?? null,
     [collections, collectionId],
   )
+  const clearCollectionFilter = useCallback(() => {
+    setCollection(null)
+    const next = new URLSearchParams(searchParams.toString())
+    next.delete('collection')
+    const href = next.toString() ? `${pathname}?${next.toString()}` : pathname
+    router.replace(href, { scroll: false })
+  }, [setCollection, searchParams, pathname, router])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -296,19 +305,19 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
           </div>
         ) : photos.length === 0 ? (
           <>
-            {activeCollection && (
-              <div className="browse-coll-hdr" aria-label={`Viewing collection ${activeCollection.name}`}>
+            {collectionId && (
+              <div className="browse-coll-hdr" aria-label={`Viewing collection ${activeCollection?.name ?? 'Collection'}`}>
                 <button
                   type="button"
                   className="browse-coll-back"
-                  onClick={() => setCollection(null)}
+                  onClick={clearCollectionFilter}
                   aria-label="Back to all collections"
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M10 3.5L5.5 8L10 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
-                <div className="browse-coll-title">{activeCollection.name}</div>
+                <div className="browse-coll-title">{activeCollection?.name ?? 'Collection'}</div>
               </div>
             )}
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: '13px' }}>
@@ -317,19 +326,19 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
           </>
         ) : (
           <>
-            {activeCollection && (
-              <div className="browse-coll-hdr" aria-label={`Viewing collection ${activeCollection.name}`}>
+            {collectionId && (
+              <div className="browse-coll-hdr" aria-label={`Viewing collection ${activeCollection?.name ?? 'Collection'}`}>
                 <button
                   type="button"
                   className="browse-coll-back"
-                  onClick={() => setCollection(null)}
+                  onClick={clearCollectionFilter}
                   aria-label="Back to all collections"
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M10 3.5L5.5 8L10 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
-                <div className="browse-coll-title">{activeCollection.name}</div>
+                <div className="browse-coll-title">{activeCollection?.name ?? 'Collection'}</div>
               </div>
             )}
             <PhotoGrid
