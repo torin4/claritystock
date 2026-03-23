@@ -35,6 +35,8 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [zipBusy, setZipBusy] = useState(false)
+  /** Avoid flashing "Loading…" on fast refetches (e.g. collection in/out). */
+  const [showLoadingUi, setShowLoadingUi] = useState(false)
   const search = useFilterStore((s) => s.search)
   const category = useFilterStore((s) => s.category)
   const neighborhood = useFilterStore((s) => s.neighborhood)
@@ -45,6 +47,11 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
   const openUpload = useUIStore((s) => s.openUpload)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const didRunInitialFetch = useRef(false)
+  /** Avoid URL→store re-applying ?collection= after we optimistically cleared (router.replace is async). */
+  const clearingCollectionFromUrlRef = useRef(false)
+  /** Detect browser back removing ?collection= so we can clear the store without fighting tile drill. */
+  const prevCollectionParamRef = useRef<string | null>(null)
+  const fetchAbortRef = useRef<AbortController | null>(null)
 
   const filterKey = useMemo(
     () =>
@@ -114,6 +121,9 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
   }
 
   const fetchPhotos = useCallback(async () => {
+    fetchAbortRef.current?.abort()
+    const ac = new AbortController()
+    fetchAbortRef.current = ac
     setLoading(true)
     try {
       const supabase = getSupabaseBrowserClient()
@@ -151,9 +161,10 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       }
 
       const { data } = await query.limit(BROWSE_PAGE_SIZE)
+      if (ac.signal.aborted) return
       const photoIds = (data ?? []).map((p: { id: string }) => p.id)
       if (!photoIds.length) {
-        setPhotos([])
+        if (!ac.signal.aborted) setPhotos([])
         return
       }
 
@@ -165,6 +176,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
           ? Promise.resolve({ data: photoIds.map((photo_id) => ({ photo_id })) })
           : supabase.from('favorites').select('photo_id').eq('user_id', userId).in('photo_id', photoIds),
       ])
+      if (ac.signal.aborted) return
       const dlIds = new Set((dlRes.data ?? []).map((d: { photo_id: string }) => d.photo_id))
       const favIds = new Set((favRes.data ?? []).map((f: { photo_id: string }) => f.photo_id))
 
@@ -174,9 +186,12 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
         is_favorited: favIds.has(p.id as string),
       })) as Photo[]
 
+      if (ac.signal.aborted) return
       setPhotos(result)
     } finally {
-      setLoading(false)
+      if (fetchAbortRef.current === ac) {
+        setLoading(false)
+      }
     }
   }, [search, category, neighborhood, collectionId, sort, quickFilter, userId])
 
@@ -185,13 +200,18 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       didRunInitialFetch.current = true
       if (filterKey === DEFAULT_FILTER_KEY) return
     }
-    if (browseMode === 'collections') return
+    if (browseMode === 'collections' && !collectionId) {
+      fetchAbortRef.current?.abort()
+      fetchAbortRef.current = null
+      setLoading(false)
+      return
+    }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(fetchPhotos, search ? 400 : 0)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [fetchPhotos, filterKey, search, browseMode])
+  }, [fetchPhotos, filterKey, search, browseMode, collectionId])
 
   useEffect(() => {
     if (browseMode !== 'collections') return
@@ -199,11 +219,38 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
   }, [browseMode, exitSelection])
 
   useEffect(() => {
-    const collectionFromUrl = searchParams.get('collection')
-    if (!collectionFromUrl) return
-    if (collectionId === collectionFromUrl) return
-    setCollection(collectionFromUrl)
-    setBrowseMode('photos')
+    if (!loading) {
+      setShowLoadingUi(false)
+      return
+    }
+    const t = window.setTimeout(() => setShowLoadingUi(true), 120)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  useEffect(() => {
+    const param = searchParams.get('collection')
+
+    if (clearingCollectionFromUrlRef.current) {
+      if (!param) {
+        clearingCollectionFromUrlRef.current = false
+        prevCollectionParamRef.current = null
+      }
+      return
+    }
+
+    if (param) {
+      prevCollectionParamRef.current = param
+      if (collectionId !== param) {
+        setCollection(param)
+        setBrowseMode('collections')
+      }
+      return
+    }
+
+    if (prevCollectionParamRef.current && collectionId) {
+      setCollection(null)
+    }
+    prevCollectionParamRef.current = null
   }, [searchParams, collectionId, setCollection])
 
   const handleFavoriteToggle = useCallback((photoId: string, val: boolean) => {
@@ -228,7 +275,9 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
     [collections, collectionId],
   )
   const clearCollectionFilter = useCallback(() => {
+    clearingCollectionFromUrlRef.current = true
     setCollection(null)
+    setBrowseMode('collections')
     const next = new URLSearchParams(searchParams.toString())
     next.delete('collection')
     const href = next.toString() ? `${pathname}?${next.toString()}` : pathname
@@ -278,7 +327,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
 
       {/* Photo grid */}
       <div style={{ flex: 1, paddingBottom: selectionMode ? 88 : undefined }}>
-        {browseMode === 'collections' ? (
+        {browseMode === 'collections' && !collectionId ? (
           filteredCollections.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: '13px' }}>
               No collections found
@@ -293,16 +342,41 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
                   active={collectionId === c.id}
                   onClick={() => {
                     setCollection(c.id)
-                    setBrowseMode('photos')
+                    setBrowseMode('collections')
+                    const next = new URLSearchParams(searchParams.toString())
+                    next.set('collection', c.id)
+                    const href = next.toString() ? `${pathname}?${next.toString()}` : pathname
+                    router.replace(href, { scroll: false })
                   }}
                 />
               ))}
             </div>
           )
         ) : loading ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-3)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
-            Loading...
-          </div>
+          <>
+            {collectionId && (
+              <div className="browse-coll-hdr" aria-label={`Viewing collection ${activeCollection?.name ?? 'Collection'}`}>
+                <button
+                  type="button"
+                  className="browse-coll-back"
+                  onClick={clearCollectionFilter}
+                  aria-label="Back to all collections"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M10 3.5L5.5 8L10 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <div className="browse-coll-title">{activeCollection?.name ?? 'Collection'}</div>
+              </div>
+            )}
+            {showLoadingUi ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-3)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
+                Loading...
+              </div>
+            ) : (
+              <div style={{ minHeight: 220 }} aria-busy="true" aria-label="Loading photos" />
+            )}
+          </>
         ) : photos.length === 0 ? (
           <>
             {collectionId && (
@@ -356,7 +430,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
         )}
       </div>
 
-      {browseMode === 'photos' && selectionMode && (
+      {(browseMode === 'photos' || (browseMode === 'collections' && !!collectionId)) && selectionMode && (
         <div className="mp-select-bar">
           <span className="mp-select-bar-count">{selectedIds.length} selected</span>
           <span className="mp-select-bar-hint">
