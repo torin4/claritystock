@@ -5,22 +5,23 @@ import BrowseClient from '@/components/browse/BrowseClient'
 export default async function BrowsePage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id
 
-  // Fetch initial data (no filters — client handles filtering)
-  const [photosRes, collections] = await Promise.all([
+  // One round-trip batch: photos + collections + downloads + favorites (was: photos+collections, then downloads+favorites)
+  const [photosRes, collections, downloadsRes, favoritesRes] = await Promise.all([
     supabase
       .from('photos')
       .select('*, photographer:users!photographer_id(id, name, initials), collection:collections!collection_id(id, name, category)')
       .order('created_at', { ascending: false })
       .limit(60),
     getCollections(supabase),
+    uid
+      ? supabase.from('downloads').select('photo_id').eq('downloaded_by', uid)
+      : Promise.resolve({ data: [] as { photo_id: string }[], error: null }),
+    uid
+      ? supabase.from('favorites').select('photo_id').eq('user_id', uid)
+      : Promise.resolve({ data: [] as { photo_id: string }[], error: null }),
   ])
-
-  // Fetch user's downloads and favorites for initial state
-  const [downloadsRes, favoritesRes] = user ? await Promise.all([
-    supabase.from('downloads').select('photo_id').eq('downloaded_by', user.id),
-    supabase.from('favorites').select('photo_id').eq('user_id', user.id),
-  ]) : [{ data: [] }, { data: [] }]
 
   const myDownloadIds = new Set((downloadsRes.data ?? []).map((d: { photo_id: string }) => d.photo_id))
   const myFavIds = new Set((favoritesRes.data ?? []).map((f: { photo_id: string }) => f.photo_id))

@@ -104,7 +104,7 @@ export default function MyPhotosClient({
     const ids = [...selectedIds]
     if (
       !confirm(
-        `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from your downloads? They stay in the Library, and Browse will no longer show the downloaded checkmark for you.`,
+        `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from My downloads? They stay in the Library for everyone. Browse will no longer show the downloaded checkmark for you.`,
       )
     ) {
       return
@@ -132,12 +132,14 @@ export default function MyPhotosClient({
 
   const handleBulkDelete = async () => {
     if (!selectedIds.length) return
+    if (tab === 'downloads') {
+      await handleRemoveFromDownloads()
+      return
+    }
     const sourceList =
-      tab === 'downloads'
-        ? downloadedPhotos
-        : drillColl || tab === 'photos'
-          ? filteredPhotos
-          : photos
+      drillColl || tab === 'photos'
+        ? filteredPhotos
+        : photos
     const ownedIds = selectedIds.filter(sid => {
       const p = sourceList.find(x => x.id === sid)
       return p?.photographer_id === userId
@@ -588,22 +590,12 @@ export default function MyPhotosClient({
           </span>
           <span className="mp-select-bar-hint">
             {tab === 'downloads'
-              ? `Remove from downloads clears your checkmark in Browse · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · Delete only removes photos you uploaded`
+              ? `Delete removes them from this list only (Library unchanged; Browse checkmark clears) · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS}`
               : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} photos`}
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
             Cancel
           </button>
-          {tab === 'downloads' && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={!selectedIds.length || removeDownloadsBusy || zipBusy || bulkDeleting}
-              onClick={handleRemoveFromDownloads}
-            >
-              {removeDownloadsBusy ? 'Removing…' : 'Remove from downloads'}
-            </button>
-          )}
           <button
             type="button"
             className="btn btn-primary btn-sm"
@@ -617,9 +609,11 @@ export default function MyPhotosClient({
             type="button"
             className="btn-del-sm"
             disabled={!selectedIds.length || bulkDeleting || zipBusy || removeDownloadsBusy}
-            onClick={handleBulkDelete}
+            onClick={tab === 'downloads' ? handleRemoveFromDownloads : handleBulkDelete}
           >
-            {bulkDeleting ? 'Deleting…' : 'Delete'}
+            {tab === 'downloads'
+              ? (removeDownloadsBusy ? 'Removing…' : 'Delete')
+              : (bulkDeleting ? 'Deleting…' : 'Delete')}
           </button>
         </div>
       )}
