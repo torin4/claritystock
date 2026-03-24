@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   initials    text,
   role        text        NOT NULL DEFAULT 'photographer',
   avatar_url  text,
+  email       text,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
@@ -228,6 +229,77 @@ CREATE POLICY "storage_delete"
     bucket_id = 'photos'
     AND auth.uid()::text = (storage.foldername(name))[1]
   );
+
+-- ---------------------------------------------------------------------------
+-- Admin helper + policies (role = 'admin' in public.users)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users u
+    WHERE u.id = auth.uid() AND u.role = 'admin'
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO service_role;
+
+DROP POLICY IF EXISTS "collections_read_admin" ON public.collections;
+CREATE POLICY "collections_read_admin"
+  ON public.collections FOR SELECT
+  TO authenticated
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "photos_insert_admin" ON public.photos;
+CREATE POLICY "photos_insert_admin"
+  ON public.photos FOR INSERT
+  TO authenticated
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "photos_update_admin" ON public.photos;
+CREATE POLICY "photos_update_admin"
+  ON public.photos FOR UPDATE
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "photos_delete_admin" ON public.photos;
+CREATE POLICY "photos_delete_admin"
+  ON public.photos FOR DELETE
+  TO authenticated
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "collections_insert_admin" ON public.collections;
+CREATE POLICY "collections_insert_admin"
+  ON public.collections FOR INSERT
+  TO authenticated
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "collections_update_admin" ON public.collections;
+CREATE POLICY "collections_update_admin"
+  ON public.collections FOR UPDATE
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "collections_delete_admin" ON public.collections;
+CREATE POLICY "collections_delete_admin"
+  ON public.collections FOR DELETE
+  TO authenticated
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "storage_delete_admin" ON storage.objects;
+CREATE POLICY "storage_delete_admin"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'photos' AND public.is_admin());
 
 -- ---------------------------------------------------------------------------
 -- RPC FUNCTION — record_download

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { assertOwnerOrAdmin, isUserAdmin } from '@/lib/auth/admin'
 import type { PhotoFormValues } from '@/lib/types/database.types'
 
 async function assertOwnedCollectionId(
@@ -19,13 +20,38 @@ async function assertOwnedCollectionId(
   if (error || !data) throw new Error('Invalid collection')
 }
 
+/** Collection must belong to this photographer (for admin proxy upload / edits). */
+async function assertCollectionOwnedByPhotographer(
+  collectionId: string | null | undefined,
+  photographerId: string,
+) {
+  if (!collectionId) return
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('collections')
+    .select('id')
+    .eq('id', collectionId)
+    .eq('created_by', photographerId)
+    .single()
+  if (error || !data) throw new Error('Invalid collection for this photographer')
+}
+
 export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
-  await assertOwnedCollectionId(values.collection_id, user.id)
+  const admin = await isUserAdmin(supabase, user.id)
 
-  const { error } = await supabase
+  if (admin) {
+    const { data: row } = await supabase.from('photos').select('photographer_id').eq('id', id).single()
+    const ownerId = row?.photographer_id
+    if (!ownerId) throw new Error('Photo not found')
+    await assertCollectionOwnedByPhotographer(values.collection_id, ownerId)
+  } else {
+    await assertOwnedCollectionId(values.collection_id, user.id)
+  }
+
+  let q = supabase
     .from('photos')
     .update({
       title: values.title,
@@ -38,8 +64,9 @@ export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) 
       notes: values.notes,
     })
     .eq('id', id)
-    .eq('photographer_id', user.id)
+  if (!admin) q = q.eq('photographer_id', user.id)
 
+  const { error } = await q
   if (error) throw error
   revalidatePath('/')
   revalidatePath('/my-photos')
@@ -82,11 +109,9 @@ export async function deletePhoto(
     await supabase.storage.from('photos').remove(toRemove)
   }
 
-  const { error } = await supabase
-    .from('photos')
-    .delete()
-    .eq('id', id)
-    .eq('photographer_id', user.id)
+  let del = supabase.from('photos').delete().eq('id', id)
+  if (!(await isUserAdmin(supabase, user.id))) del = del.eq('photographer_id', user.id)
+  const { error } = await del
 
   if (error) throw error
   revalidatePath('/')
@@ -142,11 +167,13 @@ export async function deletePhotos(ids: string[]) {
   const unique = Array.from(new Set(ids)).filter(Boolean)
   if (!unique.length) return { deleted: 0 }
 
-  const { data: photos, error: fetchErr } = await supabase
+  const admin = await isUserAdmin(supabase, user.id)
+  let sel = supabase
     .from('photos')
     .select('id, storage_path, thumbnail_path')
     .in('id', unique)
-    .eq('photographer_id', user.id)
+  if (!admin) sel = sel.eq('photographer_id', user.id)
+  const { data: photos, error: fetchErr } = await sel
 
   if (fetchErr) throw fetchErr
   if (!photos?.length) return { deleted: 0 }
@@ -183,10 +210,12 @@ export async function publishPhoto(
   photographerId: string,
   thumbnailPath?: string | null,
 ) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || user.id !== photographerId) throw new Error('Unauthorized')
-  await assertOwnedCollectionId(formValues.collection_id, photographerId)
+  const { supabase, actingAsAdmin } = await assertOwnerOrAdmin(photographerId)
+  if (actingAsAdmin) {
+    await assertCollectionOwnedByPhotographer(formValues.collection_id, photographerId)
+  } else {
+    await assertOwnedCollectionId(formValues.collection_id, photographerId)
+  }
 
   // If creating a new collection
   let collectionId = formValues.collection_id
@@ -219,4 +248,5 @@ export async function publishPhoto(
   if (error) throw error
   revalidatePath('/')
   revalidatePath('/my-photos')
+  revalidatePath('/admin')
 }

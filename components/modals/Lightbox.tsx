@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { recordDownload, updateJobRef } from '@/lib/actions/downloads.actions'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
@@ -29,7 +29,10 @@ interface DownloadRow {
 }
 
 export default function Lightbox({ photos, userId, onDownload }: Props) {
-  const { lightboxOpen, lightboxPhotoId, closeLightbox, openLightbox } = useUIStore()
+  const lightboxOpen = useUIStore(s => s.lightboxOpen)
+  const lightboxPhotoId = useUIStore(s => s.lightboxPhotoId)
+  const closeLightbox = useUIStore(s => s.closeLightbox)
+  const openLightbox = useUIStore(s => s.openLightbox)
 
   const currentIndex = lightboxPhotoId ? photos.findIndex(p => p.id === lightboxPhotoId) : -1
   const prevId = currentIndex > 0 ? photos[currentIndex - 1].id : null
@@ -47,6 +50,12 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
     [lightboxPhotoId, photos],
   )
 
+  /** Primitive dep: avoids effect re-running every render when `photos` is a new array reference. */
+  const photoPresent = useMemo(
+    () => (!lightboxPhotoId ? true : photos.some(p => p.id === lightboxPhotoId)),
+    [lightboxPhotoId, photos],
+  )
+
   useEffect(() => {
     setDownloadId(null)
     setJobRef('')
@@ -55,6 +64,12 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
     setHistOpen(false)
     setUsageHistory([])
   }, [lightboxPhotoId])
+
+  /** Close stale lightbox id before paint — avoids flash + getState() avoids effect/deps churn with zustand actions. */
+  useLayoutEffect(() => {
+    if (!lightboxOpen || !lightboxPhotoId || photoPresent) return
+    useUIStore.getState().closeLightbox()
+  }, [lightboxOpen, lightboxPhotoId, photoPresent])
 
   const fetchHistory = useCallback(async (photoId: string) => {
     const supabase = getSupabaseBrowserClient()

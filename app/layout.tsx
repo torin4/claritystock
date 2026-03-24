@@ -3,6 +3,7 @@ import './globals.css'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileTopBar from '@/components/layout/MobileTopBar'
 import SidebarOverlay from '@/components/layout/SidebarOverlay'
+import NavigationUiReset from '@/components/layout/NavigationUiReset'
 import NotificationProvider from '@/components/providers/NotificationProvider'
 import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
 
@@ -17,30 +18,35 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body>
-        {user && profile && (
+        <NavigationUiReset />
+        {user ? (
           <>
             <NotificationProvider userId={user.id} />
             <MobileTopBar />
             <SidebarOverlay />
             <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
               <Sidebar
-                userName={profile.name ?? ''}
-                userInitials={profile.initials ?? ''}
-                userRole={profile.role ?? 'photographer'}
+                userName={profile?.name ?? ''}
+                userInitials={profile?.initials ?? ''}
+                userRole={profile?.role ?? 'photographer'}
                 userId={user.id}
               />
-              <main style={{
-                flex: 1,
-                overflowY: 'auto',
-                height: '100vh',
-                minWidth: 0,
-              }}>
+              <main
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  overflowY: 'auto',
+                  height: '100vh',
+                }}
+              >
                 {children}
               </main>
             </div>
           </>
+        ) : (
+          children
         )}
-        {!user && children}
       </body>
     </html>
   )

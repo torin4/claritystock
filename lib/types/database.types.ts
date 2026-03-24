@@ -9,6 +9,8 @@ export interface User {
   initials: string | null
   role: Role
   avatar_url: string | null
+  /** Workspace email when synced from OAuth (public.users.email). */
+  email?: string | null
   created_at: string
 }
 
@@ -103,6 +105,50 @@ export interface DownloadByUser {
   userName: string
   initials: string
   count: number
+}
+
+/** Admin team analytics — top library asset with owner. */
+export interface AdminTopPhoto {
+  id: string
+  title: string
+  downloads_count: number
+  storage_path: string | null
+  thumbnail_path?: string | null
+  photographer?: { name: string | null; initials: string | null } | null
+  collection?: { name: string } | null
+}
+
+/** Per photographer: volume in library + cumulative download counter on their photos. */
+export interface PhotographerImpact {
+  userId: string
+  userName: string
+  initials: string
+  downloadUses: number
+  photoCount: number
+}
+
+/** Admin roster row with aggregate photo count. */
+export interface AdminUserRow {
+  id: string
+  name: string | null
+  initials: string | null
+  role: string
+  created_at: string
+  libraryPhotos: number
+  email: string | null
+}
+
+/** Give (uploads to library) vs take (download events) — sorted worst-first for admin. */
+export interface UsageLedgerRow {
+  userId: string
+  name: string | null
+  initials: string | null
+  role: string
+  email: string | null
+  uploads: number
+  downloads: number
+  /** downloads / max(uploads, 1) */
+  ratio: number
 }
 
 export interface Notification {

@@ -31,6 +31,8 @@ interface UIActions {
   closeNotif: () => void
   closeAll: () => void
   bumpSidebarCollections: () => void
+  /** Single update: close overlays that should not survive a client route change. */
+  resetNavigationUi: () => void
 }
 
 const defaultState: UIState = {
@@ -72,4 +74,15 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
 
   bumpSidebarCollections: () =>
     set((s) => ({ sidebarCollectionsEpoch: s.sidebarCollectionsEpoch + 1 })),
+
+  resetNavigationUi: () =>
+    set({
+      lightboxOpen: false,
+      lightboxPhotoId: null,
+      filterDrawerOpen: false,
+      notifPopoverOpen: false,
+      settingsPanelOpen: false,
+      editModalPhotoId: null,
+      sidebarOpen: false,
+    }),
 }))

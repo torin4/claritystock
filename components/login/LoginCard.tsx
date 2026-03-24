@@ -1,4 +1,5 @@
 'use client'
+import { GOOGLE_CHAT_SPACES_READONLY_SCOPE } from '@/lib/admin/googleChatDm'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import BrandTitle from '@/components/layout/BrandTitle'
 
@@ -10,6 +11,8 @@ export default function LoginCard() {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        // So admins get session.provider_token with Chat scope for /api/admin/google-chat-dm
+        scopes: `openid email profile ${GOOGLE_CHAT_SPACES_READONLY_SCOPE}`,
       },
     })
   }

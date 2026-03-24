@@ -2,6 +2,7 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { useUploadStore } from '@/stores/upload.store'
+import { fileToBase64 } from '@/lib/utils/fileToBase64'
 import { extractGps } from '@/lib/utils/exif'
 import { uploadPhoto, uploadThumbnail } from '@/lib/utils/storage'
 import { createJpegThumbnail } from '@/lib/utils/imageThumbnail'
@@ -611,14 +612,3 @@ function TagEditor({
   )
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      resolve(result.split(',')[1])
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}

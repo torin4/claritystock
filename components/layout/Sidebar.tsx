@@ -36,6 +36,19 @@ function InsightsIcon() {
     </svg>
   )
 }
+function AdminIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M7 1.5 8.2 4.1l2.8.4-2 2 .5 2.8L7 8.4 4.5 9.3l.5-2.8-2-2 2.8-.4L7 1.5Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M3 12.5h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  )
+}
 function BellIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -87,7 +100,10 @@ function RecentCollectionThumb({ collection }: { collection: Collection }) {
 export default function Sidebar({ userName, userInitials, userRole, userId }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { sidebarOpen, openSettings, toggleNotif, openUpload } = useUIStore()
+  const sidebarOpen = useUIStore(s => s.sidebarOpen)
+  const openSettings = useUIStore(s => s.openSettings)
+  const toggleNotif = useUIStore(s => s.toggleNotif)
+  const openUpload = useUIStore(s => s.openUpload)
   const sidebarCollectionsEpoch = useUIStore(s => s.sidebarCollectionsEpoch)
   const unreadCount = useNotificationsStore(s => s.unreadCount)
   const [collections, setCollections] = useState<Collection[]>([])
@@ -112,10 +128,18 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
   const mySpaceItems: NavItem[] = [
     { href: '/my-photos', label: 'My Photos', icon: <MyPhotosIcon /> },
     { href: '/insights', label: 'Insights', icon: <InsightsIcon /> },
+    ...(userRole === 'admin' ? [{ href: '/admin', label: 'Admin', icon: <AdminIcon /> }] as NavItem[] : []),
   ]
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href)
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    useUIStore.getState().setSidebarOpen(false)
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+    e.preventDefault()
+    router.push(href)
+  }
 
   const sidebarStyle: React.CSSProperties = {
     width: 'var(--sidebar)',
@@ -146,18 +170,31 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
         </div>
 
         {/* Nav */}
-        <div style={{ flex: 1, padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
+        <div
+          className="sidebar-nav-scroll"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            padding: '8px 6px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
           {/* Library section */}
           <span className="s-section-lbl">Library</span>
           {navItems.map(item => (
-            <button
+            <a
               key={item.href}
+              href={item.href}
               className={`ni ${isActive(item.href) ? 'active' : ''}`}
-              onClick={() => { router.push(item.href); useUIStore.getState().setSidebarOpen(false) }}
+              onClick={e => handleNavClick(e, item.href)}
             >
               <span className="ni-ic" style={{ color: isActive(item.href) ? 'var(--accent)' : undefined }}>{item.icon}</span>
               {item.label}
-            </button>
+            </a>
           ))}
 
           {/* Add Photos */}
@@ -177,14 +214,15 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
           {/* My Space section */}
           <span className="s-section-lbl" style={{ marginTop: '8px' }}>My Space</span>
           {mySpaceItems.map(item => (
-            <button
+            <a
               key={item.href}
+              href={item.href}
               className={`ni ${isActive(item.href) ? 'active' : ''}`}
-              onClick={() => { router.push(item.href); useUIStore.getState().setSidebarOpen(false) }}
+              onClick={e => handleNavClick(e, item.href)}
             >
               <span className="ni-ic" style={{ color: isActive(item.href) ? 'var(--accent)' : undefined }}>{item.icon}</span>
               {item.label}
-            </button>
+            </a>
           ))}
 
           {/* Collections section */}
@@ -192,13 +230,11 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
             <>
               <span className="s-section-lbl" style={{ marginTop: '8px' }}>Recent collections</span>
               {collections.map(c => (
-                <button
+                <a
                   key={c.id}
+                  href={`/?collection=${c.id}`}
                   className="ni"
-                  onClick={() => {
-                    useUIStore.getState().setSidebarOpen(false)
-                    router.push(`/?collection=${c.id}`)
-                  }}
+                  onClick={e => handleNavClick(e, `/?collection=${c.id}`)}
                   style={{ gap: '8px' }}
                 >
                   <div style={{
@@ -214,7 +250,7 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>
                     {c.name}
                   </span>
-                </button>
+                </a>
               ))}
             </>
           )}

@@ -61,3 +61,11 @@ To promote a user to admin:
 5. Save the change.
 
 The user's role is read from `public.users.role` in the app. Any value other than `admin` is treated as a standard photographer account.
+
+---
+
+## 6. Admin RLS (proxy upload + full library access)
+
+After `schema.sql` and later migrations, apply **`migrations/20260324120000_admin_rls_policies.sql`** (or run via `supabase db push`). This adds `public.is_admin()` and policies so users with `public.users.role = 'admin'` can read/write all photos and collections and delete any file in the `photos` storage bucket.
+
+In the app, admins get **Admin** in the sidebar and can use **`/admin`** to upload photos on behalf of a selected photographer (files land in that user’s storage prefix with `photographer_id` set correctly).

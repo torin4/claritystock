@@ -14,11 +14,14 @@ export const getServerProfile = cache(async (): Promise<Pick<User, 'name' | 'ini
   if (!user) return null
 
   const supabase = createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('users')
     .select('name, initials, role, avatar_url')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
+  if (error) {
+    console.error('[getServerProfile]', user.id, error.message)
+  }
   return data ?? null
 })

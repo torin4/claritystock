@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/error?reason=auth`)
   }
 
-  const email = data.user.email ?? ''
+  const identityEmail = (
+    data.user.identities?.find(i => i.provider === 'google')?.identity_data as { email?: string } | undefined
+  )?.email
+  const email = (data.user.email ?? identityEmail ?? '').trim()
   if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
     await supabase.auth.signOut()
     return NextResponse.redirect(`${origin}/error?reason=domain`)
@@ -50,6 +53,7 @@ export async function GET(request: NextRequest) {
       name: fullName,
       initials: getInitials(fullName),
       avatar_url: avatarUrl,
+      email: email.toLowerCase(),
       // role defaults to 'photographer' via DB default — don't override on upsert
     },
     { onConflict: 'id', ignoreDuplicates: false }

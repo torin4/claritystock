@@ -89,7 +89,7 @@ export async function getMyPhotos(
       .from('users')
       .select('id, name, initials, avatar_url')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
     prof = userRow ?? undefined
   }
 

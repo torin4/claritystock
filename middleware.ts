@@ -53,6 +53,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /**
+     * Must skip all `/_next/*` (not just static + image). Otherwise middleware
+     * runs on `/_next/webpack-hmr` and other dev internals — HMR breaks and
+     * refresh appears to “brick” until you restart `next dev`.
+     */
+    '/((?!api|_next|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
