@@ -1,6 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { cookies } from 'next/headers'
 import { getInitials } from '@/lib/utils/initials'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env'
 
@@ -14,19 +13,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/error?reason=no_code`)
   }
 
-  const cookieStore = cookies()
-  const supabase = createServerClient(
-    getSupabaseUrl(),
-    getSupabaseAnonKey(),
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
-          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
-        },
+  /**
+   * Session cookies must be written onto the same NextResponse we return.
+   * Using `cookies()` from next/headers here often does not attach Set-Cookie to a
+   * redirect, which causes an infinite /login loop after OAuth on localhost and prod.
+   */
+  let response = NextResponse.redirect(`${origin}/`)
+
+  const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
       },
-    }
-  )
+      setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options as never),
+        )
+      },
+    },
+  })
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
@@ -39,11 +44,23 @@ export async function GET(request: NextRequest) {
   )?.email
   const email = (data.user.email ?? identityEmail ?? '').trim()
   if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
-    await supabase.auth.signOut()
-    return NextResponse.redirect(`${origin}/error?reason=domain`)
+    const errRes = NextResponse.redirect(`${origin}/error?reason=domain`)
+    const supabaseSignOut = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            errRes.cookies.set(name, value, options as never),
+          )
+        },
+      },
+    })
+    await supabaseSignOut.auth.signOut()
+    return errRes
   }
 
-  // Upsert user profile on first login
   const fullName = data.user.user_metadata?.full_name ?? email.split('@')[0]
   const avatarUrl = data.user.user_metadata?.avatar_url ?? null
 
@@ -54,10 +71,9 @@ export async function GET(request: NextRequest) {
       initials: getInitials(fullName),
       avatar_url: avatarUrl,
       email: email.toLowerCase(),
-      // role defaults to 'photographer' via DB default — don't override on upsert
     },
-    { onConflict: 'id', ignoreDuplicates: false }
+    { onConflict: 'id', ignoreDuplicates: false },
   )
 
-  return NextResponse.redirect(`${origin}/`)
+  return response
 }

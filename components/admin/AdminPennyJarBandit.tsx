@@ -1,7 +1,10 @@
 'use client'
 
+import { useState } from 'react'
+import { workspaceChatSearchUrl } from '@/lib/admin/googleChatDm'
 import type { UsageAlertConfig } from '@/lib/admin/usageAlert'
 import { usageExceedsAlert } from '@/lib/admin/usageAlert'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { UsageLedgerRow } from '@/lib/types/database.types'
 
 interface Props {
@@ -92,11 +95,6 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
                     row.email && row.email.includes('@')
                       ? `mailto:${row.email}?subject=${subj}&body=${body}`
                       : null
-                  const chatOpen =
-                    row.email && row.email.includes('@')
-                      ? `/api/admin/google-chat-dm?email=${encodeURIComponent(row.email)}`
-                      : null
-
                   return (
                     <tr key={row.userId} style={hot ? { background: 'color-mix(in srgb, var(--red) 6%, transparent)' } : undefined}>
                       <td>
@@ -161,17 +159,8 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
                                 No email synced — run DB migration backfill or sign out/in once
                               </span>
                             )}
-                            {chatOpen ? (
-                              <a
-                                href={chatOpen}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-secondary btn-sm"
-                                style={{ textDecoration: 'none' }}
-                                title="Opens the DM if one already exists; otherwise Chat search"
-                              >
-                                Google Chat
-                              </a>
+                            {row.email && row.email.includes('@') ? (
+                              <GoogleChatButton email={row.email} />
                             ) : null}
                           </div>
                         ) : (
@@ -187,6 +176,69 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
         </div>
       </div>
     </div>
+  )
+}
+
+function GoogleChatButton({ email }: { email: string }) {
+  const [busy, setBusy] = useState(false)
+
+  const open = async () => {
+    setBusy(true)
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await supabase.auth.refreshSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.provider_token ?? null
+      const refreshToken = session?.provider_refresh_token ?? null
+
+      const res = await fetch('/api/admin/google-chat-dm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          email,
+          providerRefreshToken: refreshToken,
+        }),
+      })
+
+      if (!res.ok) {
+        window.open(workspaceChatSearchUrl(email), '_blank', 'noopener,noreferrer')
+        return
+      }
+
+      const data = (await res.json()) as { url?: string; usedSearchFallback?: boolean }
+      const url = typeof data.url === 'string' ? data.url : workspaceChatSearchUrl(email)
+      window.open(url, '_blank', 'noopener,noreferrer')
+
+      if (data.usedSearchFallback) {
+        console.warn(
+          '[Clarity Stock] Google Chat fell back to search. Common fixes: (1) Add GOOGLE_OAUTH_CLIENT_ID/SECRET to .env ' +
+            '(same Web client as Supabase Google). (2) Sign out/in so login sends access_type=offline (already default). ' +
+            '(3) If POST body shows providerRefreshToken: null, set NEXT_PUBLIC_GOOGLE_OAUTH_PROMPT_CONSENT=1 once, sign out/in, then remove. ' +
+            'See .env.example.',
+        )
+      }
+    } catch {
+      window.open(workspaceChatSearchUrl(email), '_blank', 'noopener,noreferrer')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="btn btn-secondary btn-sm"
+      disabled={busy}
+      onClick={open}
+      title="Opens the DM (creates it if needed). Sends your Google token from this browser so Chat API can run."
+    >
+      Google Chat
+    </button>
   )
 }
 

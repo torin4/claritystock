@@ -1,5 +1,5 @@
 'use client'
-import { GOOGLE_CHAT_SPACES_READONLY_SCOPE } from '@/lib/admin/googleChatDm'
+import { GOOGLE_CHAT_OAUTH_SCOPES } from '@/lib/admin/googleChatDm'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import BrandTitle from '@/components/layout/BrandTitle'
 
@@ -7,12 +7,25 @@ export default function LoginCard() {
   const supabase = getSupabaseBrowserClient()
 
   const handleGoogleSignIn = async () => {
+    /**
+     * Google only returns a refresh token when `access_type=offline` is set.
+     * Without it, `provider_refresh_token` stays null and server-side Chat API can’t mint tokens.
+     * If still null after sign-in, set NEXT_PUBLIC_GOOGLE_OAUTH_PROMPT_CONSENT=1 once, sign out/in,
+     * then unset (forces consent so Google re-issues a refresh token).
+     */
+    const queryParams: Record<string, string> = {
+      access_type: 'offline',
+    }
+    if (process.env.NEXT_PUBLIC_GOOGLE_OAUTH_PROMPT_CONSENT === '1') {
+      queryParams.prompt = 'consent'
+    }
+
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        // So admins get session.provider_token with Chat scope for /api/admin/google-chat-dm
-        scopes: `openid email profile ${GOOGLE_CHAT_SPACES_READONLY_SCOPE}`,
+        scopes: `openid email profile ${GOOGLE_CHAT_OAUTH_SCOPES}`,
+        queryParams,
       },
     })
   }
