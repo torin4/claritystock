@@ -86,8 +86,8 @@ export default function CreateCollectionModal({ open, onClose, onCreated, ownedB
               >
                 <option value="">No category</option>
                 <option value="neighborhood">Neighborhood</option>
-                <option value="community">Community</option>
-                <option value="amenity">Amenity</option>
+                <option value="city">City</option>
+                <option value="condo">Condo</option>
               </select>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

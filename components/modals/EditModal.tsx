@@ -94,7 +94,7 @@ export default function EditModal({ userId, onSuccess }: Props) {
     if (!photo || !confirm('Remove this photo from the library?')) return
     setDeleting(true)
     try {
-      await deletePhoto(photo.id, photo.storage_path, photo.thumbnail_path)
+      await deletePhoto(photo.id, photo.storage_path, photo.thumbnail_path, photo.display_path)
       onSuccess()
       closeEdit()
     } finally {
@@ -143,8 +143,8 @@ export default function EditModal({ userId, onSuccess }: Props) {
               >
                 <option value="">No category</option>
                 <option value="neighborhood">Neighborhood</option>
-                <option value="community">Community</option>
-                <option value="amenity">Amenity</option>
+                <option value="city">City</option>
+                <option value="condo">Condo</option>
               </select>
             </div>
             <div className="modal-field">

@@ -26,16 +26,8 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
   const maxD = Math.max(1, ...rows.map(r => r.downloads))
 
   return (
-    <div style={{ padding: '0 20px 20px' }}>
-      <div
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 9,
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+    <div className="admin-card">
+        <div className="admin-penny-header">
           <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
             Penny jar bandit
           </div>
@@ -184,7 +176,6 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
             </tbody>
           </table>
         </div>
-      </div>
     </div>
   )
 }

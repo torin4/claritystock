@@ -14,6 +14,7 @@ import FilterDrawer from '@/components/modals/FilterDrawer'
 import Lightbox from '@/components/modals/Lightbox'
 import UploadModal from '@/components/modals/UploadModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
+import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import type { Photo, Collection } from '@/lib/types/database.types'
 
@@ -296,9 +297,20 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
               : `${photos.length} photos in Library`}
           </div>
         </div>
-        <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={openUpload}>
-          <PlusIcon size={15} />
-          Add Photos
+        <button
+          type="button"
+          className="btn btn-primary btn-sm btn-with-icon ph-header-upload-btn"
+          onClick={openUpload}
+          title="Add photos"
+        >
+          <span className="flex md:hidden items-center justify-center">
+            <PhotoAddIcon size={18} />
+            <span className="sr-only">Add photos</span>
+          </span>
+          <span className="hidden md:inline-flex items-center gap-1.5">
+            <PlusIcon size={15} />
+            Add Photos
+          </span>
         </button>
       </div>
 
@@ -466,12 +478,12 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
 function MosaicCell({
   photo,
 }: {
-  photo: { storage_path: string | null; thumbnail_path: string | null } | undefined
+  photo: { storage_path: string | null; thumbnail_path: string | null; thumbnail_url?: string | null } | undefined
 }) {
   const cellRef = useRef<HTMLDivElement>(null)
   const inView = useInView(cellRef, { rootMargin: '120px' })
   const path = photo?.thumbnail_path ?? photo?.storage_path ?? null
-  const url = useSignedPhotoUrl(path, { enabled: inView })
+  const url = useSignedPhotoUrl(path, { enabled: inView, initialUrl: photo?.thumbnail_url ?? null })
   return (
     <div ref={cellRef} className="coll-mosaic-cell">
       {url ? (
@@ -491,7 +503,7 @@ function CollectionTile({
   onClick,
 }: {
   collection: Collection
-  photos: Array<{ storage_path: string | null; thumbnail_path: string | null }>
+  photos: Array<{ storage_path: string | null; thumbnail_path: string | null; thumbnail_url?: string | null }>
   active?: boolean
   onClick: () => void
 }) {

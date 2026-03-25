@@ -1,8 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
+import { attachSignedCollectionPreviewUrls, attachSignedThumbnailUrls } from '@/lib/photos/serverSignedUrls'
 import { getCollections } from '@/lib/queries/collections.queries'
 import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
 import { getServerUser } from '@/lib/supabase/request-context'
+import type { Photo } from '@/lib/types/database.types'
 import BrowseClient from '@/components/browse/BrowseClient'
+
+const INITIAL_GRID_THUMBNAILS = 18
+const INITIAL_COLLECTION_PREVIEWS = 12
 
 export default async function BrowsePage() {
   const supabase = createClient()
@@ -15,7 +20,7 @@ export default async function BrowsePage() {
       .select(PHOTO_CARD_SELECT)
       .order('created_at', { ascending: false })
       .limit(BROWSE_PAGE_SIZE),
-    getCollections(supabase, uid ?? null),
+    getCollections(supabase, { excludeCreatedBy: uid ?? null }),
   ])
 
   const initialIds = (photosRes.data ?? []).map((p: { id: string }) => p.id)
@@ -33,12 +38,19 @@ export default async function BrowsePage() {
     ...p,
     is_downloaded_by_me: myDownloadIds.has(p.id as string),
     is_favorited: myFavIds.has(p.id as string),
-  }))
+  })) as Photo[]
+  const [initialPhotos, initialCollections] = await Promise.all([
+    attachSignedThumbnailUrls(photos, { limit: INITIAL_GRID_THUMBNAILS }),
+    attachSignedCollectionPreviewUrls(collections, {
+      limitCollections: INITIAL_COLLECTION_PREVIEWS,
+      photosPerCollection: 3,
+    }),
+  ])
 
   return (
     <BrowseClient
-      initialPhotos={photos as never}
-      collections={collections as never}
+      initialPhotos={initialPhotos as never}
+      collections={initialCollections as never}
       userId={user?.id ?? ''}
     />
   )

@@ -8,8 +8,8 @@ import type { Photo } from '@/lib/types/database.types'
 
 const CAT_COLORS: Record<string, string> = {
   neighborhood: 'var(--accent-light)',
-  community: '#c49060',
-  amenity: '#6a9ec4',
+  city: '#c49060',
+  condo: '#6a9ec4',
 }
 
 const LONG_PRESS_MS = 520

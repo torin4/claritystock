@@ -1,10 +1,12 @@
 'use client'
+import { useRouter } from 'next/navigation'
 import { useRef } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import { useInView } from '@/lib/hooks/useInView'
 import UploadModal from '@/components/modals/UploadModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
+import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import type { InsightsStats, DownloadByUser } from '@/lib/types/database.types'
 
 interface TopPhoto {
@@ -13,6 +15,8 @@ interface TopPhoto {
   downloads_count: number
   storage_path: string | null
   thumbnail_path?: string | null
+  thumbnail_url?: string | null
+  public_url?: string | null
   collection?: { name: string } | null
 }
 
@@ -32,8 +36,12 @@ const AVATAR_COLORS = [
 ]
 
 export default function InsightsClient({ stats, topPhotos, downloadsByUser, userId }: Props) {
+  const router = useRouter()
   const { openUpload } = useUIStore()
-  const heroPhoto = topPhotos[0] ?? null
+  const heroCandidate = topPhotos[0] ?? null
+  /** Leaderboard is sorted by downloads_count; only show hero when someone has actually downloaded. */
+  const hasTopPerforming = (heroCandidate?.downloads_count ?? 0) > 0
+  const heroPhoto = hasTopPerforming ? heroCandidate : null
   const maxDownloads = downloadsByUser[0]?.count ?? 1
 
   return (
@@ -44,9 +52,20 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, user
           <div className="ph-title">Insights</div>
           <div className="ph-sub">Your Library contribution · all time</div>
         </div>
-        <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={openUpload}>
-          <PlusIcon size={15} />
-          Add Photos
+        <button
+          type="button"
+          className="btn btn-primary btn-sm btn-with-icon ph-header-upload-btn"
+          onClick={openUpload}
+          title="Add photos"
+        >
+          <span className="flex md:hidden items-center justify-center">
+            <PhotoAddIcon size={18} />
+            <span className="sr-only">Add photos</span>
+          </span>
+          <span className="hidden md:inline-flex items-center gap-1.5">
+            <PlusIcon size={15} />
+            Add Photos
+          </span>
         </button>
       </div>
 
@@ -61,52 +80,154 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, user
         <StatCard value={stats.favoritedCount} label="Favorited" />
       </div>
 
-      {/* Hero: top photo */}
+      {/* Hero: top photo when there are downloads; otherwise explain empty state */}
       <div
         id="insights-hero"
+        className={hasTopPerforming ? 'insights-hero' : 'insights-hero insights-hero--empty'}
         style={{
-          margin: '14px 20px 0', borderRadius: 10, overflow: 'hidden',
-          position: 'relative', height: 220, background: 'var(--surface-2)', cursor: 'pointer',
+          margin: '14px 20px 0',
+          borderRadius: 10,
+          overflow: 'hidden',
+          background: 'var(--surface-2)',
+          cursor: 'default',
+          border: hasTopPerforming ? undefined : '1px solid var(--border)',
         }}
       >
-        <InsightsHeroBackdrop storagePath={heroPhoto?.storage_path} />
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(to right, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)',
-          display: 'flex', alignItems: 'center', padding: 28,
-        }}>
-          <div>
-            <div style={{
-              fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
-              color: 'var(--accent)', fontFamily: 'var(--font-mono)', marginBottom: 8,
-            }}>
-              Your top performing photo
+        {hasTopPerforming ? (
+          <>
+            <div className="insights-hero-bg">
+              <InsightsHeroBackdrop
+                storagePath={heroPhoto?.storage_path}
+                initialUrl={heroPhoto?.public_url ?? null}
+              />
             </div>
-            <div style={{
-              fontFamily: 'var(--font-head)', fontSize: 28, fontWeight: 700,
-              color: '#fff', lineHeight: 1.1, marginBottom: 8,
-            }}>
-              {heroPhoto?.title ?? 'No photos yet'}
-            </div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 16 }}>
-              {heroPhoto?.collection?.name ?? '—'}
-            </div>
-            {heroPhoto && (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontFamily: 'var(--font-head)', fontSize: 48, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
-                  {heroPhoto.downloads_count}
-                </span>
-                <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-mono)' }}>
-                  downloads
-                </span>
+            <div
+              className="insights-hero-overlay"
+              style={{
+                background:
+                  'linear-gradient(to right, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.5) 55%, transparent 100%)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                padding: 28,
+              }}
+            >
+              <div className="insights-hero-copy">
+                <div
+                  className="insights-hero-kicker"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: 'var(--accent)',
+                    fontFamily: 'var(--font-mono)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Your top performing photo
+                </div>
+                <div
+                  className="insights-hero-title"
+                  style={{
+                    fontFamily: 'var(--font-head)',
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: '#fff',
+                    lineHeight: 1.15,
+                    marginBottom: 8,
+                  }}
+                >
+                  {heroPhoto?.title}
+                </div>
+                <div
+                  className="insights-hero-meta"
+                  style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 16 }}
+                >
+                  {heroPhoto?.collection?.name ?? '—'}
+                </div>
+                <div className="insights-hero-dl" style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span
+                    className="insights-hero-dl-num"
+                    style={{
+                      fontFamily: 'var(--font-head)',
+                      fontSize: 48,
+                      fontWeight: 700,
+                      color: '#fff',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {heroPhoto!.downloads_count}
+                  </span>
+                  <span
+                    style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-mono)' }}
+                  >
+                    downloads
+                  </span>
+                </div>
               </div>
-            )}
+            </div>
+          </>
+        ) : (
+          <div
+            className="insights-hero-overlay insights-hero-overlay--empty"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              padding: '22px 24px 24px',
+              position: 'relative',
+            }}
+          >
+            <div className="insights-hero-copy">
+              <div
+                className="insights-hero-kicker"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent)',
+                  fontFamily: 'var(--font-mono)',
+                  marginBottom: 8,
+                }}
+              >
+                Top performing photo
+              </div>
+              <div
+                className="insights-hero-title"
+                style={{
+                  fontFamily: 'var(--font-head)',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  lineHeight: 1.2,
+                  marginBottom: 8,
+                }}
+              >
+                {!heroCandidate ? 'Nothing to show yet' : 'No downloads yet'}
+              </div>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: 'var(--text-2)',
+                  lineHeight: 1.45,
+                  margin: 0,
+                  maxWidth: 440,
+                }}
+              >
+                {!heroCandidate
+                  ? 'Add photos to your library first. Once they’re in the pool, download counts and your leader shot will show up here.'
+                  : 'None of your photos have been downloaded yet. When teammates save your work from the library, your most-used photo will appear here.'}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '14px 20px 0' }}>
+      {/* Charts row — stacks to one column on narrow screens (see globals.css) */}
+      <div
+        className="insights-charts-row"
+        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '14px 20px 0' }}
+      >
         {/* Who used your photos */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -147,12 +268,12 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, user
           </div>
         </div>
 
-        {/* Top photos */}
+        {/* Top photos — table on desktop, full-width list on mobile */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
             Your top photos
           </div>
-          <table className="utbl">
+          <table className="utbl insights-top-photos-table-desktop">
             <thead>
               <tr>
                 <th>Photo</th>
@@ -174,11 +295,15 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, user
               ))}
             </tbody>
           </table>
+          <TopPhotosMobileList photos={topPhotos} />
         </div>
       </div>
 
       {/* Added vs. download balance + recent activity */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '14px 20px 32px' }}>
+      <div
+        className="insights-bottom-row"
+        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '14px 20px 32px' }}
+      >
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
             Added vs. download balance
@@ -196,8 +321,31 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, user
         </div>
       </div>
 
-      <UploadModal userId={userId} onSuccess={() => window.location.reload()} />
+      <UploadModal userId={userId} onSuccess={() => router.refresh()} />
     </div>
+  )
+}
+
+function TopPhotosMobileList({ photos }: { photos: TopPhoto[] }) {
+  if (photos.length === 0) {
+    return (
+      <ul className="insights-top-photos-mobile" aria-label="Your top photos">
+        <li className="insights-top-photos-mobile-empty">No photos yet</li>
+      </ul>
+    )
+  }
+  return (
+    <ul className="insights-top-photos-mobile" aria-label="Your top photos">
+      {photos.map(p => (
+        <li key={p.id} className="insights-top-photos-mobile-row">
+          <div className="insights-top-photos-mobile-main">
+            <div className="insights-top-photos-mobile-title">{p.title}</div>
+            <div className="insights-top-photos-mobile-coll">{p.collection?.name ?? '—'}</div>
+          </div>
+          <div className="insights-top-photos-mobile-uses">{p.downloads_count}</div>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -244,8 +392,14 @@ function BalanceBar({ uploads, downloads }: { uploads: number; downloads: number
   )
 }
 
-function InsightsHeroBackdrop({ storagePath }: { storagePath: string | null | undefined }) {
-  const url = useSignedPhotoUrl(storagePath ?? null)
+function InsightsHeroBackdrop({
+  storagePath,
+  initialUrl,
+}: {
+  storagePath: string | null | undefined
+  initialUrl?: string | null
+}) {
+  const url = useSignedPhotoUrl(storagePath ?? null, { initialUrl })
   if (!url) return null
   return (
     <div style={{
@@ -261,7 +415,7 @@ function RecentActivityRow({ p }: { p: TopPhoto }) {
   const rowRef = useRef<HTMLDivElement>(null)
   const inView = useInView(rowRef, { rootMargin: '80px' })
   const path = p.thumbnail_path ?? p.storage_path
-  const url = useSignedPhotoUrl(path, { enabled: inView })
+  const url = useSignedPhotoUrl(path, { enabled: inView, initialUrl: p.thumbnail_url ?? null })
   return (
     <div
       ref={rowRef}

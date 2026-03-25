@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import PhotoTile from './PhotoTile'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { getOrCreateSignedUrls, peekCachedSignedUrl } from '@/lib/utils/signedUrlCache'
@@ -52,13 +52,30 @@ export default function PhotoGrid({
     [displayPathsKey],
   )
   const selectedSet = useMemo(() => new Set(selectedIds ?? []), [selectedIds])
+  const providedUrls = useMemo(
+    () =>
+      Object.fromEntries(
+        photos
+          .map((photo) => {
+            const path = photo.thumbnail_path ?? photo.storage_path
+            return path && photo.thumbnail_url ? ([path, photo.thumbnail_url] as const) : null
+          })
+          .filter((entry): entry is readonly [string, string] => Boolean(entry)),
+      ),
+    [photos],
+  )
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       displayPaths
-        .map((path) => [path, peekCachedSignedUrl(path)] as const)
+        .map((path) => [path, peekCachedSignedUrl(path) ?? providedUrls[path]] as const)
         .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
     ),
   )
+  const signedUrlsRef = useRef(signedUrls)
+
+  useEffect(() => {
+    signedUrlsRef.current = signedUrls
+  }, [signedUrls])
 
   useEffect(() => {
     if (!displayPaths.length) {
@@ -66,26 +83,24 @@ export default function PhotoGrid({
       return
     }
 
-    const active = new Set(displayPaths)
-    setSignedUrls((prev) => {
-      const next: Record<string, string> = {}
-      for (const path of displayPaths) {
-        const cached = peekCachedSignedUrl(path)
-        if (cached) {
-          next[path] = cached
-          continue
-        }
-        if (prev[path] && active.has(path)) {
-          next[path] = prev[path]
-        }
+    const next: Record<string, string> = {}
+    const missing: string[] = []
+    for (const path of displayPaths) {
+      const known = peekCachedSignedUrl(path) ?? providedUrls[path] ?? signedUrlsRef.current[path]
+      if (known) {
+        next[path] = known
+      } else {
+        missing.push(path)
       }
-      return next
-    })
+    }
+    setSignedUrls(next)
+
+    if (!missing.length) return
 
     let cancelled = false
     ;(async () => {
       const supabase = getSupabaseBrowserClient()
-      const urls = await getOrCreateSignedUrls(supabase, displayPaths, 3600)
+      const urls = await getOrCreateSignedUrls(supabase, missing, 3600)
       if (cancelled) return
       setSignedUrls((prev) => ({ ...prev, ...urls }))
     })()
@@ -93,7 +108,7 @@ export default function PhotoGrid({
     return () => {
       cancelled = true
     }
-  }, [displayPaths, displayPathsKey])
+  }, [displayPaths, providedUrls])
 
   return (
     <div className={`photo-grid${selectionMode ? ' photo-grid-selecting' : ''}`}>
@@ -102,7 +117,7 @@ export default function PhotoGrid({
           key={photo.id}
           photo={photo}
           userId={userId}
-          imageUrl={signedUrls[photo.thumbnail_path ?? photo.storage_path ?? ''] ?? null}
+          imageUrl={signedUrls[photo.thumbnail_path ?? photo.storage_path ?? ''] ?? photo.thumbnail_url ?? null}
           onFavoriteToggle={onFavoriteToggle}
           onDownload={onDownload}
           showEdit={showEdit}

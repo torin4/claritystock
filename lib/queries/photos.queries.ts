@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BrowseFilters, Photo, User } from '@/lib/types/database.types'
 import {
   BROWSE_PAGE_SIZE,
+  MY_LIBRARY_PAGE_SIZE,
   PHOTO_CARD_SELECT,
   PHOTO_DETAIL_SELECT,
   PHOTO_MY_LIBRARY_CARD_SELECT,
@@ -66,24 +67,41 @@ export async function getPhotos(
 
 type LibraryPhotographer = Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'>
 
-/**
- * Your uploads for My Photos. Uses {@link PHOTO_MY_LIBRARY_CARD_SELECT} (no per-row photographer join).
- * Pass `photographer` from {@link getServerProfile} to avoid an extra `users` round-trip.
- */
-export async function getMyPhotos(
+type GetMyPhotosPageOptions = {
+  photographer?: LibraryPhotographer | null
+  limit?: number
+  offset?: number
+  search?: string
+  collectionId?: string | null
+}
+
+export async function getMyPhotosPage(
   supabase: SupabaseClient,
   userId: string,
-  photographer?: LibraryPhotographer | null,
+  options: GetMyPhotosPageOptions = {},
 ) {
-  const { data: rows, error } = await supabase
+  let query = supabase
     .from('photos')
-    .select(PHOTO_MY_LIBRARY_CARD_SELECT)
+    .select(PHOTO_MY_LIBRARY_CARD_SELECT, { count: 'exact' })
     .eq('photographer_id', userId)
+
+  const search = options.search?.trim()
+  if (search) {
+    query = query.textSearch('fts', search, { type: 'websearch' })
+  }
+  if (options.collectionId) {
+    query = query.eq('collection_id', options.collectionId)
+  }
+
+  const offset = options.offset ?? 0
+  const limit = options.limit ?? MY_LIBRARY_PAGE_SIZE
+  const { data: rows, error, count } = await query
     .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
   if (error) throw error
 
-  let prof: LibraryPhotographer | undefined = photographer ?? undefined
+  let prof: LibraryPhotographer | undefined = options.photographer ?? undefined
   if (!prof) {
     const { data: userRow } = await supabase
       .from('users')
@@ -93,8 +111,30 @@ export async function getMyPhotos(
     prof = userRow ?? undefined
   }
 
-  const list = rows ?? []
-  return (prof ? list.map(p => ({ ...p, photographer: prof })) : list) as unknown as Photo[]
+  const photos = ((rows ?? []) as unknown as Photo[]).map((photo) => (
+    prof ? { ...photo, photographer: prof } : photo
+  )) as Photo[]
+
+  return {
+    photos,
+    total: count ?? photos.length,
+  }
+}
+
+/**
+ * Your uploads for My Photos. Uses {@link PHOTO_MY_LIBRARY_CARD_SELECT} (no per-row photographer join).
+ * Pass `photographer` from {@link getServerProfile} to avoid an extra `users` round-trip.
+ */
+export async function getMyPhotos(
+  supabase: SupabaseClient,
+  userId: string,
+  photographer?: LibraryPhotographer | null,
+) {
+  const { photos } = await getMyPhotosPage(supabase, userId, {
+    photographer,
+    limit: 10_000,
+  })
+  return photos
 }
 
 /** Photos you’ve downloaded from the library (any photographer), most recently saved first; deduped per photo. */

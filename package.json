@@ -8,7 +8,8 @@
     "dev:clean": "rm -rf .next && WATCHPACK_POLLING=true next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "backfill:display": "node --env-file=.env scripts/backfill-display-images.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",

@@ -1,7 +1,14 @@
-export type Category = 'neighborhood' | 'community' | 'amenity'
+export type Category = 'neighborhood' | 'city' | 'condo'
 export type Role = 'photographer' | 'admin'
 export type QuickFilter = 'all' | 'mine' | 'new' | 'fav'
 export type SortOption = 'new' | 'used'
+
+export interface PhotoAsset {
+  storage_path: string | null
+  thumbnail_path: string | null
+  display_path?: string | null
+  thumbnail_url?: string | null
+}
 
 export interface User {
   id: string
@@ -21,7 +28,7 @@ export interface Collection {
   created_by: string | null
   created_at: string
   photo_count?: number
-  photos?: Array<{ storage_path: string | null; thumbnail_path: string | null }>
+  photos?: PhotoAsset[]
 }
 
 export interface Photo {
@@ -40,6 +47,7 @@ export interface Photo {
   description: string | null
   storage_path: string | null
   thumbnail_path: string | null
+  display_path?: string | null
   downloads_count: number
   created_at: string
   // Joined fields

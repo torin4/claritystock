@@ -7,7 +7,6 @@ export default function MobileTopBar() {
 
   return (
     <div className="mobile-bar">
-      <div style={{ width: '36px' }} /> {/* spacer */}
       <BrandTitle size="mobile" priority />
       <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
         <span />

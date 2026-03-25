@@ -4,8 +4,8 @@ import { useUIStore } from '@/stores/ui.store'
 import { useUploadStore } from '@/stores/upload.store'
 import { fileToBase64 } from '@/lib/utils/fileToBase64'
 import { extractGps } from '@/lib/utils/exif'
-import { uploadPhoto, uploadThumbnail } from '@/lib/utils/storage'
-import { createJpegThumbnail } from '@/lib/utils/imageThumbnail'
+import { uploadDisplayImage, uploadPhoto, uploadThumbnail } from '@/lib/utils/storage'
+import { createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Collection, Category } from '@/lib/types/database.types'
@@ -172,23 +172,34 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         const f = store.files[i]
         if (f.published) continue
         try {
-          const [storagePath, thumbBlob] = await Promise.all([
+          const [storagePath, derivatives] = await Promise.all([
             uploadPhoto(f.file, userId),
-            createJpegThumbnail(f.file),
+            createPhotoDerivatives(f.file),
           ])
           let thumbnailPath: string | null = null
-          if (thumbBlob) {
-            try {
-              thumbnailPath = await uploadThumbnail(thumbBlob, userId)
-            } catch (e) {
-              console.warn('[Add Photos] Thumbnail upload failed:', e)
-            }
+          let displayPath: string | null = null
+
+          const [thumbnailUpload, displayUpload] = await Promise.allSettled([
+            derivatives.thumbnail ? uploadThumbnail(derivatives.thumbnail, userId) : Promise.resolve(null),
+            derivatives.display ? uploadDisplayImage(derivatives.display, userId) : Promise.resolve(null),
+          ])
+
+          if (thumbnailUpload.status === 'fulfilled') {
+            thumbnailPath = thumbnailUpload.value
+          } else {
+            console.warn('[Add Photos] Thumbnail upload failed:', thumbnailUpload.reason)
+          }
+
+          if (displayUpload.status === 'fulfilled') {
+            displayPath = displayUpload.value
+          } else {
+            console.warn('[Add Photos] Display image upload failed:', displayUpload.reason)
           }
           await publishPhoto(
             { ...f.form, description: f.ai?.description },
             storagePath,
             userId,
-            thumbnailPath,
+            { thumbnailPath, displayPath },
           )
           store.markPublished(i)
         } catch (err) {
@@ -372,8 +383,8 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                     >
                       <option value="">Select category…</option>
                       <option value="neighborhood">Neighborhood</option>
-                      <option value="community">Community</option>
-                      <option value="amenity">Amenity</option>
+                      <option value="city">City</option>
+                      <option value="condo">Condo</option>
                     </select>
                   </div>
 
@@ -611,4 +622,3 @@ function TagEditor({
     </div>
   )
 }
-

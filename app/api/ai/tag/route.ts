@@ -13,10 +13,10 @@ const PROMPT = `You are a real estate photography assistant for a luxury Pacific
 Look at the image carefully (Gemini Vision). Then return JSON with:
 - "title": short descriptive title, 5–8 words (e.g. "Kirkland Marina at golden hour")
 - "tags": array of 5–8 specific lowercase tags for search (e.g. "waterfront", "marina", "golden hour", "Lake Washington", "boat dock")
-- "category": exactly one of: neighborhood, community, amenity
+- "category": exactly one of: neighborhood, city, condo
 - "description": one sentence describing the photo for search
 
-Focus on: architecture, location, lighting, amenities, Pacific Northwest context.
+Use "neighborhood" for residential areas and local character; "city" for downtown, skyline, urban streets, civic spaces; "condo" for condo buildings, lobbies, units, and building interiors. Pacific Northwest context.
 
 Return only a single JSON object (no markdown, no code fences).`
 
@@ -52,7 +52,7 @@ const TAG_RESPONSE_SCHEMA: ResponseSchema = {
     },
     category: {
       type: SchemaType.STRING,
-      description: 'neighborhood | community | amenity',
+      description: 'neighborhood | city | condo',
     },
     description: { type: SchemaType.STRING, description: 'One sentence' },
   },
@@ -113,9 +113,11 @@ function normalizeTags(input: unknown): string[] {
 
 function normalizeCategory(raw: unknown): Category {
   const s = typeof raw === 'string' ? raw.toLowerCase().trim() : ''
-  if (s === 'neighborhood' || s === 'community' || s === 'amenity') return s
-  if (s.includes('commun')) return 'community'
-  if (s.includes('amenit')) return 'amenity'
+  if (s === 'neighborhood' || s === 'city' || s === 'condo') return s
+  if (s === 'community') return 'city'
+  if (s === 'amenity') return 'condo'
+  if (s.includes('commun')) return 'city'
+  if (s.includes('condo') || s.includes('amenit')) return 'condo'
   if (s.includes('neighbor')) return 'neighborhood'
   return 'neighborhood'
 }

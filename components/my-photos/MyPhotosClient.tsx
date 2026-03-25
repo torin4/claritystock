@@ -9,12 +9,13 @@ import Lightbox from '@/components/modals/Lightbox'
 import UploadModal from '@/components/modals/UploadModal'
 import CreateCollectionModal from '@/components/my-photos/CreateCollectionModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
+import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { deleteCollection, renameCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
-import { PHOTO_MY_LIBRARY_CARD_SELECT } from '@/lib/queries/photoSelects'
+import { MY_LIBRARY_PAGE_SIZE, PHOTO_MY_LIBRARY_CARD_SELECT } from '@/lib/queries/photoSelects'
 import { getMyDownloadedPhotos } from '@/lib/queries/photos.queries'
 import { useInView } from '@/lib/hooks/useInView'
 import type { Photo, Collection, User } from '@/lib/types/database.types'
@@ -25,8 +26,10 @@ type LibraryPhotographer = Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'>
 
 interface Props {
   initialPhotos: Photo[]
+  initialTotalPhotos: number
   collections: CollectionSummary[]
   userId: string
+  pageSize: number
   /** Merged onto each library photo (avoids per-row photographer join). */
   libraryPhotographer: LibraryPhotographer | null
   /** Admin: view/edit another user’s library; hides “My downloads” and uses proxy collection actions. */
@@ -35,13 +38,18 @@ interface Props {
 
 export default function MyPhotosClient({
   initialPhotos,
+  initialTotalPhotos,
   collections,
   userId,
+  pageSize,
   libraryPhotographer,
   adminMode = false,
 }: Props) {
   const router = useRouter()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
+  const [photoTotal, setPhotoTotal] = useState(initialTotalPhotos)
+  const [photosStatus, setPhotosStatus] = useState<'idle' | 'loading' | 'ready'>('ready')
+  const [loadingMorePhotos, setLoadingMorePhotos] = useState(false)
   const [downloadedPhotos, setDownloadedPhotos] = useState<Photo[]>([])
   /** Fetched only when the My downloads tab is opened (keeps Collections / All photos fast). */
   const [downloadsStatus, setDownloadsStatus] = useState<'idle' | 'loading' | 'done'>('idle')
@@ -60,7 +68,12 @@ export default function MyPhotosClient({
   const [bulkCollBusy, setBulkCollBusy] = useState(false)
   const [bulkAssignCollId, setBulkAssignCollId] = useState('')
   const downloadsLoadedRef = useRef(false)
+  const photosRequestSeqRef = useRef(0)
   const { openUpload, openEdit } = useUIStore()
+  const libraryPageSize = pageSize || MY_LIBRARY_PAGE_SIZE
+  const searchTerm = search.trim()
+  const defaultPhotosViewActive = tab === 'photos' && !drillColl && !searchTerm
+  const hasMorePhotos = photos.length < photoTotal
 
   const beginSelection = useCallback((id: string) => {
     setSelectionMode(true)
@@ -80,7 +93,7 @@ export default function MyPhotosClient({
 
   useEffect(() => {
     exitSelection()
-  }, [drillColl?.id, tab, exitSelection])
+  }, [drillColl?.id, searchTerm, tab, exitSelection])
 
   useEffect(() => {
     if (adminMode && tab === 'downloads') setTab('photos')
@@ -165,6 +178,13 @@ export default function MyPhotosClient({
   useEffect(() => {
     if (!selectionMode) setBulkAssignCollId('')
   }, [selectionMode])
+
+  useEffect(() => {
+    if (tab === 'photos' || drillColl) return
+    photosRequestSeqRef.current += 1
+    setPhotosStatus('ready')
+    setLoadingMorePhotos(false)
+  }, [drillColl, tab])
 
   const handleBulkAddToCollection = async () => {
     if (!selectedIds.length || !bulkAssignCollId || bulkCollBusy) return
@@ -282,10 +302,6 @@ export default function MyPhotosClient({
   }
 
   useEffect(() => {
-    setPhotos(initialPhotos)
-  }, [initialPhotos])
-
-  useEffect(() => {
     setLocalCollections(collections)
   }, [collections])
 
@@ -329,56 +345,108 @@ export default function MyPhotosClient({
     [libraryPhotographer],
   )
 
+  const fetchPhotosPage = useCallback(async (opts?: { offset?: number; append?: boolean }) => {
+    const offset = opts?.offset ?? 0
+    const append = opts?.append === true
+    const requestId = ++photosRequestSeqRef.current
+
+    if (append) {
+      setLoadingMorePhotos(true)
+    } else {
+      setPhotosStatus('loading')
+    }
+
+    try {
+      const supabase = getSupabaseBrowserClient()
+      let query = supabase
+        .from('photos')
+        .select(PHOTO_MY_LIBRARY_CARD_SELECT, { count: 'exact' })
+        .eq('photographer_id', userId)
+
+      if (drillColl?.id) {
+        query = query.eq('collection_id', drillColl.id)
+      }
+      if (searchTerm) {
+        query = query.textSearch('fts', searchTerm, { type: 'websearch' })
+      }
+
+      const { data, count, error } = await query
+        .order('created_at', { ascending: false })
+        .range(offset, offset + libraryPageSize - 1)
+
+      if (error) throw error
+      if (requestId !== photosRequestSeqRef.current) return
+
+      const nextPhotos = mergeLibraryRows((data as Photo[]) ?? []) as Photo[]
+      setPhotoTotal(count ?? nextPhotos.length)
+      setPhotos((prev) => (append ? [...prev, ...nextPhotos] : nextPhotos))
+    } catch (e) {
+      if (requestId !== photosRequestSeqRef.current) return
+      console.error(e)
+      alert(e instanceof Error ? e.message : append ? 'Could not load more photos' : 'Could not load photos')
+    } finally {
+      if (requestId !== photosRequestSeqRef.current) return
+      setPhotosStatus('ready')
+      setLoadingMorePhotos(false)
+    }
+  }, [drillColl?.id, libraryPageSize, mergeLibraryRows, searchTerm, userId])
+
   const refresh = async () => {
-    const supabase = getSupabaseBrowserClient()
-    const { data } = await supabase
-      .from('photos')
-      .select(PHOTO_MY_LIBRARY_CARD_SELECT)
-      .eq('photographer_id', userId)
-      .order('created_at', { ascending: false })
-    setPhotos(mergeLibraryRows((data as Photo[]) ?? []) as Photo[])
+    await fetchPhotosPage({ offset: 0 })
   }
 
-  const filteredPhotos = useMemo(() => {
-    const src = drillColl
-      ? photos.filter(p => p.collection_id === drillColl.id)
-      : photos
-    if (!search) return src
-    const q = search.toLowerCase()
-    return src.filter(p =>
-      p.title.toLowerCase().includes(q) ||
-      (p.neighborhood ?? '').toLowerCase().includes(q)
-    )
-  }, [photos, drillColl, search])
+  const loadMorePhotos = async () => {
+    if (loadingMorePhotos || !hasMorePhotos) return
+    await fetchPhotosPage({ offset: photos.length, append: true })
+  }
+
+  const filteredPhotos = photos
 
   const filteredDownloadedPhotos = useMemo(() => {
-    if (!search) return downloadedPhotos
-    const q = search.toLowerCase()
+    if (!searchTerm) return downloadedPhotos
+    const q = searchTerm.toLowerCase()
     return downloadedPhotos.filter(
       p =>
         p.title.toLowerCase().includes(q) ||
         (p.neighborhood ?? '').toLowerCase().includes(q) ||
         (p.photographer?.name ?? '').toLowerCase().includes(q),
     )
-  }, [downloadedPhotos, search])
+  }, [downloadedPhotos, searchTerm])
 
   const lightboxPhotos = useMemo(() => {
     if (!drillColl && tab === 'downloads') return filteredDownloadedPhotos
     return filteredPhotos
   }, [drillColl, tab, filteredDownloadedPhotos, filteredPhotos])
 
-  const photosByCollection = useMemo(() => {
-    const grouped = new Map<string, Photo[]>()
-    for (const photo of photos) {
-      if (!photo.collection_id) continue
-      const existing = grouped.get(photo.collection_id)
-      if (existing) existing.push(photo)
-      else grouped.set(photo.collection_id, [photo])
-    }
-    return grouped
-  }, [photos])
+  useEffect(() => {
+    if (!defaultPhotosViewActive) return
+    photosRequestSeqRef.current += 1
+    setPhotos(initialPhotos)
+    setPhotoTotal(initialTotalPhotos)
+    setPhotosStatus('ready')
+    setLoadingMorePhotos(false)
+  }, [defaultPhotosViewActive, initialPhotos, initialTotalPhotos])
 
-  const totalDownloads = photos.reduce((sum, p) => sum + (p.downloads_count ?? 0), 0)
+  useEffect(() => {
+    if (tab !== 'photos' && !drillColl) return
+    if (defaultPhotosViewActive) return
+
+    const debounceMs = searchTerm ? 250 : 0
+    const timeout = window.setTimeout(() => {
+      void fetchPhotosPage({ offset: 0 })
+    }, debounceMs)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [defaultPhotosViewActive, drillColl, fetchPhotosPage, searchTerm, tab])
+
+  const collectionPhotoCounts = useMemo(
+    () => new Map(localCollections.map((collection) => [collection.id, collection.photo_count ?? 0])),
+    [localCollections],
+  )
+
+  const activePhotoCount = drillColl ? (collectionPhotoCounts.get(drillColl.id) ?? 0) : photoTotal
 
   const noopFavoriteToggle = useCallback(() => {}, [])
 
@@ -413,9 +481,9 @@ export default function MyPhotosClient({
     try {
       await deleteCollection(drillColl.id)
       useUIStore.getState().bumpSidebarCollections()
+      setLocalCollections(prev => prev.filter(c => c.id !== drillColl.id))
       setDrillColl(null)
       setTab('collections')
-      await refresh()
       router.refresh()
     } catch (e) {
       console.error(e)
@@ -466,7 +534,7 @@ export default function MyPhotosClient({
                 : `${downloadedPhotos.length} photo${downloadedPhotos.length !== 1 ? 's' : ''} you've downloaded`
             ) : (
               <>
-                {photos.length} in Library · {totalDownloads} uses by the team
+                {photoTotal} in Library
                 {drillColl && (
                   <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
                     Adds go to “{drillColl.name}”
@@ -477,9 +545,20 @@ export default function MyPhotosClient({
           </div>
         </div>
         {(!drillColl && tab === 'downloads') ? null : (
-          <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={() => openUpload()}>
-            <PlusIcon size={15} />
-            {drillColl ? 'Add to collection' : 'Add Photos'}
+          <button
+            type="button"
+            className="btn btn-primary btn-sm btn-with-icon ph-header-upload-btn"
+            onClick={() => openUpload()}
+            title={drillColl ? 'Add to collection' : 'Add photos'}
+          >
+            <span className="flex md:hidden items-center justify-center">
+              <PhotoAddIcon size={18} />
+              <span className="sr-only">{drillColl ? 'Add to collection' : 'Add photos'}</span>
+            </span>
+            <span className="hidden md:inline-flex items-center gap-1.5">
+              <PlusIcon size={15} />
+              {drillColl ? 'Add to collection' : 'Add Photos'}
+            </span>
           </button>
         )}
       </div>
@@ -529,7 +608,6 @@ export default function MyPhotosClient({
                 <CollectionTile
                   key={coll.id}
                   collection={coll}
-                  photos={photosByCollection.get(coll.id) ?? []}
                   onClick={() => { setDrillColl(coll); setTab('photos') }}
                 />
               ))}
@@ -561,18 +639,27 @@ export default function MyPhotosClient({
                 <div style={{ minWidth: 0 }}>
                   <div className="browse-coll-title">{drillColl.name}</div>
                   <div className="browse-coll-sub">
-                    {filteredPhotos.length} photo{filteredPhotos.length !== 1 ? 's' : ''}
+                    {searchTerm
+                      ? `${photoTotal} match${photoTotal === 1 ? '' : 'es'}`
+                      : `${activePhotoCount} photo${activePhotoCount !== 1 ? 's' : ''}`}
                   </div>
                 </div>
               </div>
               <div className="drill-actions">
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm btn-with-icon"
+                  className="btn btn-primary btn-sm btn-with-icon ph-header-upload-btn"
                   onClick={() => openUpload()}
+                  title="Add photos"
                 >
-                  <PlusIcon size={14} />
-                  Add photos
+                  <span className="flex md:hidden items-center justify-center">
+                    <PhotoAddIcon size={18} />
+                    <span className="sr-only">Add photos</span>
+                  </span>
+                  <span className="hidden md:inline-flex items-center gap-1.5">
+                    <PlusIcon size={15} />
+                    Add photos
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -611,18 +698,22 @@ export default function MyPhotosClient({
               />
             </div>
             <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
-              {filteredPhotos.length} photos
+              {photosStatus === 'loading' ? '…' : `${photoTotal} photos`}
             </span>
           </div>
 
           {/* Grid or empty states */}
-          {filteredPhotos.length === 0 ? (
+          {photosStatus === 'loading' ? (
+            <div className="mp-empty-block" style={{ paddingTop: 48 }}>
+              <p className="mp-empty-sub" style={{ margin: 0 }}>Loading photos…</p>
+            </div>
+          ) : filteredPhotos.length === 0 ? (
             drillColl ? (
-              search.trim() ? (
+              searchTerm ? (
                 <div className="mp-empty-block">
                   <h3 className="mp-empty-title">No matches in this collection</h3>
                   <p className="mp-empty-sub">
-                    Nothing matches “{search.trim()}” in “{drillColl.name}”. Try a different search or clear it to see all photos here.
+                    Nothing matches “{searchTerm}” in “{drillColl.name}”. Try a different search or clear it to see all photos here.
                   </p>
                   <div className="mp-empty-actions">
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch('')}>
@@ -637,15 +728,26 @@ export default function MyPhotosClient({
                     Add photos here — they’ll be saved to <strong style={{ color: 'var(--text-2)' }}>{drillColl.name}</strong> automatically. You can still change the collection for each photo before publishing.
                   </p>
                   <div className="mp-empty-actions">
-                    <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={() => openUpload()}>
-                      <PlusIcon size={15} />
-                      Add photos to this collection
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm btn-with-icon ph-header-upload-btn"
+                      onClick={() => openUpload()}
+                      title="Add photos to this collection"
+                    >
+                      <span className="flex md:hidden items-center justify-center">
+                        <PhotoAddIcon size={18} />
+                        <span className="sr-only">Add photos to this collection</span>
+                      </span>
+                      <span className="hidden md:inline-flex items-center gap-1.5">
+                        <PlusIcon size={15} />
+                        Add photos to this collection
+                      </span>
                     </button>
                   </div>
                 </div>
               )
             ) : (
-              search.trim() ? (
+              searchTerm ? (
                 <div className="mp-empty-block">
                   <h3 className="mp-empty-title">No photos match your search</h3>
                   <p className="mp-empty-sub">Try another term or clear the search box.</p>
@@ -660,9 +762,20 @@ export default function MyPhotosClient({
                   <h3 className="mp-empty-title">{adminMode ? 'No photos in this library yet' : 'No photos in your library yet'}</h3>
                   <p className="mp-empty-sub">{adminMode ? 'Upload photos for this photographer to see them here.' : 'Upload photos to see them here and organize them into collections.'}</p>
                   <div className="mp-empty-actions">
-                    <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={() => openUpload()}>
-                      <PlusIcon size={15} />
-                      Add Photos
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm btn-with-icon ph-header-upload-btn"
+                      onClick={() => openUpload()}
+                      title="Add photos"
+                    >
+                      <span className="flex md:hidden items-center justify-center">
+                        <PhotoAddIcon size={18} />
+                        <span className="sr-only">Add photos</span>
+                      </span>
+                      <span className="hidden md:inline-flex items-center gap-1.5">
+                        <PlusIcon size={15} />
+                        Add Photos
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -682,6 +795,19 @@ export default function MyPhotosClient({
               onBeginSelection={beginSelection}
               onToggleSelected={toggleSelected}
             />
+          )}
+
+          {photosStatus !== 'loading' && filteredPhotos.length > 0 && hasMorePhotos && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 20px 20px' }}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={loadingMorePhotos}
+                onClick={() => void loadMorePhotos()}
+              >
+                {loadingMorePhotos ? 'Loading…' : `Load ${Math.min(libraryPageSize, photoTotal - photos.length)} more`}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -857,11 +983,15 @@ export default function MyPhotosClient({
   )
 }
 
-function MosaicCell({ photo }: { photo: Photo | undefined }) {
+function MosaicCell({
+  photo,
+}: {
+  photo: { storage_path: string | null; thumbnail_path: string | null; thumbnail_url?: string | null } | undefined
+}) {
   const cellRef = useRef<HTMLDivElement>(null)
   const inView = useInView(cellRef, { rootMargin: '120px' })
   const path = photo?.thumbnail_path ?? photo?.storage_path ?? null
-  const url = useSignedPhotoUrl(path, { enabled: inView })
+  const url = useSignedPhotoUrl(path, { enabled: inView, initialUrl: photo?.thumbnail_url ?? null })
   return (
     <div ref={cellRef} className="coll-mosaic-cell">
       {url ? (
@@ -876,15 +1006,13 @@ function MosaicCell({ photo }: { photo: Photo | undefined }) {
 
 function CollectionTile({
   collection,
-  photos,
   onClick,
 }: {
   collection: Collection
-  photos: Photo[]
   onClick: () => void
 }) {
-  const topPhotos = photos.slice(0, 3)
-  const single = photos.length === 1
+  const topPhotos = (collection.photos ?? []).slice(0, 3)
+  const single = (collection.photo_count ?? topPhotos.length) === 1
 
   return (
     <div className="coll-tile" onClick={onClick}>
@@ -899,7 +1027,9 @@ function CollectionTile({
       </div>
       <div className="coll-ov">
         <div className="coll-name">{collection.name}</div>
-        <div className="coll-count">{photos.length} photo{photos.length !== 1 ? 's' : ''}</div>
+        <div className="coll-count">
+          {collection.photo_count ?? 0} photo{(collection.photo_count ?? 0) !== 1 ? 's' : ''}
+        </div>
       </div>
     </div>
   )

@@ -41,7 +41,7 @@ const config: Config = {
         'search-bar': '19',
         'drawer-overlay': '50',
         'drawer': '51',
-        lightbox: '100',
+        lightbox: '380',
         'notif-popover': '400',
         'modal-overlay': '500',
         upload: '600',

@@ -8,6 +8,8 @@ type Options = {
   expiresSec?: number
   /** When false, no network (e.g. tile below the fold until scrolled). */
   enabled?: boolean
+  /** Server-signed URL for the initial render; avoids placeholder flashes during hydration. */
+  initialUrl?: string | null
 }
 
 /**
@@ -16,25 +18,31 @@ type Options = {
 export function useSignedPhotoUrl(path: string | null | undefined, options?: Options) {
   const expiresSec = options?.expiresSec ?? 3600
   const enabled = options?.enabled !== false
+  const initialUrl = options?.initialUrl ?? null
 
   const [url, setUrl] = useState<string | null>(() =>
-    path && enabled ? peekCachedSignedUrl(path) ?? null : null,
+    path ? peekCachedSignedUrl(path) ?? initialUrl : initialUrl,
   )
 
   useEffect(() => {
     if (!path) {
-      setUrl(null)
-      return
-    }
-
-    if (!enabled) {
-      setUrl(null)
+      setUrl(initialUrl)
       return
     }
 
     const cached = peekCachedSignedUrl(path)
     if (cached) {
       setUrl(cached)
+      return
+    }
+
+    if (initialUrl) {
+      setUrl(initialUrl)
+      return
+    }
+
+    if (!enabled) {
+      setUrl(null)
       return
     }
 
@@ -49,7 +57,7 @@ export function useSignedPhotoUrl(path: string | null | undefined, options?: Opt
     return () => {
       cancelled = true
     }
-  }, [path, expiresSec, enabled])
+  }, [path, expiresSec, enabled, initialUrl])
 
   return url
 }

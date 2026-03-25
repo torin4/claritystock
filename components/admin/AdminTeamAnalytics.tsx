@@ -41,12 +41,14 @@ export default function AdminTeamAnalytics({
   usageLedger,
   usageAlert,
 }: Props) {
-  const heroPhoto = topPhotos[0] ?? null
+  const heroCandidate = topPhotos[0] ?? null
+  const hasTopPerforming = (heroCandidate?.downloads_count ?? 0) > 0
+  const heroPhoto = hasTopPerforming ? heroCandidate : null
   const maxDownloader = downloadsByDownloader[0]?.count ?? 1
   const maxImpact = photographerImpact[0]?.downloadUses ?? 1
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div className="admin-analytics-page">
       <div className="ph">
         <div>
           <div className="ph-title">Admin</div>
@@ -57,15 +59,7 @@ export default function AdminTeamAnalytics({
         </div>
       </div>
 
-      <div
-        id="admin-insight-cards"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 'var(--gap)',
-          padding: '16px 20px 0',
-        }}
-      >
+      <div id="admin-insight-cards" className="admin-stat-grid">
         <StatCard value={stats.totalPhotos} label="Photos in library" />
         <StatCard value={stats.totalDownloads} label="Total downloads" />
         <StatCard value={stats.thisMonthDownloads} label="Downloads this month" />
@@ -74,115 +68,150 @@ export default function AdminTeamAnalytics({
 
       <div
         id="admin-hero"
+        className={`admin-hero-block ${hasTopPerforming ? 'insights-hero' : 'insights-hero insights-hero--empty'}`}
         style={{
-          margin: '14px 20px 0',
-          borderRadius: 10,
-          overflow: 'hidden',
-          position: 'relative',
-          height: 220,
-          background: 'var(--surface-2)',
+          cursor: 'default',
+          border: hasTopPerforming ? undefined : '1px solid var(--border)',
         }}
       >
-        <AdminHeroBackdrop storagePath={heroPhoto?.storage_path} />
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(to right, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            padding: 28,
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: 'var(--accent)',
-                fontFamily: 'var(--font-mono)',
-                marginBottom: 8,
-              }}
-            >
-              Top performing photo · library-wide
+        {hasTopPerforming ? (
+          <>
+            <div className="insights-hero-bg">
+              <AdminHeroBackdrop storagePath={heroPhoto?.storage_path} />
             </div>
             <div
+              className="insights-hero-overlay"
               style={{
-                fontFamily: 'var(--font-head)',
-                fontSize: 28,
-                fontWeight: 700,
-                color: '#fff',
-                lineHeight: 1.1,
-                marginBottom: 8,
+                background:
+                  'linear-gradient(to right, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.5) 55%, transparent 100%)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                padding: 28,
               }}
             >
-              {heroPhoto?.title ?? 'No photos yet'}
-            </div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>
-              {heroPhoto?.photographer?.name ?? '—'} · {heroPhoto?.collection?.name ?? '—'}
-            </div>
-            {heroPhoto && (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span
+              <div className="insights-hero-copy">
+                <div
+                  className="insights-hero-kicker"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: 'var(--accent)',
+                    fontFamily: 'var(--font-mono)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Top performing photo · library-wide
+                </div>
+                <div
+                  className="insights-hero-title"
                   style={{
                     fontFamily: 'var(--font-head)',
-                    fontSize: 48,
+                    fontSize: 28,
                     fontWeight: 700,
                     color: '#fff',
-                    lineHeight: 1,
+                    lineHeight: 1.15,
+                    marginBottom: 8,
                   }}
                 >
-                  {heroPhoto.downloads_count}
-                </span>
-                <span
-                  style={{
-                    fontSize: 14,
-                    color: 'rgba(255,255,255,0.5)',
-                    fontFamily: 'var(--font-mono)',
-                  }}
+                  {heroPhoto?.title}
+                </div>
+                <div
+                  className="insights-hero-meta"
+                  style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 16 }}
                 >
-                  downloads
-                </span>
+                  {heroPhoto?.photographer?.name ?? '—'} · {heroPhoto?.collection?.name ?? '—'}
+                </div>
+                <div className="insights-hero-dl" style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span
+                    className="insights-hero-dl-num"
+                    style={{
+                      fontFamily: 'var(--font-head)',
+                      fontSize: 48,
+                      fontWeight: 700,
+                      color: '#fff',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {heroPhoto!.downloads_count}
+                  </span>
+                  <span
+                    style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-mono)' }}
+                  >
+                    downloads
+                  </span>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div
-        className="admin-analytics-two-col"
-        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '14px 20px 0' }}
-      >
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 9,
-            overflow: 'hidden',
-          }}
-        >
+            </div>
+          </>
+        ) : (
           <div
+            className="insights-hero-overlay insights-hero-overlay--empty"
             style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--border)',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              padding: '22px 24px 24px',
+              position: 'relative',
             }}
           >
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Who uses the library</span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+            <div className="insights-hero-copy">
+              <div
+                className="insights-hero-kicker"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent)',
+                  fontFamily: 'var(--font-mono)',
+                  marginBottom: 8,
+                }}
+              >
+                Top performing photo
+              </div>
+              <div
+                className="insights-hero-title"
+                style={{
+                  fontFamily: 'var(--font-head)',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  lineHeight: 1.2,
+                  marginBottom: 8,
+                }}
+              >
+                {!heroCandidate ? 'Nothing to show yet' : 'No downloads yet'}
+              </div>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: 'var(--text-2)',
+                  lineHeight: 1.45,
+                  margin: 0,
+                  maxWidth: 440,
+                }}
+              >
+                {!heroCandidate
+                  ? 'The library is empty. Once photographers add work, download stats and a leader photo will show up here.'
+                  : 'No library downloads yet. When teammates save photos from the library, the most-used shot appears here.'}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="admin-analytics-two-col">
+        <div className="admin-card">
+          <div className="admin-card__headerRow">
+            <span className="admin-card__headerTitle">Who uses the library</span>
+            <span className="admin-card__headerMeta">
               {stats.totalDownloads.toLocaleString()} download events
             </span>
           </div>
           <div className="bar-chart">
             {downloadsByDownloader.length === 0 ? (
-              <div style={{ padding: '16px 0', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
-                No downloads yet
-              </div>
+              <div className="admin-card__chartEmpty">No downloads yet</div>
             ) : (
               downloadsByDownloader.map((u, i) => {
                 const pct = Math.round((u.count / maxDownloader) * 100)
@@ -214,33 +243,14 @@ export default function AdminTeamAnalytics({
           </div>
         </div>
 
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 9,
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Whose photos are used most</span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-              By download count on their work
-            </span>
+        <div className="admin-card">
+          <div className="admin-card__headerRow">
+            <span className="admin-card__headerTitle">Whose photos are used most</span>
+            <span className="admin-card__headerMeta">By download count on their work</span>
           </div>
           <div className="bar-chart">
             {photographerImpact.length === 0 ? (
-              <div style={{ padding: '16px 0', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
-                No photos yet
-              </div>
+              <div className="admin-card__chartEmpty">No photos yet</div>
             ) : (
               photographerImpact.map((u, i) => {
                 const pct = Math.round((u.downloadUses / maxImpact) * 100)
@@ -275,37 +285,16 @@ export default function AdminTeamAnalytics({
 
       <AdminPennyJarBandit rows={usageLedger} alert={usageAlert} />
 
-      <div
-        className="admin-analytics-two-col"
-        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '14px 20px 0' }}
-      >
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 9,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
-            Library balance
-          </div>
-          <div style={{ padding: 16 }}>
+      <div className="admin-analytics-two-col">
+        <div className="admin-card">
+          <div className="admin-card__header">Library balance</div>
+          <div className="admin-card__body">
             <BalanceBar uploads={stats.totalPhotos} downloads={stats.totalDownloads} />
           </div>
         </div>
 
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 9,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
-            Top library photos
-          </div>
+        <div className="admin-card">
+          <div className="admin-card__header">Top library photos</div>
           <table className="utbl">
             <thead>
               <tr>
@@ -337,20 +326,10 @@ export default function AdminTeamAnalytics({
         </div>
       </div>
 
-      <div style={{ padding: '14px 20px 28px' }}>
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 9,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
-            Team roster
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="utbl">
+      <div className="admin-card">
+        <div className="admin-card__header">Team roster</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="utbl">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -387,8 +366,7 @@ export default function AdminTeamAnalytics({
                   ))
                 )}
               </tbody>
-            </table>
-          </div>
+          </table>
         </div>
       </div>
     </div>

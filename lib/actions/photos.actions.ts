@@ -116,12 +116,13 @@ export async function deletePhoto(
   id: string,
   storagePath: string | null,
   thumbnailPath?: string | null,
+  displayPath?: string | null,
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
-  const toRemove = [storagePath, thumbnailPath].filter(Boolean) as string[]
+  const toRemove = [storagePath, thumbnailPath, displayPath].filter(Boolean) as string[]
   if (toRemove.length) {
     await supabase.storage.from('photos').remove(toRemove)
   }
@@ -144,7 +145,7 @@ export async function deleteAllMyPhotos() {
 
   const { data: photos, error: fetchErr } = await supabase
     .from('photos')
-    .select('id, storage_path, thumbnail_path')
+    .select('id, storage_path, thumbnail_path, display_path')
     .eq('photographer_id', user.id)
 
   if (fetchErr) throw fetchErr
@@ -154,6 +155,7 @@ export async function deleteAllMyPhotos() {
   for (const p of photos) {
     if (p.storage_path) paths.add(p.storage_path)
     if (p.thumbnail_path) paths.add(p.thumbnail_path)
+    if (p.display_path) paths.add(p.display_path)
   }
   if (paths.size > 0) {
     const arr = Array.from(paths)
@@ -188,7 +190,7 @@ export async function deletePhotos(ids: string[]) {
   const admin = await isUserAdmin(supabase, user.id)
   let sel = supabase
     .from('photos')
-    .select('id, storage_path, thumbnail_path')
+    .select('id, storage_path, thumbnail_path, display_path')
     .in('id', unique)
   if (!admin) sel = sel.eq('photographer_id', user.id)
   const { data: photos, error: fetchErr } = await sel
@@ -200,6 +202,7 @@ export async function deletePhotos(ids: string[]) {
   for (const p of photos) {
     if (p.storage_path) paths.add(p.storage_path)
     if (p.thumbnail_path) paths.add(p.thumbnail_path)
+    if (p.display_path) paths.add(p.display_path)
   }
   if (paths.size > 0) {
     const arr = Array.from(paths)
@@ -227,7 +230,10 @@ export async function publishPhoto(
   formValues: PhotoFormValues & { description?: string },
   storagePath: string,
   photographerId: string,
-  thumbnailPath?: string | null,
+  paths?: {
+    thumbnailPath?: string | null
+    displayPath?: string | null
+  },
 ) {
   const { supabase, actingAsAdmin } = await assertOwnerOrAdmin(photographerId)
   if (actingAsAdmin) {
@@ -260,7 +266,8 @@ export async function publishPhoto(
     notes: formValues.notes,
     description: formValues.description ?? null,
     storage_path: storagePath,
-    thumbnail_path: thumbnailPath ?? null,
+    thumbnail_path: paths?.thumbnailPath ?? null,
+    display_path: paths?.displayPath ?? null,
     downloads_count: 0,
   })
 

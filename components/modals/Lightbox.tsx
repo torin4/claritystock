@@ -9,8 +9,8 @@ import type { Photo, Download } from '@/lib/types/database.types'
 
 const CAT_COLORS: Record<string, string> = {
   neighborhood: 'var(--accent-light)',
-  community: '#c49060',
-  amenity: '#6a9ec4',
+  city: '#c49060',
+  condo: '#6a9ec4',
 }
 
 interface Props {
@@ -37,6 +37,8 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
   const currentIndex = lightboxPhotoId ? photos.findIndex(p => p.id === lightboxPhotoId) : -1
   const prevId = currentIndex > 0 ? photos[currentIndex - 1].id : null
   const nextId = currentIndex < photos.length - 1 && currentIndex >= 0 ? photos[currentIndex + 1].id : null
+  const showPager = photos.length > 1 && currentIndex >= 0
+  const pagerText = showPager ? `${currentIndex + 1} / ${photos.length}` : null
 
   const [downloadId, setDownloadId] = useState<string | null>(null)
   const [jobRef, setJobRef] = useState('')
@@ -44,6 +46,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
   const [jobSaved, setJobSaved] = useState(false)
   const [histOpen, setHistOpen] = useState(false)
   const [usageHistory, setUsageHistory] = useState<DownloadRow[]>([])
+  const [displayImageLoaded, setDisplayImageLoaded] = useState(false)
 
   const photo = useMemo(
     () => (lightboxPhotoId ? photos.find(p => p.id === lightboxPhotoId) ?? null : null),
@@ -64,6 +67,13 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
     setHistOpen(false)
     setUsageHistory([])
   }, [lightboxPhotoId])
+
+  const previewPath = photo?.thumbnail_path ?? photo?.display_path ?? photo?.storage_path ?? null
+  const displayPath = photo?.display_path ?? photo?.storage_path ?? null
+
+  useEffect(() => {
+    setDisplayImageLoaded(false)
+  }, [photo?.id, lightboxOpen])
 
   /** Close stale lightbox id before paint — avoids flash + getState() avoids effect/deps churn with zustand actions. */
   useLayoutEffect(() => {
@@ -124,50 +134,117 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [lightboxOpen, closeLightbox, prevId, nextId, openLightbox])
 
-  const imageUrl = useSignedPhotoUrl(photo?.storage_path, { enabled: lightboxOpen && !!photo?.storage_path })
+  const previewUrl = useSignedPhotoUrl(previewPath, {
+    enabled: lightboxOpen && !!previewPath,
+    initialUrl: photo?.thumbnail_url ?? null,
+  })
+  const displayImageUrl = useSignedPhotoUrl(displayPath, {
+    enabled: lightboxOpen && !!displayPath,
+    initialUrl: displayPath === previewPath ? previewUrl : null,
+  })
+  const showDisplayImage = !!displayImageUrl && displayImageLoaded
+  const backdropUrl = previewUrl ?? displayImageUrl
+  const showLoadingOverlay = !!displayPath && !showDisplayImage
   const isDone = !!downloadId
 
   if (!lightboxOpen) return null
 
   return (
     <div className={`lightbox ${lightboxOpen ? 'open' : ''}`}>
-      {prevId && (
-        <button className="lb-arrow lb-prev" onClick={() => openLightbox(prevId)}>‹</button>
-      )}
-      {nextId && (
-        <button className="lb-arrow lb-next" onClick={() => openLightbox(nextId)}>›</button>
-      )}
-
       <div className="lb-body">
         {/* Image area */}
         <div className="lb-img-area">
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="lb-img" src={imageUrl} alt={photo?.title} />
+          {backdropUrl ? (
+            <div className="lb-img-backdrop-layer" aria-hidden>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className={`lb-img-backdrop${showDisplayImage ? ' is-settled' : ''}`}
+                src={backdropUrl}
+                alt=""
+              />
+            </div>
           ) : (
-            <div className="lb-img" style={{ background: 'var(--surface-2)', aspectRatio: '4/3', borderRadius: '4px' }} />
+            <div className="lb-img-backdrop-fallback" aria-hidden />
           )}
-          <div style={{
-            position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)',
-            display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
-            color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-mono)',
-            pointerEvents: 'none', whiteSpace: 'nowrap',
-          }}>
-            <span style={{ padding: '2px 6px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4 }}>←</span>
-            <span style={{ padding: '2px 6px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4 }}>→</span>
-            <span style={{ marginLeft: 2 }}>navigate</span>
-            <span style={{ marginLeft: 6, padding: '2px 6px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4 }}>esc</span>
-            <span>close</span>
+          <div className={`lb-img-backdrop-wash${showDisplayImage ? ' is-settled' : ''}`} aria-hidden />
+          <div className="lb-img-stack">
+            {showLoadingOverlay ? (
+              <div className={`lb-loading-overlay${showDisplayImage ? ' is-hidden' : ''}`} role="status" aria-live="polite">
+                <div className="lb-loading-chip">
+                  <span className="lb-loading-spinner" aria-hidden />
+                  <span>Loading photo…</span>
+                </div>
+              </div>
+            ) : null}
+            {displayImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className={`lb-img lb-img-display${showDisplayImage ? ' is-ready' : ''}`}
+                src={displayImageUrl}
+                alt={photo?.title}
+                onLoad={() => setDisplayImageLoaded(true)}
+              />
+            ) : null}
+            {!backdropUrl && !showDisplayImage ? (
+              <div className="lb-img lb-img-placeholder" />
+            ) : null}
           </div>
+          {prevId && (
+            <button type="button" className="lb-arrow lb-prev" onClick={() => openLightbox(prevId)} aria-label="Previous photo">
+              ‹
+            </button>
+          )}
+          {nextId && (
+            <button type="button" className="lb-arrow lb-next" onClick={() => openLightbox(nextId)} aria-label="Next photo">
+              ›
+            </button>
+          )}
+          {/* Keyboard hint: desktop only — on mobile the panel shows pager + tap prev/next */}
+          {showPager ? (
+            <div className="lb-kbd-hint" aria-hidden>
+              <span className="lb-kbd-key">←</span>
+              <span className="lb-kbd-key">→</span>
+              <span>navigate</span>
+              <span className="lb-kbd-key lb-kbd-key--wide">esc</span>
+              <span>close</span>
+            </div>
+          ) : null}
         </div>
 
         {/* Info panel */}
         <div className="lb-panel">
           <div className="lb-panel-close">
-            <span style={{ fontFamily: 'var(--font-head)', fontSize: 14, fontWeight: 700, color: 'var(--text-2)' }}>
-              Photo
-            </span>
-            <button className="lb-panel-close-btn" onClick={closeLightbox}>✕</button>
+            <div className="lb-panel-close-lead">
+              <span className="lb-panel-title">Photo</span>
+              {pagerText ? <span className="lb-panel-pager">{pagerText}</span> : null}
+            </div>
+            <div className="lb-panel-close-actions">
+              {showPager ? (
+                <div className="lb-panel-mobile-nav" aria-label="Photo navigation">
+                  <button
+                    type="button"
+                    className="lb-panel-nav-btn"
+                    disabled={!prevId}
+                    onClick={() => prevId && openLightbox(prevId)}
+                    aria-label="Previous photo"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    className="lb-panel-nav-btn"
+                    disabled={!nextId}
+                    onClick={() => nextId && openLightbox(nextId)}
+                    aria-label="Next photo"
+                  >
+                    ›
+                  </button>
+                </div>
+              ) : null}
+              <button type="button" className="lb-panel-close-btn" onClick={closeLightbox} aria-label="Close">
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Download button */}

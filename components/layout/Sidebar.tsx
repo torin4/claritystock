@@ -1,13 +1,13 @@
 'use client'
-import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useUIStore } from '@/stores/ui.store'
 import { useNotificationsStore } from '@/stores/notifications.store'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import NotificationPopover from '@/components/modals/NotificationPopover'
 import SettingsPanel from '@/components/modals/SettingsPanel'
 import BrandTitle from '@/components/layout/BrandTitle'
+import type { Collection } from '@/lib/types/database.types'
 
 // SVG icons as components
 function BrowseIcon() {
@@ -64,10 +64,10 @@ interface NavItem {
   icon: React.ReactNode
 }
 
-interface Collection {
+type RecentCollection = {
   id: string
   name: string
-  photos?: { storage_path: string | null; thumbnail_path: string | null }[]
+  photos?: Collection['photos']
 }
 
 interface SidebarProps {
@@ -75,11 +75,13 @@ interface SidebarProps {
   userInitials: string
   userRole: string
   userId: string
+  recentCollections: RecentCollection[]
 }
 
-function RecentCollectionThumb({ collection }: { collection: Collection }) {
-  const path = collection.photos?.[0]?.thumbnail_path ?? collection.photos?.[0]?.storage_path ?? null
-  const url = useSignedPhotoUrl(path)
+function RecentCollectionThumb({ collection }: { collection: RecentCollection }) {
+  const previewPhoto = collection.photos?.[0]
+  const path = previewPhoto?.thumbnail_path ?? previewPhoto?.storage_path ?? null
+  const url = useSignedPhotoUrl(path, { initialUrl: previewPhoto?.thumbnail_url ?? null })
 
   if (!url) {
     return <div style={{ width: '100%', height: '100%', background: 'var(--surface-2)' }} />
@@ -97,30 +99,13 @@ function RecentCollectionThumb({ collection }: { collection: Collection }) {
   )
 }
 
-export default function Sidebar({ userName, userInitials, userRole, userId }: SidebarProps) {
+export default function Sidebar({ userName, userInitials, userRole, userId, recentCollections }: SidebarProps) {
   const pathname = usePathname()
-  const router = useRouter()
   const sidebarOpen = useUIStore(s => s.sidebarOpen)
   const openSettings = useUIStore(s => s.openSettings)
   const toggleNotif = useUIStore(s => s.toggleNotif)
   const openUpload = useUIStore(s => s.openUpload)
-  const sidebarCollectionsEpoch = useUIStore(s => s.sidebarCollectionsEpoch)
   const unreadCount = useNotificationsStore(s => s.unreadCount)
-  const [collections, setCollections] = useState<Collection[]>([])
-
-  useEffect(() => {
-    const supabase = getSupabaseBrowserClient()
-    ;(async () => {
-      // Global recent collections excluding your own collections.
-      const { data } = await supabase
-        .from('collections')
-        .select('id, name, created_by, photos(storage_path, thumbnail_path)')
-        .neq('created_by', userId)
-        .order('created_at', { ascending: false })
-        .limit(8)
-      setCollections((data as Collection[]) ?? [])
-    })()
-  }, [sidebarCollectionsEpoch, userId])
 
   const navItems: NavItem[] = [
     { href: '/', label: 'Browse', icon: <BrowseIcon /> },
@@ -134,11 +119,8 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href)
 
-  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  const handleNavClick = () => {
     useUIStore.getState().setSidebarOpen(false)
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
-    e.preventDefault()
-    router.push(href)
   }
 
   const sidebarStyle: React.CSSProperties = {
@@ -186,15 +168,15 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
           {/* Library section */}
           <span className="s-section-lbl" style={{ color: 'var(--label-library)' }}>Library</span>
           {navItems.map(item => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               className={`ni ${isActive(item.href) ? 'active' : ''}`}
-              onClick={e => handleNavClick(e, item.href)}
+              onClick={handleNavClick}
             >
               <span className="ni-ic" style={{ color: isActive(item.href) ? 'var(--accent)' : undefined }}>{item.icon}</span>
               {item.label}
-            </a>
+            </Link>
           ))}
 
           {/* Add Photos */}
@@ -214,27 +196,27 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
           {/* My Space section */}
           <span className="s-section-lbl" style={{ marginTop: '8px' }}>My Space</span>
           {mySpaceItems.map(item => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               className={`ni ${isActive(item.href) ? 'active' : ''}`}
-              onClick={e => handleNavClick(e, item.href)}
+              onClick={handleNavClick}
             >
               <span className="ni-ic" style={{ color: isActive(item.href) ? 'var(--accent)' : undefined }}>{item.icon}</span>
               {item.label}
-            </a>
+            </Link>
           ))}
 
           {/* Collections section */}
-          {collections.length > 0 && (
+          {recentCollections.length > 0 && (
             <>
               <span className="s-section-lbl" style={{ marginTop: '8px' }}>Recent collections</span>
-              {collections.map(c => (
-                <a
+              {recentCollections.map(c => (
+                <Link
                   key={c.id}
                   href={`/?collection=${c.id}`}
                   className="ni"
-                  onClick={e => handleNavClick(e, `/?collection=${c.id}`)}
+                  onClick={handleNavClick}
                   style={{ gap: '8px' }}
                 >
                   <div style={{
@@ -250,7 +232,7 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>
                     {c.name}
                   </span>
-                </a>
+                </Link>
               ))}
             </>
           )}

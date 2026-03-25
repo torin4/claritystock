@@ -1,4 +1,5 @@
 export const BROWSE_PAGE_SIZE = 60
+export const MY_LIBRARY_PAGE_SIZE = 48
 
 /**
  * Fields needed for grid cards + lightbox.
@@ -16,6 +17,7 @@ export const PHOTO_CARD_SELECT = `
   tags,
   storage_path,
   thumbnail_path,
+  display_path,
   downloads_count,
   created_at,
   photographer:users!photographer_id(id, name, initials, avatar_url),
@@ -38,6 +40,7 @@ export const PHOTO_MY_LIBRARY_CARD_SELECT = `
   tags,
   storage_path,
   thumbnail_path,
+  display_path,
   downloads_count,
   created_at,
   collection:collections!collection_id(id, name, category)

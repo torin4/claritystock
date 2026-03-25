@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import { getInsightsStats, getTopPhotos, getDownloadsByUser } from '@/lib/queries/insights.queries'
+import { getSignedPhotoUrl, getSignedPhotoUrls } from '@/lib/photos/serverSignedUrls'
+import { getInsightsPageData } from '@/lib/queries/insights.queries'
 import { getServerUser } from '@/lib/supabase/request-context'
 import InsightsClient from '@/components/insights/InsightsClient'
 import { redirect } from 'next/navigation'
@@ -9,16 +10,24 @@ export default async function InsightsPage() {
   const user = await getServerUser()
   if (!user) redirect('/login')
 
-  const [stats, topPhotos, downloadsByUser] = await Promise.all([
-    getInsightsStats(supabase, user.id),
-    getTopPhotos(supabase, user.id),
-    getDownloadsByUser(supabase, user.id),
+  const { stats, topPhotos, downloadsByUser } = await getInsightsPageData(supabase, user.id)
+  const [thumbnailUrls, heroUrl] = await Promise.all([
+    getSignedPhotoUrls(topPhotos.map((photo) => photo.thumbnail_path ?? photo.storage_path)),
+    getSignedPhotoUrl(topPhotos[0]?.storage_path),
   ])
+  const initialTopPhotos = topPhotos.map((photo, index) => {
+    const path = photo.thumbnail_path ?? photo.storage_path
+    return {
+      ...photo,
+      thumbnail_url: path ? thumbnailUrls[path] : undefined,
+      public_url: index === 0 ? heroUrl ?? undefined : undefined,
+    }
+  })
 
   return (
     <InsightsClient
       stats={stats}
-      topPhotos={topPhotos as never}
+      topPhotos={initialTopPhotos as never}
       downloadsByUser={downloadsByUser}
       userId={user.id}
     />

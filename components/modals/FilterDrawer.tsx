@@ -6,8 +6,8 @@ import type { Category, SortOption } from '@/lib/types/database.types'
 const CATEGORIES: { label: string; value: Category | null }[] = [
   { label: 'All', value: null },
   { label: 'Neighborhood', value: 'neighborhood' },
-  { label: 'Community', value: 'community' },
-  { label: 'Amenity', value: 'amenity' },
+  { label: 'City', value: 'city' },
+  { label: 'Condo', value: 'condo' },
 ]
 
 const SORT_OPTIONS: { label: string; value: SortOption }[] = [

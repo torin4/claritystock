@@ -1,10 +1,15 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getMyPhotos } from '@/lib/queries/photos.queries'
+import { attachSignedCollectionPreviewUrls, attachSignedThumbnailUrls } from '@/lib/photos/serverSignedUrls'
+import { getMyPhotosPage } from '@/lib/queries/photos.queries'
 import { getMyCollections } from '@/lib/queries/collections.queries'
+import { MY_LIBRARY_PAGE_SIZE } from '@/lib/queries/photoSelects'
 import { getAdminUsersWithPhotoCounts } from '@/lib/queries/admin.queries'
 import MyPhotosClient from '@/components/my-photos/MyPhotosClient'
 import AdminPhotographerLibraryPicker from '@/components/admin/AdminPhotographerLibraryPicker'
+
+const INITIAL_GRID_THUMBNAILS = 18
+const INITIAL_COLLECTION_PREVIEWS = 12
 
 export default async function AdminLibrariesPage({
   searchParams,
@@ -55,17 +60,29 @@ export default async function AdminLibrariesPage({
       }
     : null
 
-  const [photos, collections] = await Promise.all([
-    getMyPhotos(supabase, photographerId, libraryPhotographer),
+  const [{ photos, total }, collections] = await Promise.all([
+    getMyPhotosPage(supabase, photographerId, {
+      photographer: libraryPhotographer,
+      limit: MY_LIBRARY_PAGE_SIZE,
+    }),
     getMyCollections(supabase, photographerId),
+  ])
+  const [initialPhotos, initialCollections] = await Promise.all([
+    attachSignedThumbnailUrls(photos, { limit: INITIAL_GRID_THUMBNAILS }),
+    attachSignedCollectionPreviewUrls(collections, {
+      limitCollections: INITIAL_COLLECTION_PREVIEWS,
+      photosPerCollection: 3,
+    }),
   ])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AdminPhotographerLibraryPicker photographers={photographers} selectedId={photographerId} />
       <MyPhotosClient
-        initialPhotos={photos as never}
-        collections={collections as never}
+        initialPhotos={initialPhotos as never}
+        initialTotalPhotos={total}
+        collections={initialCollections as never}
+        pageSize={MY_LIBRARY_PAGE_SIZE}
         userId={photographerId}
         libraryPhotographer={libraryPhotographer}
         adminMode

@@ -54,9 +54,13 @@ CREATE TABLE IF NOT EXISTS public.photos (
   description      text,
   storage_path     text,
   thumbnail_path   text,
+  display_path     text,
   downloads_count  int         NOT NULL DEFAULT 0,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.photos
+  ADD COLUMN IF NOT EXISTS display_path text;
 
 -- 4. downloads
 CREATE TABLE IF NOT EXISTS public.downloads (
