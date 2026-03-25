@@ -59,6 +59,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Sidebar
                 userName={profile?.name ?? ''}
                 userInitials={profile?.initials ?? ''}
+                userAvatarUrl={profile?.avatar_url ?? null}
                 userRole={profile?.role ?? 'photographer'}
                 userId={user.id}
                 recentItems={recentItems}

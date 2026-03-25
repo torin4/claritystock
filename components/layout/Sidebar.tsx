@@ -7,6 +7,7 @@ import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import NotificationPopover from '@/components/modals/NotificationPopover'
 import SettingsPanel from '@/components/modals/SettingsPanel'
 import BrandTitle from '@/components/layout/BrandTitle'
+import UserAvatar from '@/components/layout/UserAvatar'
 import type { RecentNavItem } from '@/lib/navigation/recentNav'
 
 // SVG icons as components
@@ -67,6 +68,8 @@ interface NavItem {
 interface SidebarProps {
   userName: string
   userInitials: string
+  /** From `public.users.avatar_url` (Google OAuth). */
+  userAvatarUrl: string | null
   userRole: string
   userId: string
   recentItems: RecentNavItem[]
@@ -110,7 +113,14 @@ function recentItemHref(item: RecentNavItem): string {
   return `/?photo=${item.id}`
 }
 
-export default function Sidebar({ userName, userInitials, userRole, userId, recentItems }: SidebarProps) {
+export default function Sidebar({
+  userName,
+  userInitials,
+  userAvatarUrl,
+  userRole,
+  userId,
+  recentItems,
+}: SidebarProps) {
   const pathname = usePathname()
   const sidebarOpen = useUIStore(s => s.sidebarOpen)
   const openSettings = useUIStore(s => s.openSettings)
@@ -279,7 +289,7 @@ export default function Sidebar({ userName, userInitials, userRole, userId, rece
         {/* User profile */}
         <div style={{ padding: '10px 6px', borderTop: '1px solid var(--border)' }}>
           <button className="s-user-inner" onClick={openSettings} style={{ width: '100%' }}>
-            <div className="s-avatar">{userInitials}</div>
+            <UserAvatar avatarUrl={userAvatarUrl} initials={userInitials} size={40} />
             <div>
               <div className="s-name">{userName}</div>
               <div className="s-role">{userRole}</div>
@@ -288,7 +298,13 @@ export default function Sidebar({ userName, userInitials, userRole, userId, rece
         </div>
       </nav>
 
-      <SettingsPanel userId={userId} userName={userName} userInitials={userInitials} userRole={userRole} />
+      <SettingsPanel
+        userId={userId}
+        userName={userName}
+        userInitials={userInitials}
+        userAvatarUrl={userAvatarUrl}
+        userRole={userRole}
+      />
     </>
   )
 }

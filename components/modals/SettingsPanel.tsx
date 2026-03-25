@@ -3,16 +3,24 @@ import { useState } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { deleteAllMyPhotos } from '@/lib/actions/photos.actions'
+import UserAvatar from '@/components/layout/UserAvatar'
 import { useRouter } from 'next/navigation'
 
 interface SettingsPanelProps {
   userId: string
   userName: string
   userInitials: string
+  userAvatarUrl: string | null
   userRole: string
 }
 
-export default function SettingsPanel({ userId, userName, userInitials, userRole }: SettingsPanelProps) {
+export default function SettingsPanel({
+  userId,
+  userName,
+  userInitials,
+  userAvatarUrl,
+  userRole,
+}: SettingsPanelProps) {
   const { settingsPanelOpen, closeSettings } = useUIStore()
   const [displayName, setDisplayName] = useState(userName)
   const [removingPhotos, setRemovingPhotos] = useState(false)
@@ -82,9 +90,7 @@ export default function SettingsPanel({ userId, userName, userInitials, userRole
           <div className="sp-sec">
             <div className="sp-sec-title" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: '12px' }}>Profile</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div className="s-avatar" style={{ width: '46px', height: '46px', fontSize: '13px', borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent)' }}>
-                {userInitials}
-              </div>
+              <UserAvatar avatarUrl={userAvatarUrl} initials={userInitials} size={46} />
               <div>
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>{userName}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{userRole}</div>

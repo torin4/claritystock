@@ -73,7 +73,16 @@ export async function GET(request: NextRequest) {
   }
 
   const fullName = data.user.user_metadata?.full_name ?? email.split('@')[0]
-  const avatarUrl = data.user.user_metadata?.avatar_url ?? null
+  const meta = data.user.user_metadata as { avatar_url?: string; picture?: string } | undefined
+  const googleIdentity = data.user.identities?.find((i) => i.provider === 'google')?.identity_data as
+    | { avatar_url?: string; picture?: string }
+    | undefined
+  const avatarUrl =
+    (typeof meta?.avatar_url === 'string' && meta.avatar_url) ||
+    (typeof meta?.picture === 'string' && meta.picture) ||
+    (typeof googleIdentity?.picture === 'string' && googleIdentity.picture) ||
+    (typeof googleIdentity?.avatar_url === 'string' && googleIdentity.avatar_url) ||
+    null
 
   await supabase.from('users').upsert(
     {
