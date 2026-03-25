@@ -29,11 +29,9 @@ export default function SettingsPanel({
   userRole,
   hideOwnPhotosInBrowse: hideOwnInitial,
 }: SettingsPanelProps) {
-  const { settingsPanelOpen, closeSettings, optimisticDisplayName, setOptimisticDisplayName } = useUIStore()
-  const [displayName, setDisplayName] = useState(userName)
+  const { settingsPanelOpen, closeSettings } = useUIStore()
   const [hideOwnInBrowse, setHideOwnInBrowse] = useState(hideOwnInitial)
   const [hideOwnSaving, setHideOwnSaving] = useState(false)
-  const [profileSaving, setProfileSaving] = useState(false)
   const [removingPhotos, setRemovingPhotos] = useState(false)
   const [showAccountDeletion, setShowAccountDeletion] = useState(false)
   const [deleteAccountPhrase, setDeleteAccountPhrase] = useState('')
@@ -55,13 +53,7 @@ export default function SettingsPanel({
     }
   }, [settingsPanelOpen])
 
-  useEffect(() => {
-    if (!settingsPanelOpen) return
-    setDisplayName((optimisticDisplayName ?? userName) || '')
-  }, [settingsPanelOpen, optimisticDisplayName, userName])
-
   const handleLogout = async () => {
-    useUIStore.getState().setOptimisticDisplayName(null)
     const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
     router.push('/login')
@@ -124,50 +116,13 @@ export default function SettingsPanel({
           {/* Profile */}
           <div className="sp-sec">
             <div className="sp-sec-title" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: '12px' }}>Profile</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <UserAvatar avatarUrl={userAvatarUrl} initials={userInitials} size={46} />
               <div>
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{displayName || userName}</div>
+                <div style={{ fontSize: '14px', fontWeight: 500 }}>{userName}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{userRole}</div>
               </div>
             </div>
-            <div className="sp-field" style={{ marginBottom: '10px' }}>
-              <div className="sp-lbl" style={{ fontSize: '11px', color: 'var(--text-3)', marginBottom: '4px' }}>Display name</div>
-              <input
-                className="sp-input ui"
-                value={displayName}
-                onChange={e => setDisplayName(e.target.value)}
-              />
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              style={{ width: '100%' }}
-              disabled={profileSaving}
-              onClick={async () => {
-                const trimmed = displayName.trim()
-                if (!trimmed) {
-                  alert('Display name can’t be empty.')
-                  return
-                }
-                setProfileSaving(true)
-                try {
-                  const supabase = getSupabaseBrowserClient()
-                  const { error } = await supabase.from('users').update({ name: trimmed }).eq('id', userId)
-                  if (error) throw error
-                  setOptimisticDisplayName(trimmed)
-                  setDisplayName(trimmed)
-                  router.refresh()
-                } catch (err) {
-                  devError(err)
-                  alert(err instanceof Error ? err.message : 'Could not save display name')
-                } finally {
-                  setProfileSaving(false)
-                }
-              }}
-            >
-              {profileSaving ? 'Saving…' : 'Save changes'}
-            </button>
           </div>
 
           {/* Library */}
@@ -409,7 +364,6 @@ export default function SettingsPanel({
                       setDeletingAccount(true)
                       try {
                         await deleteMyAccount()
-                        useUIStore.getState().setOptimisticDisplayName(null)
                         useBrowsePrefsStore.getState().setHideOwnPhotosInBrowseOverride(null)
                         const supabase = getSupabaseBrowserClient()
                         await supabase.auth.signOut()

@@ -1,4 +1,5 @@
 'use client'
+import { useMemo } from 'react'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import type { Category, SortOption } from '@/lib/types/database.types'
@@ -15,11 +16,22 @@ const SORT_OPTIONS: { label: string; value: SortOption }[] = [
   { label: 'Most used', value: 'used' },
 ]
 
-const NEIGHBORHOODS = ['Kirkland', 'Bellevue', 'Redmond', 'Seattle', 'Issaquah', 'Sammamish']
+interface FilterDrawerProps {
+  /** Distinct `photos.neighborhood` values (browse library), sorted. */
+  neighborhoodOptions: string[]
+}
 
-export default function FilterDrawer() {
+export default function FilterDrawer({ neighborhoodOptions }: FilterDrawerProps) {
   const { filterDrawerOpen, closeFilter } = useUIStore()
   const { category, neighborhood, sort, setCategory, setNeighborhood, setSort, clearAll } = useFilterStore()
+
+  const locationChoices = useMemo(() => {
+    const set = new Set(neighborhoodOptions)
+    if (neighborhood && !set.has(neighborhood)) {
+      return [...neighborhoodOptions, neighborhood].sort((a, b) => a.localeCompare(b))
+    }
+    return neighborhoodOptions
+  }, [neighborhoodOptions, neighborhood])
 
   return (
     <>
@@ -57,7 +69,7 @@ export default function FilterDrawer() {
               onChange={e => setNeighborhood(e.target.value || null)}
             >
               <option value="">Anywhere</option>
-              {NEIGHBORHOODS.map(n => (
+              {locationChoices.map(n => (
                 <option key={n} value={n}>{n}</option>
               ))}
             </select>

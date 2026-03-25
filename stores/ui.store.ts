@@ -13,10 +13,6 @@ interface UIState {
   notifPopoverOpen: boolean
   /** Increment to tell Sidebar to refetch “Recent collections”. */
   sidebarCollectionsEpoch: number
-  /**
-   * After saving display name in Settings; shown in Sidebar until server props catch up (router.refresh).
-   */
-  optimisticDisplayName: string | null
 }
 
 interface UIActions {
@@ -37,7 +33,6 @@ interface UIActions {
   bumpSidebarCollections: () => void
   /** Single update: close overlays that should not survive a client route change. */
   resetNavigationUi: () => void
-  setOptimisticDisplayName: (name: string | null) => void
 }
 
 const defaultState: UIState = {
@@ -50,16 +45,14 @@ const defaultState: UIState = {
   sidebarOpen: false,
   notifPopoverOpen: false,
   sidebarCollectionsEpoch: 0,
-  optimisticDisplayName: null,
 }
 
 export const useUIStore = create<UIState & UIActions>((set) => ({
   ...defaultState,
 
   openLightbox: (photoId) =>
-    set((s) => ({
+    set(() => ({
       ...defaultState,
-      optimisticDisplayName: s.optimisticDisplayName,
       lightboxOpen: true,
       lightboxPhotoId: photoId,
     })),
@@ -69,9 +62,8 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
   closeUpload: () => set({ uploadModalOpen: false }),
 
   openEdit: (photoId) =>
-    set((s) => ({
+    set(() => ({
       ...defaultState,
-      optimisticDisplayName: s.optimisticDisplayName,
       editModalPhotoId: photoId,
     })),
   closeEdit: () => set({ editModalPhotoId: null }),
@@ -80,9 +72,8 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
   closeFilter: () => set({ filterDrawerOpen: false }),
 
   openSettings: () =>
-    set((s) => ({
+    set(() => ({
       ...defaultState,
-      optimisticDisplayName: s.optimisticDisplayName,
       settingsPanelOpen: true,
     })),
   closeSettings: () => set({ settingsPanelOpen: false }),
@@ -106,8 +97,5 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
       settingsPanelOpen: false,
       editModalPhotoId: null,
       sidebarOpen: false,
-      optimisticDisplayName: null,
     }),
-
-  setOptimisticDisplayName: (name) => set({ optimisticDisplayName: name }),
 }))

@@ -61,6 +61,7 @@ export default function BrowseClient({
   const [zipBusy, setZipBusy] = useState(false)
   /** Avoid flashing "Loading…" on fast refetches (e.g. collection in/out). */
   const [showLoadingUi, setShowLoadingUi] = useState(false)
+  const [rpcNeighborhoods, setRpcNeighborhoods] = useState<string[]>([])
   const search = useFilterStore((s) => s.search)
   const category = useFilterStore((s) => s.category)
   const neighborhood = useFilterStore((s) => s.neighborhood)
@@ -98,6 +99,39 @@ export default function BrowseClient({
       collectionId,
     ],
   )
+
+  /** Distinct neighborhoods in the library (RPC) merged with anything already in the grid. */
+  const neighborhoodOptions = useMemo(() => {
+    const s = new Set<string>(rpcNeighborhoods)
+    for (const p of initialPhotos) {
+      if (p.neighborhood?.trim()) s.add(p.neighborhood.trim())
+    }
+    for (const p of photos) {
+      if (p.neighborhood?.trim()) s.add(p.neighborhood.trim())
+    }
+    return Array.from(s).sort((a, b) => a.localeCompare(b))
+  }, [rpcNeighborhoods, initialPhotos, photos])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase.rpc('get_browse_neighborhoods', {
+        p_exclude_photographer_id: hideEffective && userId ? userId : null,
+      })
+      if (cancelled) return
+      if (error) {
+        devError(error)
+        setRpcNeighborhoods([])
+        return
+      }
+      const rows = (data ?? []) as { neighborhood: string }[]
+      setRpcNeighborhoods(rows.map((r) => r.neighborhood).filter(Boolean))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [hideEffective, userId])
 
   const beginSelection = useCallback((id: string) => {
     setSelectionMode(true)
@@ -524,7 +558,7 @@ export default function BrowseClient({
       )}
 
       {/* Filter drawer */}
-      <FilterDrawer />
+      <FilterDrawer neighborhoodOptions={neighborhoodOptions} />
 
       {/* Lightbox */}
       <Lightbox photos={photos} userId={userId} onDownload={handleDownload} />

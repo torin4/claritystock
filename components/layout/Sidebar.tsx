@@ -1,6 +1,5 @@
 'use client'
 import Link from 'next/link'
-import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { useUIStore } from '@/stores/ui.store'
 import { useNotificationsStore } from '@/stores/notifications.store'
@@ -130,17 +129,7 @@ export default function Sidebar({
   const openSettings = useUIStore(s => s.openSettings)
   const toggleNotif = useUIStore(s => s.toggleNotif)
   const openUpload = useUIStore(s => s.openUpload)
-  const optimisticDisplayName = useUIStore(s => s.optimisticDisplayName)
-  const setOptimisticDisplayName = useUIStore(s => s.setOptimisticDisplayName)
   const unreadCount = useNotificationsStore(s => s.unreadCount)
-
-  const shownUserName = optimisticDisplayName ?? userName
-
-  useEffect(() => {
-    if (optimisticDisplayName && userName === optimisticDisplayName) {
-      setOptimisticDisplayName(null)
-    }
-  }, [userName, optimisticDisplayName, setOptimisticDisplayName])
 
   /** Keep Admin under Library so it stays visible when Recents fills the scroll area. */
   const navItems: NavItem[] = [
@@ -308,7 +297,7 @@ export default function Sidebar({
           <button className="s-user-inner" onClick={openSettings} style={{ width: '100%' }}>
             <UserAvatar avatarUrl={userAvatarUrl} initials={userInitials} size={40} />
             <div>
-              <div className="s-name">{shownUserName}</div>
+              <div className="s-name">{userName}</div>
               <div className="s-role">{userRole}</div>
             </div>
           </button>
