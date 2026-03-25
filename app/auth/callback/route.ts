@@ -1,17 +1,27 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { OAUTH_SAVE_GOOGLE_CREDENTIALS_COOKIE } from '@/lib/auth/googleOAuthCookies'
 import { saveGoogleCredentialsFromSession } from '@/lib/auth/saveGoogleCredentialsVault'
 import { getInitials } from '@/lib/utils/initials'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env'
 
 const ALLOWED_DOMAIN = process.env.ALLOWED_EMAIL_DOMAIN ?? 'claritynw.com'
 
+function clearOauthIntentCookie(res: NextResponse) {
+  res.cookies.set(OAUTH_SAVE_GOOGLE_CREDENTIALS_COOKIE, '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'lax',
+  })
+  return res
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/error?reason=no_code`)
+    return clearOauthIntentCookie(NextResponse.redirect(`${origin}/error?reason=no_code`))
   }
 
   /**
@@ -37,7 +47,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error || !data.user) {
-    return NextResponse.redirect(`${origin}/error?reason=auth`)
+    return clearOauthIntentCookie(NextResponse.redirect(`${origin}/error?reason=auth`))
   }
 
   const identityEmail = (
@@ -59,7 +69,7 @@ export async function GET(request: NextRequest) {
       },
     })
     await supabaseSignOut.auth.signOut()
-    return errRes
+    return clearOauthIntentCookie(errRes)
   }
 
   const fullName = data.user.user_metadata?.full_name ?? email.split('@')[0]
@@ -76,7 +86,13 @@ export async function GET(request: NextRequest) {
     { onConflict: 'id', ignoreDuplicates: false },
   )
 
-  await saveGoogleCredentialsFromSession(data.user.id, data.session)
+  const saveGoogleVault =
+    request.cookies.get(OAUTH_SAVE_GOOGLE_CREDENTIALS_COOKIE)?.value === '1'
+  if (saveGoogleVault) {
+    await saveGoogleCredentialsFromSession(data.user.id, data.session)
+  }
+
+  clearOauthIntentCookie(response)
 
   return response
 }

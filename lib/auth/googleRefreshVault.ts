@@ -4,6 +4,13 @@ const ALGO = 'aes-256-gcm'
 const IV_LEN = 12
 const TAG_LEN = 16
 
+function vaultKeyRequiresEnv(): boolean {
+  if (process.env.NODE_ENV === 'production') return true
+  const ve = process.env.VERCEL_ENV
+  if (ve === 'preview' || ve === 'production') return true
+  return false
+}
+
 function vaultKey(): Buffer {
   const b64 = process.env.GOOGLE_REFRESH_TOKEN_ENCRYPTION_KEY?.trim()
   if (b64) {
@@ -13,8 +20,10 @@ function vaultKey(): Buffer {
     }
     return buf
   }
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('GOOGLE_REFRESH_TOKEN_ENCRYPTION_KEY is required in production')
+  if (vaultKeyRequiresEnv()) {
+    throw new Error(
+      'GOOGLE_REFRESH_TOKEN_ENCRYPTION_KEY is required in production, on Vercel preview/production, or when NODE_ENV=production',
+    )
   }
   console.warn(
     '[googleRefreshVault] GOOGLE_REFRESH_TOKEN_ENCRYPTION_KEY not set — using insecure dev-only key',

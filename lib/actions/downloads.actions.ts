@@ -13,7 +13,6 @@ export async function recordDownload(
 
   const { data, error } = await supabase.rpc('record_download', {
     p_photo_id: photoId,
-    p_downloaded_by: user.id,
     p_job_ref: jobRef ?? null,
   })
 

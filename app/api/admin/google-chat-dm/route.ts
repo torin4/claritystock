@@ -7,10 +7,11 @@ import {
 } from '@/lib/admin/googleChatDm'
 import { decryptGoogleRefreshTokenFromStorage } from '@/lib/auth/googleRefreshVault'
 
-/** Google access tokens are ~1h; ignore stored copies older than this. */
-const STORED_ACCESS_MAX_AGE_MS = 50 * 60 * 1000
 import { isUserAdmin } from '@/lib/auth/admin'
 import { createClient } from '@/lib/supabase/server'
+
+/** Google access tokens are ~1h; ignore stored copies older than this. */
+const STORED_ACCESS_MAX_AGE_MS = 50 * 60 * 1000
 
 const ALLOWED_DOMAIN = process.env.ALLOWED_EMAIL_DOMAIN ?? 'claritynw.com'
 
@@ -164,12 +165,13 @@ async function googleAccessTokenForAdmin(
   return access ?? undefined
 }
 
-type GateOk = { ok: true; supabase: SupabaseClient; email: string; userId: string }
-type GateErr = { ok: false; response: NextResponse }
+type GateOk = { kind: 'proceed'; supabase: SupabaseClient; email: string; userId: string }
+type GateSelf = { kind: 'self'; url: string }
+type GateErr = { kind: 'bad_email' } | { kind: 'forbidden' }
 
-async function gateAdminChat(email: string | null): Promise<GateOk | GateErr> {
+async function gateAdminChat(email: string | null): Promise<GateOk | GateSelf | GateErr> {
   if (!email || !email.endsWith(`@${ALLOWED_DOMAIN}`)) {
-    return { ok: false, response: NextResponse.json({ error: 'Invalid email' }, { status: 400 }) }
+    return { kind: 'bad_email' }
   }
 
   const supabase = createClient()
@@ -177,35 +179,69 @@ async function gateAdminChat(email: string | null): Promise<GateOk | GateErr> {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user || !(await isUserAdmin(supabase, user.id))) {
-    return { ok: false, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+    return { kind: 'forbidden' }
   }
 
   const adminEmail = (user.email ?? '').trim().toLowerCase()
   if (adminEmail && adminEmail === email) {
-    return {
-      ok: false,
-      response: NextResponse.redirect(workspaceChatSearchUrl(email)),
-    }
+    return { kind: 'self', url: workspaceChatSearchUrl(email) }
   }
 
-  return { ok: true, supabase, email, userId: user.id }
+  return { kind: 'proceed', supabase, email, userId: user.id }
 }
 
-export async function GET(request: NextRequest) {
-  const email = normalizeEmail(request.nextUrl.searchParams.get('email'))
+function sameOrigin(request: NextRequest): boolean {
+  const expected = new URL(request.url).origin
+  const origin = request.headers.get('origin')
+  return Boolean(origin && origin === expected)
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method not allowed', hint: 'Use POST with JSON { "email": "..." }' },
+    { status: 405, headers: { Allow: 'POST' } },
+  )
+}
+
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const email = normalizeEmail(
+    typeof body === 'object' && body !== null && 'email' in body
+      ? String((body as { email: unknown }).email)
+      : null,
+  )
+
   const gate = await gateAdminChat(email)
-  if (!gate.ok) return gate.response
+  if (gate.kind === 'bad_email') {
+    return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
+  }
+  if (gate.kind === 'forbidden') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (gate.kind === 'self') {
+    return NextResponse.json({ url: gate.url })
+  }
 
   const token = await googleAccessTokenForAdmin(gate.supabase, gate.userId)
   const url = await resolveChatUrl(gate.email, token)
 
   if (process.env.NODE_ENV === 'development') {
     const fb = workspaceChatSearchUrl(gate.email)
-    console.error('[google-chat-dm] GET', {
+    console.error('[google-chat-dm] POST', {
       resolvedToken: Boolean(token),
       usedSearchFallback: url === fb || url.includes('#search'),
     })
   }
 
-  return NextResponse.redirect(url)
+  return NextResponse.json({ url })
 }

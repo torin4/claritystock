@@ -1,5 +1,4 @@
 'use client'
-import { GOOGLE_CHAT_OAUTH_SCOPES } from '@/lib/admin/googleChatDm'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import BrandTitle from '@/components/layout/BrandTitle'
 
@@ -24,7 +23,7 @@ export default function LoginCard() {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        scopes: `openid email profile ${GOOGLE_CHAT_OAUTH_SCOPES}`,
+        scopes: 'openid email profile',
         queryParams,
       },
     })

@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
+import ConnectGoogleChatBanner from '@/components/admin/ConnectGoogleChatBanner'
 import AdminSubnav from '@/components/admin/AdminSubnav'
+import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerUser()
@@ -25,6 +26,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <>
       <AdminSubnav />
+      <ConnectGoogleChatBanner />
       {children}
     </>
   )

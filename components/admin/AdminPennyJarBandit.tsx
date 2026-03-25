@@ -14,6 +14,24 @@ const JAR_H = 72
 /** `true` = always show Email / Google Chat (for testing). Set to `false` to show contact only when over alert thresholds. */
 const SHOW_CONTACT_ALWAYS = true
 
+async function openGoogleChatDm(email: string) {
+  const res = await fetch('/api/admin/google-chat-dm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
+  if (!res.ok) {
+    window.alert(data.error ?? `Could not open Chat (${res.status})`)
+    return
+  }
+  if (typeof data.url === 'string' && data.url) {
+    window.location.assign(data.url)
+  } else {
+    window.alert('Invalid response from server')
+  }
+}
+
 function formatRatio(r: number) {
   if (!Number.isFinite(r) || r > 999) return '999+×'
   if (r >= 10) return `${r.toFixed(0)}×`
@@ -84,10 +102,7 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
                     row.email && row.email.includes('@')
                       ? `mailto:${row.email}?subject=${subj}&body=${body}`
                       : null
-                  const chatOpen =
-                    row.email && row.email.includes('@')
-                      ? `/api/admin/google-chat-dm?email=${encodeURIComponent(row.email)}`
-                      : null
+                  const chatEmail = row.email && row.email.includes('@') ? row.email : null
                   return (
                     <tr key={row.userId} style={hot ? { background: 'color-mix(in srgb, var(--red) 6%, transparent)' } : undefined}>
                       <td>
@@ -152,17 +167,15 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
                                 No email synced — run DB migration backfill or sign out/in once
                               </span>
                             )}
-                            {chatOpen ? (
-                              <a
-                                href={chatOpen}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                            {chatEmail ? (
+                              <button
+                                type="button"
                                 className="btn btn-secondary btn-sm"
-                                style={{ textDecoration: 'none' }}
-                                title="Opens Google Chat DM (server uses your stored Google refresh token). Sign out/in once after deploying credentials migration."
+                                title="Uses your Google Chat connection (Admin → Connect Google Chat). Opens in this window."
+                                onClick={() => void openGoogleChatDm(chatEmail)}
                               >
                                 Google Chat
-                              </a>
+                              </button>
                             ) : null}
                           </div>
                         ) : (

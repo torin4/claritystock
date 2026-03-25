@@ -17,6 +17,34 @@ type InlinePart =
 const CATEGORY_REF_DIR = join(process.cwd(), 'lib', 'ai', 'category-refs')
 const CATEGORY_REF_MIME = 'image/png' as const
 
+/** Reject huge JSON before parsing (Content-Length is advisory; we also check decoded size). */
+const MAX_CONTENT_LENGTH = Math.ceil(6.5 * 1024 * 1024)
+const MAX_IMAGE_DECODED_BYTES = 5 * 1024 * 1024
+const ALLOWED_UPLOAD_MIME = new Map<string, string>([
+  ['image/jpeg', 'image/jpeg'],
+  ['image/jpg', 'image/jpeg'],
+  ['image/pjpeg', 'image/jpeg'],
+  ['image/png', 'image/png'],
+  ['image/x-png', 'image/png'],
+  ['image/webp', 'image/webp'],
+])
+
+const TAG_RATE_WINDOW_MS = 60_000
+const TAG_RATE_MAX_PER_WINDOW = 24
+const tagRateByUser = new Map<string, { count: number; windowStart: number }>()
+
+function tagRateAllow(userId: string): boolean {
+  const now = Date.now()
+  const row = tagRateByUser.get(userId)
+  if (!row || now - row.windowStart >= TAG_RATE_WINDOW_MS) {
+    tagRateByUser.set(userId, { count: 1, windowStart: now })
+    return true
+  }
+  if (row.count >= TAG_RATE_MAX_PER_WINDOW) return false
+  row.count += 1
+  return true
+}
+
 const PROMPT = `You are a real estate photography assistant for a luxury Pacific Northwest property library.
 Study the **final** image in this message (the photographer's upload), then assign exactly ONE category as a lowercase string: neighborhood, city, or condo.
 
@@ -197,6 +225,15 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  if (!tagRateAllow(user.id)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
+  const cl = request.headers.get('content-length')
+  if (cl && /^\d+$/.test(cl) && parseInt(cl, 10) > MAX_CONTENT_LENGTH) {
+    return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+  }
+
   const key = process.env.GEMINI_API_KEY?.trim()
   if (!key) {
     return NextResponse.json({ error: 'GEMINI_API_KEY is not set' }, { status: 503 })
@@ -210,12 +247,20 @@ export async function POST(request: NextRequest) {
   }
 
   const rawB64 = body.imageBase64
-  const mimeType = body.mimeType?.trim()
+  const mimeNorm = body.mimeType?.trim().toLowerCase() ?? ''
+  const mimeType = ALLOWED_UPLOAD_MIME.get(mimeNorm)
   if (!rawB64 || !mimeType) {
-    return NextResponse.json({ error: 'Missing imageBase64 or mimeType' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Missing imageBase64 or mimeType, or mimeType is not allowed (jpeg, png, webp)' },
+      { status: 400 },
+    )
   }
 
   const imageBase64 = rawB64.replace(/\s/g, '')
+  const decoded = Buffer.from(imageBase64, 'base64')
+  if (!decoded.length || decoded.length > MAX_IMAGE_DECODED_BYTES) {
+    return NextResponse.json({ error: 'Image too large or invalid base64' }, { status: 413 })
+  }
 
   const genAI = new GoogleGenerativeAI(key)
   let lastErr: unknown

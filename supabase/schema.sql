@@ -70,6 +70,19 @@ CREATE INDEX IF NOT EXISTS photos_content_hash_idx
   ON public.photos (content_hash)
   WHERE content_hash IS NOT NULL;
 
+ALTER TABLE public.photos
+  DROP CONSTRAINT IF EXISTS photos_storage_paths_under_photographer;
+
+ALTER TABLE public.photos
+  ADD CONSTRAINT photos_storage_paths_under_photographer CHECK (
+    photographer_id IS NULL
+    OR (
+      (storage_path IS NULL OR storage_path LIKE photographer_id::text || '/%')
+      AND (thumbnail_path IS NULL OR thumbnail_path LIKE photographer_id::text || '/%')
+      AND (display_path IS NULL OR display_path LIKE photographer_id::text || '/%')
+    )
+  ) NOT VALID;
+
 -- 4. downloads
 CREATE TABLE IF NOT EXISTS public.downloads (
   id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -267,7 +280,11 @@ CREATE POLICY "storage_read"
 DROP POLICY IF EXISTS "storage_insert" ON storage.objects;
 CREATE POLICY "storage_insert"
   ON storage.objects FOR INSERT
-  WITH CHECK (bucket_id = 'photos' AND auth.uid() IS NOT NULL);
+  WITH CHECK (
+    bucket_id = 'photos'
+    AND auth.uid() IS NOT NULL
+    AND name LIKE (auth.uid()::text || '/%')
+  );
 
 DROP POLICY IF EXISTS "storage_delete" ON storage.objects;
 CREATE POLICY "storage_delete"
@@ -352,10 +369,11 @@ CREATE POLICY "storage_delete_admin"
 -- RPC FUNCTION — record_download
 -- ---------------------------------------------------------------------------
 
+DROP FUNCTION IF EXISTS public.record_download(uuid, uuid, text);
+
 CREATE OR REPLACE FUNCTION public.record_download(
-  p_photo_id      uuid,
-  p_downloaded_by uuid,
-  p_job_ref       text DEFAULT NULL
+  p_photo_id uuid,
+  p_job_ref  text DEFAULT NULL
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -363,14 +381,17 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_uid uuid := auth.uid();
   v_download_id uuid;
 BEGIN
-  -- Insert download record
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
   INSERT INTO public.downloads (photo_id, downloaded_by, job_ref)
-  VALUES (p_photo_id, p_downloaded_by, p_job_ref)
+  VALUES (p_photo_id, v_uid, p_job_ref)
   RETURNING id INTO v_download_id;
 
-  -- Atomically increment downloads_count on the photo
   UPDATE public.photos
   SET downloads_count = downloads_count + 1
   WHERE id = p_photo_id;
@@ -378,6 +399,8 @@ BEGIN
   RETURN v_download_id;
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.record_download(uuid, text) TO authenticated;
 
 -- Bulk ZIP downloads: one row per photo + increment counts (same semantics as N × record_download)
 DROP FUNCTION IF EXISTS public.record_downloads_bulk(uuid[], text);
@@ -399,6 +422,10 @@ BEGIN
 
   IF p_photo_ids IS NULL OR cardinality(p_photo_ids) = 0 THEN
     RETURN;
+  END IF;
+
+  IF cardinality(p_photo_ids) > 25 THEN
+    RAISE EXCEPTION 'Too many photo ids (max 25)';
   END IF;
 
   INSERT INTO public.downloads (photo_id, downloaded_by, job_ref)
