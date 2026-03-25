@@ -7,6 +7,7 @@ import { downloadFromUrl } from '@/lib/photos/downloadFromUrl'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { devError } from '@/lib/utils/devLog'
 import type { Photo, Download } from '@/lib/types/database.types'
 
 const CAT_COLORS: Record<string, string> = {
@@ -104,7 +105,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
       onDownload(photo.id)
       if (href) await downloadFromUrl(href, `${photo.title || 'photo'}.jpg`)
     } catch (err) {
-      console.error(err)
+      devError(err)
     }
   }
 
@@ -115,7 +116,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
       setJobSaved(true)
       setJobLogOpen(false)
     } catch (err) {
-      console.error(err)
+      devError(err)
     }
   }
 

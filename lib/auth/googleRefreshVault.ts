@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
+import { devError, devWarn } from '@/lib/utils/devLog'
 
 const ALGO = 'aes-256-gcm'
 const IV_LEN = 12
@@ -25,7 +26,7 @@ function vaultKey(): Buffer {
       'GOOGLE_REFRESH_TOKEN_ENCRYPTION_KEY is required in production, on Vercel preview/production, or when NODE_ENV=production',
     )
   }
-  console.warn(
+  devWarn(
     '[googleRefreshVault] GOOGLE_REFRESH_TOKEN_ENCRYPTION_KEY not set — using insecure dev-only key',
   )
   return scryptSync('clarity-stock-dev-google-vault', 'v1', 32)
@@ -41,7 +42,7 @@ export function encryptGoogleRefreshTokenForStorage(plain: string): string | nul
     const tag = cipher.getAuthTag()
     return Buffer.concat([iv, tag, enc]).toString('base64')
   } catch (e) {
-    console.error('[googleRefreshVault] encrypt failed', e)
+    devError('[googleRefreshVault] encrypt failed', e)
     return null
   }
 }

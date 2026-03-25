@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import archiver from 'archiver'
 import { PassThrough, Readable } from 'node:stream'
 import { ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
+import { devError, devWarn } from '@/lib/utils/devLog'
 
 export const runtime = 'nodejs'
 
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     .in('id', ids)
 
   if (qErr) {
-    console.error('[zip]', qErr)
+    devError('[zip]', qErr)
     return NextResponse.json({ error: 'Could not load photos' }, { status: 500 })
   }
 
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
       .download(photo.storage_path)
 
     if (dErr || !blob) {
-      console.warn('[zip] skip storage', photo.id, dErr?.message)
+      devWarn('[zip] skip storage', photo.id, dErr?.message)
       continue
     }
 
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
   })
 
   if (rpcErr) {
-    console.error('[zip] record_downloads_bulk', rpcErr)
+    devError('[zip] record_downloads_bulk', rpcErr)
     return NextResponse.json(
       { error: 'Could not record downloads. Run latest supabase/schema.sql (record_downloads_bulk).' },
       { status: 500 },

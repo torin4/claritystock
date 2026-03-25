@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js'
 import { encryptGoogleRefreshTokenForStorage } from '@/lib/auth/googleRefreshVault'
 import { createServiceClient } from '@/lib/supabase/service'
+import { devError, devWarn } from '@/lib/utils/devLog'
 
 /**
  * Persist Google tokens from the OAuth exchange using the service role so RLS / same-request
@@ -13,7 +14,7 @@ export async function saveGoogleCredentialsFromSession(userId: string, session: 
   const googleAt = session.provider_token ?? null
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
-    console.error('[saveGoogleCredentialsVault] SUPABASE_SERVICE_ROLE_KEY is not set')
+    devError('[saveGoogleCredentialsVault] SUPABASE_SERVICE_ROLE_KEY is not set')
     return
   }
   const svc = createServiceClient()
@@ -22,16 +23,16 @@ export async function saveGoogleCredentialsFromSession(userId: string, session: 
   const newAccessEnc = googleAt ? encryptGoogleRefreshTokenForStorage(googleAt) : null
 
   if (googleRt && !newRefreshEnc) {
-    console.warn(
+    devWarn(
       '[saveGoogleCredentialsVault] provider_refresh_token present but encryption failed — set GOOGLE_REFRESH_TOKEN_ENCRYPTION_KEY (openssl rand -base64 32)',
     )
   }
   if (googleAt && !newAccessEnc) {
-    console.warn('[saveGoogleCredentialsVault] provider_token present but encryption failed')
+    devWarn('[saveGoogleCredentialsVault] provider_token present but encryption failed')
   }
 
   if (!newRefreshEnc && !newAccessEnc) {
-    console.warn(
+    devWarn(
       '[saveGoogleCredentialsVault] No storable Google tokens on session (missing provider_token and provider_refresh_token).',
     )
     return
@@ -44,7 +45,7 @@ export async function saveGoogleCredentialsFromSession(userId: string, session: 
     .maybeSingle()
 
   if (selErr) {
-    console.error('[saveGoogleCredentialsVault] select', selErr)
+    devError('[saveGoogleCredentialsVault] select', selErr)
     return
   }
 
@@ -69,5 +70,5 @@ export async function saveGoogleCredentialsFromSession(userId: string, session: 
     { onConflict: 'user_id' },
   )
 
-  if (upErr) console.error('[saveGoogleCredentialsVault] upsert', upErr)
+  if (upErr) devError('[saveGoogleCredentialsVault] upsert', upErr)
 }

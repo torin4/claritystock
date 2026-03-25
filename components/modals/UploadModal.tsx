@@ -8,6 +8,7 @@ import { uploadDisplayImage, uploadPhoto, uploadThumbnail } from '@/lib/utils/st
 import { createJpegForAiTagging, createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { devWarn } from '@/lib/utils/devLog'
 import { contentHashInFilter, isContentHashColumnMissingError } from '@/lib/utils/contentHashQuery'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
 import type { Collection, Category } from '@/lib/types/database.types'
@@ -78,7 +79,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     try {
       hashes = await Promise.all(files.map((f) => sha256HexFromFile(f)))
     } catch (e) {
-      console.warn('[Add Photos] Could not hash files for duplicate check:', e)
+      devWarn('[Add Photos] Could not hash files for duplicate check:', e)
       return
     }
     if (useUploadStore.getState().files.length !== files.length) return
@@ -97,7 +98,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
             setLibraryDupNeedsMigration(true)
             rows = []
           } else {
-            console.warn('[Add Photos] Duplicate library lookup failed:', error.message, error)
+            devWarn('[Add Photos] Duplicate library lookup failed:', error.message, error)
             rows = []
           }
         } else {
@@ -106,7 +107,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         }
       }
     } catch (e) {
-      console.warn('[Add Photos] Duplicate library lookup failed:', e)
+      devWarn('[Add Photos] Duplicate library lookup failed:', e)
     }
     if (useUploadStore.getState().files.length !== files.length) return
     const byHash = new Map<string, { id: string; title: string }[]>()
@@ -188,7 +189,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           b64 = await fileToBase64(file)
           mimeType = file.type
         } else {
-          console.warn('[Add Photos] AI tag skipped: could not downscale and file is too large to POST')
+          devWarn('[Add Photos] AI tag skipped: could not downscale and file is too large to POST')
           return
         }
         const res = await fetch('/api/ai/tag', {
@@ -201,10 +202,10 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           store.setAi(i, ai)
         } else {
           const err = await res.json().catch(() => ({}))
-          console.warn('[Add Photos] Gemini vision tag failed:', res.status, err)
+          devWarn('[Add Photos] Gemini vision tag failed:', res.status, err)
         }
       } catch (e) {
-        console.warn('[Add Photos] Gemini vision tag error:', e)
+        devWarn('[Add Photos] Gemini vision tag error:', e)
       } finally {
         store.setAiScanning(i, false)
       }
@@ -272,13 +273,13 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           if (thumbnailUpload.status === 'fulfilled') {
             thumbnailPath = thumbnailUpload.value
           } else {
-            console.warn('[Add Photos] Thumbnail upload failed:', thumbnailUpload.reason)
+            devWarn('[Add Photos] Thumbnail upload failed:', thumbnailUpload.reason)
           }
 
           if (displayUpload.status === 'fulfilled') {
             displayPath = displayUpload.value
           } else {
-            console.warn('[Add Photos] Display image upload failed:', displayUpload.reason)
+            devWarn('[Add Photos] Display image upload failed:', displayUpload.reason)
           }
           await publishPhoto(
             { ...f.form, description: f.ai?.description },

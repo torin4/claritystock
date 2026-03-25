@@ -4,6 +4,7 @@ import { deleteMyAccount } from '@/lib/actions/account.actions'
 import { isMissingHideOwnPhotosColumnError } from '@/lib/preferences/hideOwnPhotosInBrowse'
 import { deleteAllMyPhotos } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { devError } from '@/lib/utils/devLog'
 import { useBrowsePrefsStore } from '@/stores/browsePrefs.store'
 import { useUIStore } from '@/stores/ui.store'
 import UserAvatar from '@/components/layout/UserAvatar'
@@ -158,7 +159,7 @@ export default function SettingsPanel({
                   setDisplayName(trimmed)
                   router.refresh()
                 } catch (err) {
-                  console.error(err)
+                  devError(err)
                   alert(err instanceof Error ? err.message : 'Could not save display name')
                 } finally {
                   setProfileSaving(false)
@@ -214,7 +215,7 @@ export default function SettingsPanel({
 
                     throw error
                   } catch (err) {
-                    console.error(err)
+                    devError(err)
                     setHideOwnInBrowse(!next)
                     alert(err instanceof Error ? err.message : 'Could not update setting')
                   } finally {
@@ -298,7 +299,7 @@ export default function SettingsPanel({
                   closeSettings()
                   alert(deleted === 0 ? 'You had no photos to remove.' : `Removed ${deleted} photo${deleted === 1 ? '' : 's'} from the Library.`)
                 } catch (e) {
-                  console.error(e)
+                  devError(e)
                   alert(e instanceof Error ? e.message : 'Could not remove photos')
                 } finally {
                   setRemovingPhotos(false)
@@ -416,7 +417,7 @@ export default function SettingsPanel({
                         closeSettings()
                         router.push('/login')
                       } catch (e) {
-                        console.error(e)
+                        devError(e)
                         alert(e instanceof Error ? e.message : 'Could not delete account')
                       } finally {
                         setDeletingAccount(false)

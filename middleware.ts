@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env'
+import { devError } from '@/lib/utils/devLog'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback', '/error']
 
@@ -11,7 +12,7 @@ export async function middleware(request: NextRequest) {
     supabaseUrl = getSupabaseUrl()
     supabaseAnonKey = getSupabaseAnonKey()
   } catch (e) {
-    console.error('[middleware]', e)
+    devError('[middleware]', e)
     return new NextResponse('Application configuration error', { status: 500 })
   }
 

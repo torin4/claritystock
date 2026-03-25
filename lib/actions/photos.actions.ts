@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { assertOwnerOrAdmin, isUserAdmin } from '@/lib/auth/admin'
 import type { PhotoFormValues } from '@/lib/types/database.types'
 import type { PostgrestError } from '@supabase/supabase-js'
+import { devWarn } from '@/lib/utils/devLog'
 
 /** PostgREST when a column is not in the live schema (migration not applied yet). */
 function isMissingColumnError(error: PostgrestError | null, column: string): boolean {
@@ -291,7 +292,7 @@ export async function publishPhoto(
   let { error } = await supabase.from('photos').insert(withHash)
 
   if (error && paths?.contentHash && isMissingColumnError(error, 'content_hash')) {
-    console.warn(
+    devWarn(
       '[publishPhoto] content_hash column missing — retry without it. Run migration 20260325210000_photos_content_hash.sql',
     )
     ;({ error } = await supabase.from('photos').insert(baseRow))

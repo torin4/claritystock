@@ -11,6 +11,7 @@ import CreateCollectionModal from '@/components/my-photos/CreateCollectionModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { devError } from '@/lib/utils/devLog'
 import { deleteCollection, renameCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
@@ -121,7 +122,7 @@ export default function MyPhotosClient({
       router.refresh()
     } catch (e) {
       if (e instanceof Error && e.message === 'Cancelled') return
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : 'Could not build ZIP')
     } finally {
       setZipBusy(false)
@@ -148,7 +149,7 @@ export default function MyPhotosClient({
       setDownloadedPhotos(prev => prev.filter(p => !ids.includes(p.id)))
       router.refresh()
     } catch (e) {
-      console.error(e)
+      devError(e)
       alert(
         e instanceof Error
           ? e.message
@@ -211,7 +212,7 @@ export default function MyPhotosClient({
       await refresh()
       router.refresh()
     } catch (e) {
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : 'Could not update collection')
     } finally {
       setBulkCollBusy(false)
@@ -236,7 +237,7 @@ export default function MyPhotosClient({
       await refresh()
       router.refresh()
     } catch (e) {
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : 'Could not remove from collection')
     } finally {
       setBulkCollBusy(false)
@@ -294,7 +295,7 @@ export default function MyPhotosClient({
       await refresh()
       router.refresh()
     } catch (e) {
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : 'Could not delete photos')
     } finally {
       setBulkDeleting(false)
@@ -321,7 +322,7 @@ export default function MyPhotosClient({
         setDownloadedPhotos(data)
       })
       .catch(err => {
-        console.error(err)
+        devError(err)
       })
       .finally(() => {
         if (cancelled) {
@@ -382,7 +383,7 @@ export default function MyPhotosClient({
       setPhotos((prev) => (append ? [...prev, ...nextPhotos] : nextPhotos))
     } catch (e) {
       if (requestId !== photosRequestSeqRef.current) return
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : append ? 'Could not load more photos' : 'Could not load photos')
     } finally {
       if (requestId !== photosRequestSeqRef.current) return
@@ -486,7 +487,7 @@ export default function MyPhotosClient({
       setTab('collections')
       router.refresh()
     } catch (e) {
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : 'Could not delete collection')
     } finally {
       setDeletingColl(false)
@@ -514,7 +515,7 @@ export default function MyPhotosClient({
       useUIStore.getState().bumpSidebarCollections()
       router.refresh()
     } catch (e) {
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : 'Could not rename collection')
     } finally {
       setRenamingColl(false)

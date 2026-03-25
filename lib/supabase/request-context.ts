@@ -3,6 +3,7 @@ import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { resolveHideOwnPhotosInBrowse } from '@/lib/preferences/hideOwnPhotosInBrowse'
 import { createClient } from '@/lib/supabase/server'
 import type { User } from '@/lib/types/database.types'
+import { devError } from '@/lib/utils/devLog'
 
 export const getServerUser = cache(async (): Promise<SupabaseUser | null> => {
   const supabase = createClient()
@@ -23,7 +24,7 @@ export const getServerProfile = cache(async (): Promise<Pick<User, 'name' | 'ini
     .maybeSingle()
 
   if (error) {
-    console.error('[getServerProfile]', user.id, error.message)
+    devError('[getServerProfile]', user.id, error.message)
     return null
   }
   if (!data) return null

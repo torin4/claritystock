@@ -5,6 +5,7 @@ import { toggleFavorite } from '@/lib/actions/favorites.actions'
 import { recordDownload } from '@/lib/actions/downloads.actions'
 import { downloadFromUrl } from '@/lib/photos/downloadFromUrl'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
+import { devError } from '@/lib/utils/devLog'
 import type { Photo } from '@/lib/types/database.types'
 
 const CAT_COLORS: Record<string, string> = {
@@ -90,7 +91,7 @@ function PhotoTile({
       onDownload(photo.id)
       await downloadFromUrl(href, `${photo.title || 'photo'}.jpg`)
     } catch (err) {
-      console.error(err)
+      devError(err)
     }
   }
 

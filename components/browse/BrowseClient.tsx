@@ -18,6 +18,7 @@ import { PlusIcon } from '@/components/icons/PlusIcon'
 import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import type { Photo, Collection } from '@/lib/types/database.types'
+import { devError } from '@/lib/utils/devLog'
 
 interface BrowseClientProps {
   initialPhotos: Photo[]
@@ -138,7 +139,7 @@ export default function BrowseClient({
       exitSelection()
     } catch (e) {
       if (e instanceof Error && e.message === 'Cancelled') return
-      console.error(e)
+      devError(e)
       alert(e instanceof Error ? e.message : 'Could not build ZIP')
     } finally {
       setZipBusy(false)

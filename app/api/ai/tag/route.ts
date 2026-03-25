@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { Category } from '@/lib/types/database.types'
+import { devError } from '@/lib/utils/devLog'
 
 type InlinePart =
   | { text: string }
@@ -325,7 +326,7 @@ export async function POST(request: NextRequest) {
   }
 
   const message = lastErr instanceof Error ? lastErr.message : String(lastErr)
-  console.error('[api/ai/tag]', message, lastErr)
+  devError('[api/ai/tag]', message, lastErr)
   return NextResponse.json(
     {
       error: 'AI tagging failed',

@@ -11,6 +11,7 @@ import { createCollection } from '@/lib/actions/collections.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Category, PhotoFormValues, AiTagResult, ExifResult } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
+import { devWarn } from '@/lib/utils/devLog'
 
 type Row = {
   file: File
@@ -257,7 +258,7 @@ export default function AdminUploadClient({ photographers, embedded = false }: P
             try {
               thumbnailPath = await uploadThumbnail(thumbBlob, targetUserId)
             } catch (e) {
-              console.warn('[Admin upload] Thumbnail failed:', e)
+              devWarn('[Admin upload] Thumbnail failed:', e)
             }
           }
           await publishPhoto(
