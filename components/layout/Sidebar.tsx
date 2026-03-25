@@ -182,7 +182,7 @@ export default function Sidebar({
         style={sidebarStyle}
       >
         {/* Logo */}
-        <div style={{
+        <div className="sidebar-brand" style={{
           padding: '20px 16px 18px',
           borderBottom: '1px solid var(--border)',
         }}>

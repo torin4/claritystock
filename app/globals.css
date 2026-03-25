@@ -1448,6 +1448,7 @@ body {
   }
   .ph { padding: 14px 16px 10px; }
   .ph-title { font-size: 18px; }
+  .sidebar-brand { display: none; }
   .browse-search-bar { top: 65px; padding: 8px 12px; gap: 6px; }
   .quick-filter-row { padding: 6px 12px; gap: 4px; overflow-x: auto; flex-wrap: nowrap; }
   .photo-grid { grid-template-columns: repeat(2, 1fr); }
