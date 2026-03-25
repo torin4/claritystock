@@ -8,6 +8,7 @@ import { uploadDisplayImage, uploadPhoto, uploadThumbnail } from '@/lib/utils/st
 import { createJpegForAiTagging, createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { contentHashInFilter } from '@/lib/utils/contentHashQuery'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
 import type { Collection, Category } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
@@ -80,11 +81,20 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     if (useUploadStore.getState().files.length !== files.length) return
     let rows: { id: string; title: string; content_hash: string | null }[] = []
     try {
-      const unique = Array.from(new Set(hashes))
+      const unique = Array.from(new Set(hashes.filter(Boolean)))
       if (unique.length) {
         const supabase = getSupabaseBrowserClient()
-        const { data } = await supabase.from('photos').select('id, title, content_hash').in('content_hash', unique)
-        rows = data ?? []
+        const inClause = contentHashInFilter(unique)
+        const { data, error } = await supabase
+          .from('photos')
+          .select('id, title, content_hash')
+          .filter('content_hash', 'in', inClause)
+        if (error) {
+          console.warn('[Add Photos] Duplicate library lookup failed:', error.message, error)
+          rows = []
+        } else {
+          rows = data ?? []
+        }
       }
     } catch (e) {
       console.warn('[Add Photos] Duplicate library lookup failed:', e)
