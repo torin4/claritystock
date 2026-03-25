@@ -29,6 +29,8 @@ interface Props {
   userId: string
   /** Merged onto each library photo (avoids per-row photographer join). */
   libraryPhotographer: LibraryPhotographer | null
+  /** Admin: view/edit another user’s library; hides “My downloads” and uses proxy collection actions. */
+  adminMode?: boolean
 }
 
 export default function MyPhotosClient({
@@ -36,6 +38,7 @@ export default function MyPhotosClient({
   collections,
   userId,
   libraryPhotographer,
+  adminMode = false,
 }: Props) {
   const router = useRouter()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
@@ -78,6 +81,10 @@ export default function MyPhotosClient({
   useEffect(() => {
     exitSelection()
   }, [drillColl?.id, tab, exitSelection])
+
+  useEffect(() => {
+    if (adminMode && tab === 'downloads') setTab('photos')
+  }, [adminMode, tab])
 
   useEffect(() => {
     if (!selectionMode) return
@@ -163,10 +170,13 @@ export default function MyPhotosClient({
     if (!selectedIds.length || !bulkAssignCollId || bulkCollBusy) return
     setBulkCollBusy(true)
     try {
-      const { updated } = await updatePhotosCollectionIds(selectedIds, bulkAssignCollId)
+      const collOpts = adminMode ? { photographerId: userId } : undefined
+      const { updated } = await updatePhotosCollectionIds(selectedIds, bulkAssignCollId, collOpts)
       if (updated < selectedIds.length) {
         alert(
-          `Updated ${updated} of ${selectedIds.length} photo(s). You can only assign photos you uploaded.`,
+          `Updated ${updated} of ${selectedIds.length} photo(s). ${
+            adminMode ? 'Some photos could not be updated.' : 'You can only assign photos you uploaded.'
+          }`,
         )
       }
       setPhotos(prev =>
@@ -192,12 +202,12 @@ export default function MyPhotosClient({
     const ids = drillColl ? selectedIdsInDrillCollection : selectedIdsWithCollection
     if (!ids.length || bulkCollBusy) return
     const msg = drillColl
-      ? `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from “${drillColl.name}”? They stay in your library.`
-      : `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from their collection(s)? They stay in your library.`
+      ? `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from “${drillColl.name}”? They stay in ${adminMode ? 'this photographer’s' : 'your'} library.`
+      : `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from their collection(s)? They stay in ${adminMode ? 'this photographer’s' : 'your'} library.`
     if (!confirm(msg)) return
     setBulkCollBusy(true)
     try {
-      await updatePhotosCollectionIds(ids, null)
+      await updatePhotosCollectionIds(ids, null, adminMode ? { photographerId: userId } : undefined)
       setPhotos(prev =>
         prev.map(p => (ids.includes(p.id) ? { ...p, collection_id: null } : p)),
       )
@@ -229,14 +239,18 @@ export default function MyPhotosClient({
     })
     if (!ownedIds.length) {
       alert(
-        'None of the selected photos are yours to remove from the library. You can only delete photos you uploaded.',
+        adminMode
+          ? 'None of the selected photos belong to this photographer.'
+          : 'None of the selected photos are yours to remove from the library. You can only delete photos you uploaded.',
       )
       return
     }
     if (ownedIds.length < selectedIds.length) {
       if (
         !confirm(
-          `Only ${ownedIds.length} selected photo${ownedIds.length === 1 ? '' : 's'} ${ownedIds.length === 1 ? 'is' : 'are'} yours and will be removed from the library. Continue?`,
+          adminMode
+            ? `Only ${ownedIds.length} selected photo${ownedIds.length === 1 ? '' : 's'} belong to this photographer and will be removed from the library. Continue?`
+            : `Only ${ownedIds.length} selected photo${ownedIds.length === 1 ? '' : 's'} ${ownedIds.length === 1 ? 'is' : 'are'} yours and will be removed from the library. Continue?`,
         )
       ) {
         return
@@ -276,6 +290,7 @@ export default function MyPhotosClient({
   }, [collections])
 
   useEffect(() => {
+    if (adminMode) return
     if (tab !== 'downloads') return
     if (downloadsLoadedRef.current) return
 
@@ -304,7 +319,7 @@ export default function MyPhotosClient({
     return () => {
       cancelled = true
     }
-  }, [tab, userId])
+  }, [tab, userId, adminMode])
 
   const mergeLibraryRows = useCallback(
     (rows: Photo[]) =>
@@ -367,6 +382,10 @@ export default function MyPhotosClient({
 
   const noopFavoriteToggle = useCallback(() => {}, [])
 
+  const pageTitle = adminMode
+    ? (libraryPhotographer?.name ? `${libraryPhotographer.name}'s library` : 'Photographer library')
+    : 'My Photos'
+
   const handleFavoriteToggleDownloads = useCallback((photoId: string, val: boolean) => {
     setDownloadedPhotos(prev => prev.map(p => (p.id === photoId ? { ...p, is_favorited: val } : p)))
   }, [])
@@ -386,7 +405,9 @@ export default function MyPhotosClient({
   const handleDeleteCollection = async () => {
     if (!drillColl) return
     if (!confirm(
-      `Delete “${drillColl.name}”? Photos stay in your library; they’ll just be removed from this collection.`,
+      adminMode
+        ? `Delete “${drillColl.name}”? Photos stay in this photographer’s library; they’ll just be removed from this collection.`
+        : `Delete “${drillColl.name}”? Photos stay in your library; they’ll just be removed from this collection.`,
     )) return
     setDeletingColl(true)
     try {
@@ -437,7 +458,7 @@ export default function MyPhotosClient({
       {/* Page header */}
       <div className="ph">
         <div>
-          <div className="ph-title">My Photos</div>
+          <div className="ph-title">{pageTitle}</div>
           <div className="ph-sub">
             {!drillColl && tab === 'downloads' ? (
               downloadsStatus === 'loading'
@@ -474,10 +495,12 @@ export default function MyPhotosClient({
             className={`my-tab ${tab === 'collections' ? 'active' : ''}`}
             onClick={() => setTab('collections')}
           >Collections</button>
-          <button
-            className={`my-tab ${tab === 'downloads' ? 'active' : ''}`}
-            onClick={() => setTab('downloads')}
-          >My downloads</button>
+          {!adminMode && (
+            <button
+              className={`my-tab ${tab === 'downloads' ? 'active' : ''}`}
+              onClick={() => setTab('downloads')}
+            >My downloads</button>
+          )}
         </div>
       )}
 
@@ -498,7 +521,7 @@ export default function MyPhotosClient({
           </div>
           {localCollections.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-              No collections yet. Create one with <strong style={{ color: 'var(--text-2)' }}>+ Create collection</strong>, or add one when you add photos.
+              No collections yet. Create one with <strong style={{ color: 'var(--text-2)' }}>+ Create collection</strong>, or add one when you add photos{adminMode ? ' for this photographer' : ''}.
             </div>
           ) : (
             <div className="coll-grid">
@@ -582,7 +605,7 @@ export default function MyPhotosClient({
               </span>
               <input
                 className="si"
-                placeholder="Search your photos…"
+                placeholder={adminMode ? 'Search photos…' : 'Search your photos…'}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -634,8 +657,8 @@ export default function MyPhotosClient({
                 </div>
               ) : (
                 <div className="mp-empty-block">
-                  <h3 className="mp-empty-title">No photos in your library yet</h3>
-                  <p className="mp-empty-sub">Upload photos to see them here and organize them into collections.</p>
+                  <h3 className="mp-empty-title">{adminMode ? 'No photos in this library yet' : 'No photos in your library yet'}</h3>
+                  <p className="mp-empty-sub">{adminMode ? 'Upload photos for this photographer to see them here.' : 'Upload photos to see them here and organize them into collections.'}</p>
                   <div className="mp-empty-actions">
                     <button type="button" className="btn btn-primary btn-sm btn-with-icon" onClick={() => openUpload()}>
                       <PlusIcon size={15} />
@@ -747,6 +770,7 @@ export default function MyPhotosClient({
       <CreateCollectionModal
         open={createCollOpen}
         onClose={() => setCreateCollOpen(false)}
+        ownedByUserId={adminMode ? userId : undefined}
         onCreated={() => {
           useUIStore.getState().bumpSidebarCollections()
           router.refresh()
@@ -761,7 +785,9 @@ export default function MyPhotosClient({
           <span className="mp-select-bar-hint">
             {tab === 'downloads'
               ? `Remove from downloads only clears your list (Library unchanged; Browse checkmark clears) · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS}`
-              : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · choose a collection to assign`}
+              : adminMode
+                ? `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · assign to this photographer’s collections`
+                : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · choose a collection to assign`}
           </span>
           {tab !== 'downloads' && (tab === 'photos' || drillColl) && (
             <>

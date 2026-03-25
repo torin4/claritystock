@@ -8,7 +8,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Photo, Download } from '@/lib/types/database.types'
 
 const CAT_COLORS: Record<string, string> = {
-  neighborhood: '#6dbfa0',
+  neighborhood: 'var(--accent-light)',
   community: '#c49060',
   amenity: '#6a9ec4',
 }

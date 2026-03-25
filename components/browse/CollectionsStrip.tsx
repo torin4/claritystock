@@ -3,7 +3,7 @@ import { useFilterStore } from '@/stores/filter.store'
 import type { Collection } from '@/lib/types/database.types'
 
 const CAT_COLORS: Record<string, string> = {
-  neighborhood: '#6dbfa0',
+  neighborhood: 'var(--accent-light)',
   community: '#c49060',
   amenity: '#6a9ec4',
 }

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
+import AdminSubnav from '@/components/admin/AdminSubnav'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerUser()
@@ -21,5 +22,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </div>
     )
   }
-  return <>{children}</>
+  return (
+    <>
+      <AdminSubnav />
+      {children}
+    </>
+  )
 }

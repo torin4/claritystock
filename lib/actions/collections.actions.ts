@@ -43,7 +43,10 @@ export async function createCollection(input: {
   if (error || !data?.id) throw new Error(error?.message ?? 'Failed to create collection')
   revalidatePath('/')
   revalidatePath('/my-photos')
-  if (input.ownedByUserId) revalidatePath('/admin')
+  if (input.ownedByUserId) {
+    revalidatePath('/admin')
+    revalidatePath('/admin/libraries')
+  }
   return { id: data.id }
 }
 
@@ -60,6 +63,7 @@ export async function deleteCollection(id: string) {
   if (error) throw error
   revalidatePath('/')
   revalidatePath('/my-photos')
+  revalidatePath('/admin/libraries')
 }
 
 export async function renameCollection(id: string, name: string) {
@@ -77,4 +81,5 @@ export async function renameCollection(id: string, name: string) {
   if (error) throw error
   revalidatePath('/')
   revalidatePath('/my-photos')
+  revalidatePath('/admin/libraries')
 }

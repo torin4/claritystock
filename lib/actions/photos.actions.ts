@@ -70,14 +70,30 @@ export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) 
   if (error) throw error
   revalidatePath('/')
   revalidatePath('/my-photos')
+  revalidatePath('/admin/libraries')
 }
 
-/** Set the same collection (or null to leave no collection) for many of your photos. */
-export async function updatePhotosCollectionIds(photoIds: string[], collectionId: string | null) {
+/**
+ * Set the same collection (or null) for many photos.
+ * Admins may pass `photographerId` to update another user’s photos (admin library UI).
+ */
+export async function updatePhotosCollectionIds(
+  photoIds: string[],
+  collectionId: string | null,
+  opts?: { photographerId?: string },
+) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
-  await assertOwnedCollectionId(collectionId, user.id)
+  const admin = await isUserAdmin(supabase, user.id)
+  const photographerScope =
+    admin && opts?.photographerId ? opts.photographerId : user.id
+
+  if (admin && opts?.photographerId) {
+    await assertCollectionOwnedByPhotographer(collectionId, opts.photographerId)
+  } else {
+    await assertOwnedCollectionId(collectionId, photographerScope)
+  }
 
   const unique = Array.from(new Set(photoIds)).filter(Boolean)
   if (!unique.length) return { updated: 0 }
@@ -86,12 +102,13 @@ export async function updatePhotosCollectionIds(photoIds: string[], collectionId
     .from('photos')
     .update({ collection_id: collectionId })
     .in('id', unique)
-    .eq('photographer_id', user.id)
+    .eq('photographer_id', photographerScope)
     .select('id')
 
   if (error) throw error
   revalidatePath('/')
   revalidatePath('/my-photos')
+  revalidatePath('/admin/libraries')
   return { updated: data?.length ?? 0 }
 }
 
@@ -116,6 +133,7 @@ export async function deletePhoto(
   if (error) throw error
   revalidatePath('/')
   revalidatePath('/my-photos')
+  revalidatePath('/admin/libraries')
 }
 
 /** Remove every photo you uploaded (storage files + DB). Favorites/downloads rows cascade. Collections are not deleted. */
@@ -201,6 +219,7 @@ export async function deletePhotos(ids: string[]) {
   revalidatePath('/')
   revalidatePath('/my-photos')
   revalidatePath('/insights')
+  revalidatePath('/admin/libraries')
   return { deleted: photos.length }
 }
 
@@ -249,4 +268,5 @@ export async function publishPhoto(
   revalidatePath('/')
   revalidatePath('/my-photos')
   revalidatePath('/admin')
+  revalidatePath('/admin/libraries')
 }

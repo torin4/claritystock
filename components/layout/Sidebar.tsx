@@ -184,7 +184,7 @@ export default function Sidebar({ userName, userInitials, userRole, userId }: Si
           }}
         >
           {/* Library section */}
-          <span className="s-section-lbl">Library</span>
+          <span className="s-section-lbl" style={{ color: 'var(--label-library)' }}>Library</span>
           {navItems.map(item => (
             <a
               key={item.href}

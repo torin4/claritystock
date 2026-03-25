@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { saveGoogleCredentialsFromSession } from '@/lib/auth/saveGoogleCredentialsVault'
 import { getInitials } from '@/lib/utils/initials'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env'
 
@@ -74,6 +75,8 @@ export async function GET(request: NextRequest) {
     },
     { onConflict: 'id', ignoreDuplicates: false },
   )
+
+  await saveGoogleCredentialsFromSession(data.user.id, data.session)
 
   return response
 }

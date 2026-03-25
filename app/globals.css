@@ -12,13 +12,17 @@
   --text: #f0ede6;
   --text-2: #7a7870;
   --text-3: #5c5b56;
-  --accent: #3d7a6a;
-  --accent-dim: #0f2218;
+  /* Brand greens — “punchy” palette */
+  --accent-light: #6ee8a2; /* icon light — chips, highlights */
+  --accent: #2db870; /* icon mid — Stock wordmark, primary actions */
+  --accent-dark: #1a7a47; /* icon dark — anchors, strong emphasis */
+  --accent-dim: #0c1c14; /* dark wash behind accent UI */
+  --label-library: #5a6b5a; /* subdued section label (Library) */
   --red: #b54040;
-  --green: #4d8f5a;
+  --green: #2db870;
   --amber: #b07840;
-  --nb: #1a3828;
-  --nb-t: #6dbfa0;
+  --nb: #152a1f;
+  --nb-t: #6ee8a2;
   --cm: #362a14;
   --cm-t: #c49060;
   --am: #16283a;
@@ -76,7 +80,7 @@ body {
     color: var(--text-3);
   }
   /* Category color tokens */
-  .t-nb { background: #6dbfa0; }
+  .t-nb { background: var(--accent-light); }
   .t-cm { background: #c49060; }
   .t-am { background: #6a9ec4; }
   /* Section label */

@@ -5,6 +5,10 @@ import {
   chatOpenUrlFromSpace,
   workspaceChatSearchUrl,
 } from '@/lib/admin/googleChatDm'
+import { decryptGoogleRefreshTokenFromStorage } from '@/lib/auth/googleRefreshVault'
+
+/** Google access tokens are ~1h; ignore stored copies older than this. */
+const STORED_ACCESS_MAX_AGE_MS = 50 * 60 * 1000
 import { isUserAdmin } from '@/lib/auth/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -56,10 +60,6 @@ async function findDirectMessage(token: string, peerEmail: string): Promise<Resp
   })
 }
 
-/**
- * Google Chat user token is often present in the browser session but omitted from
- * server cookie serialization — prefer `Authorization: Bearer` from the client POST.
- */
 async function resolveChatUrl(email: string, token: string | undefined): Promise<string> {
   const fallback = workspaceChatSearchUrl(email)
   if (!token) return fallback
@@ -116,30 +116,58 @@ async function resolveChatUrl(email: string, token: string | undefined): Promise
   return fallback
 }
 
-async function resolveGoogleAccessToken(input: {
-  bearer?: string
-  cookieProviderToken?: string | null
-  bodyRefreshToken?: string | null
-}): Promise<string | undefined> {
-  const b = input.bearer?.trim()
-  if (b) return b
-  const c = input.cookieProviderToken?.trim()
-  if (c) return c
-  const rt = input.bodyRefreshToken?.trim()
-  if (rt) {
-    const at = await googleAccessTokenFromRefreshToken(rt)
-    if (at) return at
+/**
+ * Prefer short-lived cookie token; otherwise load encrypted refresh from DB and exchange
+ * with Google (requires GOOGLE_OAUTH_CLIENT_ID / SECRET).
+ */
+async function googleAccessTokenForAdmin(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | undefined> {
+  await supabase.auth.refreshSession().catch(() => {})
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const cookie = session?.provider_token?.trim()
+  if (cookie) return cookie
+
+  const { data: row, error } = await supabase
+    .from('user_google_credentials')
+    .select('refresh_ciphertext, access_ciphertext, access_stored_at')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[google-chat-dm] credentials select', error.message)
+    }
+    return undefined
   }
-  return undefined
+
+  const ac = row?.access_ciphertext
+  const acAt = row?.access_stored_at
+  if (typeof ac === 'string' && ac && typeof acAt === 'string' && acAt) {
+    const age = Date.now() - new Date(acAt).getTime()
+    if (age >= 0 && age < STORED_ACCESS_MAX_AGE_MS) {
+      const tok = decryptGoogleRefreshTokenFromStorage(ac)
+      if (tok) return tok
+    }
+  }
+
+  const ct = row?.refresh_ciphertext
+  if (typeof ct !== 'string' || !ct) return undefined
+
+  const refresh = decryptGoogleRefreshTokenFromStorage(ct)
+  if (!refresh) return undefined
+
+  const access = await googleAccessTokenFromRefreshToken(refresh)
+  return access ?? undefined
 }
 
-type GateOk = { ok: true; supabase: SupabaseClient; email: string }
+type GateOk = { ok: true; supabase: SupabaseClient; email: string; userId: string }
 type GateErr = { ok: false; response: NextResponse }
 
-async function gateAdminChat(
-  email: string | null,
-  selfAs: 'redirect' | 'json',
-): Promise<GateOk | GateErr> {
+async function gateAdminChat(email: string | null): Promise<GateOk | GateErr> {
   if (!email || !email.endsWith(`@${ALLOWED_DOMAIN}`)) {
     return { ok: false, response: NextResponse.json({ error: 'Invalid email' }, { status: 400 }) }
   }
@@ -154,72 +182,30 @@ async function gateAdminChat(
 
   const adminEmail = (user.email ?? '').trim().toLowerCase()
   if (adminEmail && adminEmail === email) {
-    const u = workspaceChatSearchUrl(email)
-    if (selfAs === 'redirect') {
-      return { ok: false, response: NextResponse.redirect(u) }
+    return {
+      ok: false,
+      response: NextResponse.redirect(workspaceChatSearchUrl(email)),
     }
-    return { ok: false, response: NextResponse.json({ url: u }) }
   }
 
-  return { ok: true, supabase, email }
+  return { ok: true, supabase, email, userId: user.id }
 }
 
 export async function GET(request: NextRequest) {
   const email = normalizeEmail(request.nextUrl.searchParams.get('email'))
-  const gate = await gateAdminChat(email, 'redirect')
+  const gate = await gateAdminChat(email)
   if (!gate.ok) return gate.response
 
-  await gate.supabase.auth.refreshSession().catch(() => {})
-  const {
-    data: { session },
-  } = await gate.supabase.auth.getSession()
-  const url = await resolveChatUrl(gate.email, session?.provider_token ?? undefined)
-  return NextResponse.redirect(url)
-}
-
-export async function POST(request: NextRequest) {
-  let body: { email?: string; providerRefreshToken?: string | null }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const email = normalizeEmail(body.email ?? null)
-  const gate = await gateAdminChat(email, 'json')
-  if (!gate.ok) return gate.response
-
-  const authHeader = request.headers.get('authorization')
-  const bearer =
-    authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined
-
-  await gate.supabase.auth.refreshSession().catch(() => {})
-  const {
-    data: { session },
-  } = await gate.supabase.auth.getSession()
-
-  const token = await resolveGoogleAccessToken({
-    bearer,
-    cookieProviderToken: session?.provider_token,
-    bodyRefreshToken: body.providerRefreshToken,
-  })
-
+  const token = await googleAccessTokenForAdmin(gate.supabase, gate.userId)
   const url = await resolveChatUrl(gate.email, token)
-  const searchFallback = workspaceChatSearchUrl(gate.email)
 
   if (process.env.NODE_ENV === 'development') {
-    console.error('[google-chat-dm] POST', {
-      hadBearer: Boolean(bearer),
-      hadCookieProviderToken: Boolean(session?.provider_token),
-      hadBodyRefreshToken: Boolean(body.providerRefreshToken?.trim()),
-      hasGoogleClientEnv: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID?.trim()),
+    const fb = workspaceChatSearchUrl(gate.email)
+    console.error('[google-chat-dm] GET', {
       resolvedToken: Boolean(token),
-      usedSearchUrl: url === searchFallback || url.includes('#search'),
+      usedSearchFallback: url === fb || url.includes('#search'),
     })
   }
 
-  return NextResponse.json({
-    url,
-    usedSearchFallback: url === searchFallback || url.includes('#search'),
-  })
+  return NextResponse.redirect(url)
 }

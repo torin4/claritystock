@@ -1,5 +1,15 @@
 'use client'
 
+/** Matches `public/logo-mark.png` intrinsic size (portrait). */
+const LOGO_SRC_W = 310
+const LOGO_SRC_H = 343
+
+function logoDimensions(targetHeightPx: number) {
+  const height = targetHeightPx
+  const width = Math.round((targetHeightPx * LOGO_SRC_W) / LOGO_SRC_H)
+  return { width, height }
+}
+
 type BrandSize = 'sidebar' | 'mobile'
 
 const SIZE_MAP: Record<BrandSize, { img: number; fontSize: string; letterSpacing: string }> = {
@@ -26,6 +36,7 @@ type Props = {
 
 export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackWordmark, priority }: Props) {
   if (layout === 'stack') {
+    const stackLogo = logoDimensions(STACK_BRAND.img)
     return (
       <div
         style={{
@@ -40,10 +51,15 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
         <img
           src="/logo-mark.png"
           alt=""
-          width={STACK_BRAND.img}
-          height={STACK_BRAND.img}
+          width={stackLogo.width}
+          height={stackLogo.height}
           fetchPriority={priority ? 'high' : undefined}
-          style={{ objectFit: 'contain', flexShrink: 0, width: STACK_BRAND.img, height: STACK_BRAND.img }}
+          style={{
+            objectFit: 'contain',
+            flexShrink: 0,
+            width: stackLogo.width,
+            height: stackLogo.height,
+          }}
         />
         <div
           style={{
@@ -62,6 +78,7 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
   }
 
   const { img, fontSize, letterSpacing } = SIZE_MAP[size]
+  const inlineLogo = logoDimensions(img)
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -69,10 +86,15 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
       <img
         src="/logo-mark.png"
         alt=""
-        width={img}
-        height={img}
+        width={inlineLogo.width}
+        height={inlineLogo.height}
         fetchPriority={priority ? 'high' : undefined}
-        style={{ objectFit: 'contain', flexShrink: 0, width: img, height: img }}
+        style={{
+          objectFit: 'contain',
+          flexShrink: 0,
+          width: inlineLogo.width,
+          height: inlineLogo.height,
+        }}
       />
       {stackWordmark ? (
         <div

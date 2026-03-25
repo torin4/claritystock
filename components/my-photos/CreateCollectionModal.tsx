@@ -7,9 +7,11 @@ interface Props {
   open: boolean
   onClose: () => void
   onCreated: () => void
+  /** Admin: create the collection owned by this user (not the signed-in admin). */
+  ownedByUserId?: string
 }
 
-export default function CreateCollectionModal({ open, onClose, onCreated }: Props) {
+export default function CreateCollectionModal({ open, onClose, onCreated, ownedByUserId }: Props) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState<Category | null>(null)
   const [saving, setSaving] = useState(false)
@@ -31,7 +33,11 @@ export default function CreateCollectionModal({ open, onClose, onCreated }: Prop
     if (!trimmed) return
     setSaving(true)
     try {
-      await createCollection({ name: trimmed, category })
+      await createCollection(
+        ownedByUserId
+          ? { name: trimmed, category, ownedByUserId }
+          : { name: trimmed, category },
+      )
       onCreated()
       onClose()
     } catch (err) {

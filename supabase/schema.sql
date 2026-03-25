@@ -19,6 +19,15 @@ CREATE TABLE IF NOT EXISTS public.users (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- 1b. Google OAuth refresh token vault (Chat API); ciphertext from app, RLS own-row only
+CREATE TABLE IF NOT EXISTS public.user_google_credentials (
+  user_id             uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+  refresh_ciphertext  text,
+  access_ciphertext   text,
+  access_stored_at    timestamptz,
+  updated_at          timestamptz NOT NULL DEFAULT now()
+);
+
 -- 2. collections
 CREATE TABLE IF NOT EXISTS public.collections (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -103,6 +112,7 @@ CREATE TRIGGER photos_fts_trigger
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE public.users       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_google_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.photos      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.downloads   ENABLE ROW LEVEL SECURITY;
@@ -127,6 +137,31 @@ CREATE POLICY "users_update"
   ON public.users FOR UPDATE
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
+
+-- ---------------------------------------------------------------------------
+-- RLS POLICIES — user_google_credentials
+-- ---------------------------------------------------------------------------
+
+DROP POLICY IF EXISTS "user_google_credentials_select_own" ON public.user_google_credentials;
+CREATE POLICY "user_google_credentials_select_own"
+  ON public.user_google_credentials FOR SELECT
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "user_google_credentials_insert_own" ON public.user_google_credentials;
+CREATE POLICY "user_google_credentials_insert_own"
+  ON public.user_google_credentials FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "user_google_credentials_update_own" ON public.user_google_credentials;
+CREATE POLICY "user_google_credentials_update_own"
+  ON public.user_google_credentials FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "user_google_credentials_delete_own" ON public.user_google_credentials;
+CREATE POLICY "user_google_credentials_delete_own"
+  ON public.user_google_credentials FOR DELETE
+  USING (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
 -- RLS POLICIES — photos

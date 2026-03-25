@@ -13,7 +13,7 @@ import type {
 } from '@/lib/types/database.types'
 
 const AVATAR_COLORS = [
-  { bg: '#1a3828', text: '#6dbfa0' },
+  { bg: '#1a7a47', text: '#6ee8a2' },
   { bg: '#362a14', text: '#c49060' },
   { bg: '#16283a', text: '#6a9ec4' },
   { bg: '#2a1a28', text: '#c46a9e' },

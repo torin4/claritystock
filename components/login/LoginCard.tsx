@@ -48,7 +48,7 @@ export default function LoginCard() {
         <BrandTitle layout="stack" priority />
         <div style={{
           fontSize: '13px',
-          color: 'var(--text-3)',
+          color: 'var(--label-library)',
           fontFamily: 'var(--font-mono)',
         }}>
           Internal photo library
