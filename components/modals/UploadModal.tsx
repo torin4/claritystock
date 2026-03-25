@@ -8,7 +8,7 @@ import { uploadDisplayImage, uploadPhoto, uploadThumbnail } from '@/lib/utils/st
 import { createJpegForAiTagging, createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-import { contentHashInFilter } from '@/lib/utils/contentHashQuery'
+import { contentHashInFilter, isContentHashColumnMissingError } from '@/lib/utils/contentHashQuery'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
 import type { Collection, Category } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
@@ -36,6 +36,8 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const [publishing, setPublishing] = useState(false)
   const [collections, setCollections] = useState<Collection[]>([])
   const [uploadNotice, setUploadNotice] = useState<UploadNotice>(null)
+  /** Set when DB has no `content_hash` column — library dup check skipped; same-batch still works */
+  const [libraryDupNeedsMigration, setLibraryDupNeedsMigration] = useState(false)
 
   useEffect(() => {
     if (!uploadModalOpen) return
@@ -59,6 +61,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const handleClose = () => {
     store.reset()
     setUploadNotice(null)
+    setLibraryDupNeedsMigration(false)
     closeUpload()
   }
 
@@ -90,9 +93,15 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           .select('id, title, content_hash')
           .filter('content_hash', 'in', inClause)
         if (error) {
-          console.warn('[Add Photos] Duplicate library lookup failed:', error.message, error)
-          rows = []
+          if (isContentHashColumnMissingError(error)) {
+            setLibraryDupNeedsMigration(true)
+            rows = []
+          } else {
+            console.warn('[Add Photos] Duplicate library lookup failed:', error.message, error)
+            rows = []
+          }
         } else {
+          setLibraryDupNeedsMigration(false)
           rows = data ?? []
         }
       }
@@ -110,7 +119,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     useUploadStore.getState().setAllFileFingerprints(
       hashes.map((h) => ({ contentHash: h, libraryDuplicates: byHash.get(h) ?? [] })),
     )
-  }, [])
+  }, [setLibraryDupNeedsMigration])
 
   const processFiles = useCallback(async (files: File[]) => {
     const images = files.filter(f => f.type.startsWith('image/'))
@@ -139,6 +148,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     }
 
     if (!valid.length) return
+    setLibraryDupNeedsMigration(false)
     store.setFiles(valid)
     if (defaultCollectionId) {
       for (let i = 0; i < valid.length; i++) {
@@ -409,6 +419,17 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           {/* Step 2 — Review each photo */}
           {store.step === 2 && currentForm && (
             <>
+              {libraryDupNeedsMigration && (
+                <div className="upload-dup-hint upload-dup-hint--migration" role="status">
+                  <strong>Library duplicate check is unavailable.</strong> Your Supabase project does not have a{' '}
+                  <code className="upload-dup-code">content_hash</code> column on{' '}
+                  <code className="upload-dup-code">photos</code> yet. Apply migration{' '}
+                  <code className="upload-dup-code">20260325210000_photos_content_hash.sql</code> (SQL Editor or{' '}
+                  <code className="upload-dup-code">supabase db push</code>). Until then, the same file uploaded again
+                  later will not match the library. If you add the same file twice in this upload, you will still see a
+                  warning.
+                </div>
+              )}
               {/* Filmstrip */}
               <div className="filmstrip">
                 {store.files.map((f, i) => {
