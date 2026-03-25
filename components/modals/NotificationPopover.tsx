@@ -32,7 +32,6 @@ export default function NotificationPopover() {
         notifications.map(n => (
           <div key={n.id} className={`s-notif-item ${n.read ? '' : 'unread'}`}>
             <div className={`s-notif-dot ${n.read ? 'read' : ''}`} />
-            <div className="s-notif-thumb" style={{ background: 'var(--surface-2)' }} />
             <div className="s-notif-body">
               <div className="s-notif-text">
                 <strong>{n.downloaderName}</strong> downloaded your photo
