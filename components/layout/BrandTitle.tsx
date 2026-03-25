@@ -143,6 +143,6 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
           Clarity <span style={{ color: 'var(--accent)' }}>Stock</span>
         </div>
       )}
-    </div>
+    </Link>
   )
 }
