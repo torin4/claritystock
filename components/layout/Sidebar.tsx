@@ -287,7 +287,7 @@ export default function Sidebar({
         </div>
 
         {/* User profile */}
-        <div style={{ padding: '10px 6px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '10px 6px' }}>
           <button className="s-user-inner" onClick={openSettings} style={{ width: '100%' }}>
             <UserAvatar avatarUrl={userAvatarUrl} initials={userInitials} size={40} />
             <div>

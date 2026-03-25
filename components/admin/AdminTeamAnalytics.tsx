@@ -1,16 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import type { UsageAlertConfig } from '@/lib/admin/usageAlert'
 import AdminPennyJarBandit from '@/components/admin/AdminPennyJarBandit'
-import type {
-  AdminTopPhoto,
-  AdminUserRow,
-  DownloadByUser,
-  InsightsStats,
-  PhotographerImpact,
-  UsageLedgerRow,
-} from '@/lib/types/database.types'
+import type { AdminAnalyticsRangeData } from '@/lib/queries/admin.queries'
+import type { AdminUserRow, UsageLedgerRow } from '@/lib/types/database.types'
 
 const AVATAR_COLORS = [
   { bg: '#1a7a47', text: '#6ee8a2' },
@@ -20,11 +15,11 @@ const AVATAR_COLORS = [
   { bg: '#1a2832', text: '#6ab4c4' },
 ]
 
+type RangeKey = 'all' | 'month'
+
 interface Props {
-  stats: InsightsStats
-  topPhotos: AdminTopPhoto[]
-  downloadsByDownloader: DownloadByUser[]
-  photographerImpact: PhotographerImpact[]
+  allTime: AdminAnalyticsRangeData
+  thisMonth: AdminAnalyticsRangeData
   userRows: AdminUserRow[]
   teamSummary: { memberCount: number; adminCount: number }
   usageLedger: UsageLedgerRow[]
@@ -32,20 +27,29 @@ interface Props {
 }
 
 export default function AdminTeamAnalytics({
-  stats,
-  topPhotos,
-  downloadsByDownloader,
-  photographerImpact,
+  allTime,
+  thisMonth,
   userRows,
   teamSummary,
   usageLedger,
   usageAlert,
 }: Props) {
+  const [range, setRange] = useState<RangeKey>('all')
+  const active = range === 'all' ? allTime : thisMonth
+  const { stats, topPhotos, downloadsByDownloader, photographerImpact } = active
+
   const heroCandidate = topPhotos[0] ?? null
   const hasTopPerforming = (heroCandidate?.downloads_count ?? 0) > 0
   const heroPhoto = hasTopPerforming ? heroCandidate : null
-  const maxDownloader = downloadsByDownloader[0]?.count ?? 1
-  const maxImpact = photographerImpact[0]?.downloadUses ?? 1
+  const maxDownloader = Math.max(1, downloadsByDownloader[0]?.count ?? 1)
+  const maxImpact = Math.max(1, photographerImpact[0]?.downloadUses ?? 1)
+
+  const thirdStatValue = range === 'all' ? stats.thisMonthDownloads : downloadsByDownloader.length
+  const thirdStatLabel = range === 'all' ? 'Downloads this month' : 'Downloaders'
+  const downloadEventsSubtitle =
+    range === 'all'
+      ? `${stats.totalDownloads.toLocaleString()} download events`
+      : `${stats.totalDownloads.toLocaleString()} events this month`
 
   return (
     <div className="admin-analytics-page">
@@ -55,15 +59,42 @@ export default function AdminTeamAnalytics({
           <div className="ph-sub">
             Team-wide library analytics · {teamSummary.memberCount} member{teamSummary.memberCount !== 1 ? 's' : ''}
             {teamSummary.adminCount > 0 ? ` · ${teamSummary.adminCount} admin${teamSummary.adminCount !== 1 ? 's' : ''}` : ''}
+            {' · '}
+            {range === 'all' ? 'All time' : 'This month (UTC)'}
+          </div>
+          <div className="browse-mode-row" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className={`browse-mode-btn ${range === 'all' ? 'active' : ''}`}
+              onClick={() => setRange('all')}
+            >
+              All time
+            </button>
+            <button
+              type="button"
+              className={`browse-mode-btn ${range === 'month' ? 'active' : ''}`}
+              onClick={() => setRange('month')}
+            >
+              This month
+            </button>
           </div>
         </div>
       </div>
 
       <div id="admin-insight-cards" className="admin-stat-grid">
-        <StatCard value={stats.totalPhotos} label="Photos in library" />
-        <StatCard value={stats.totalDownloads} label="Total downloads" />
-        <StatCard value={stats.thisMonthDownloads} label="Downloads this month" />
-        <StatCard value={stats.favoritedCount} label="Team favorites" />
+        <StatCard
+          value={stats.totalPhotos}
+          label={range === 'all' ? 'Photos in library' : 'Photos uploaded'}
+        />
+        <StatCard
+          value={stats.totalDownloads}
+          label={range === 'all' ? 'Total downloads' : 'Download uses'}
+        />
+        <StatCard value={thirdStatValue} label={thirdStatLabel} />
+        <StatCard
+          value={stats.favoritedCount}
+          label={range === 'all' ? 'Team favorites' : 'Favorites added'}
+        />
       </div>
 
       <div
@@ -102,7 +133,7 @@ export default function AdminTeamAnalytics({
                     marginBottom: 8,
                   }}
                 >
-                  Top performing photo · library-wide
+                  {range === 'all' ? 'Top performing photo · library-wide' : 'Top photo this month · library-wide'}
                 </div>
                 <div
                   className="insights-hero-title"
@@ -139,7 +170,7 @@ export default function AdminTeamAnalytics({
                   <span
                     style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-mono)' }}
                   >
-                    downloads
+                    {range === 'all' ? 'downloads' : 'uses'}
                   </span>
                 </div>
               </div>
@@ -181,7 +212,11 @@ export default function AdminTeamAnalytics({
                   marginBottom: 8,
                 }}
               >
-                {!heroCandidate ? 'Nothing to show yet' : 'No downloads yet'}
+                {!heroCandidate
+                  ? 'Nothing to show yet'
+                  : range === 'month'
+                    ? 'No downloads this month'
+                    : 'No downloads yet'}
               </div>
               <p
                 style={{
@@ -194,7 +229,9 @@ export default function AdminTeamAnalytics({
               >
                 {!heroCandidate
                   ? 'The library is empty. Once photographers add work, download stats and a leader photo will show up here.'
-                  : 'No library downloads yet. When teammates save photos from the library, the most-used shot appears here.'}
+                  : range === 'month'
+                    ? 'No library download events in the current UTC month yet. Switch to All time for lifetime leaders.'
+                    : 'No library downloads yet. When teammates save photos from the library, the most-used shot appears here.'}
               </p>
             </div>
           </div>
@@ -205,13 +242,13 @@ export default function AdminTeamAnalytics({
         <div className="admin-card">
           <div className="admin-card__headerRow">
             <span className="admin-card__headerTitle">Who uses the library</span>
-            <span className="admin-card__headerMeta">
-              {stats.totalDownloads.toLocaleString()} download events
-            </span>
+            <span className="admin-card__headerMeta">{downloadEventsSubtitle}</span>
           </div>
           <div className="bar-chart">
             {downloadsByDownloader.length === 0 ? (
-              <div className="admin-card__chartEmpty">No downloads yet</div>
+              <div className="admin-card__chartEmpty">
+                {range === 'month' ? 'No downloads this month' : 'No downloads yet'}
+              </div>
             ) : (
               downloadsByDownloader.map((u, i) => {
                 const pct = Math.round((u.count / maxDownloader) * 100)
@@ -246,11 +283,15 @@ export default function AdminTeamAnalytics({
         <div className="admin-card">
           <div className="admin-card__headerRow">
             <span className="admin-card__headerTitle">Whose photos are used most</span>
-            <span className="admin-card__headerMeta">By download count on their work</span>
+            <span className="admin-card__headerMeta">
+              {range === 'all' ? 'By download count on their work' : 'By download events · UTC month'}
+            </span>
           </div>
           <div className="bar-chart">
             {photographerImpact.length === 0 ? (
-              <div className="admin-card__chartEmpty">No photos yet</div>
+              <div className="admin-card__chartEmpty">
+                {range === 'month' ? 'No download activity this month' : 'No photos yet'}
+              </div>
             ) : (
               photographerImpact.map((u, i) => {
                 const pct = Math.round((u.downloadUses / maxImpact) * 100)
@@ -283,31 +324,51 @@ export default function AdminTeamAnalytics({
         </div>
       </div>
 
+      <p
+        style={{
+          fontSize: 11,
+          color: 'var(--text-3)',
+          fontFamily: 'var(--font-mono)',
+          padding: '0 20px',
+          margin: '12px 0 0',
+        }}
+      >
+        Penny jar uses all-time give/take (not filtered by the range toggle).
+      </p>
       <AdminPennyJarBandit rows={usageLedger} alert={usageAlert} />
 
       <div className="admin-analytics-two-col">
         <div className="admin-card">
-          <div className="admin-card__header">Library balance</div>
+          <div className="admin-card__header">
+            Library balance
+            {range === 'month' ? (
+              <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400, marginLeft: 8 }}>
+                (this month · UTC)
+              </span>
+            ) : null}
+          </div>
           <div className="admin-card__body">
-            <BalanceBar uploads={stats.totalPhotos} downloads={stats.totalDownloads} />
+            <BalanceBar uploads={stats.totalPhotos} downloads={stats.totalDownloads} range={range} />
           </div>
         </div>
 
         <div className="admin-card">
-          <div className="admin-card__header">Top library photos</div>
+          <div className="admin-card__header">
+            {range === 'all' ? 'Top library photos' : 'Top photos this month'}
+          </div>
           <table className="utbl">
             <thead>
               <tr>
                 <th>Photo</th>
                 <th>Photographer</th>
-                <th>Uses</th>
+                <th>{range === 'all' ? 'Uses' : 'Uses (month)'}</th>
               </tr>
             </thead>
             <tbody>
               {topPhotos.length === 0 ? (
                 <tr>
                   <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-3)' }}>
-                    No photos yet
+                    {range === 'month' ? 'No download activity this month' : 'No photos yet'}
                   </td>
                 </tr>
               ) : (
@@ -382,16 +443,25 @@ function StatCard({ value, label }: { value: number; label: string }) {
   )
 }
 
-function BalanceBar({ uploads, downloads }: { uploads: number; downloads: number }) {
+function BalanceBar({
+  uploads,
+  downloads,
+  range,
+}: {
+  uploads: number
+  downloads: number
+  range: RangeKey
+}) {
   const total = uploads + downloads || 1
   const upPct = Math.round((uploads / total) * 100)
   const dlPct = 100 - upPct
+  const photosLabel = range === 'all' ? 'Photos' : 'Uploaded'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', minWidth: 70 }}>
-          Photos
+          {photosLabel}
         </div>
         <div style={{ flex: 1, height: 20, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
           <div style={{ width: `${upPct}%`, height: '100%', background: 'var(--accent)', borderRadius: 4 }} />
@@ -429,7 +499,7 @@ function BalanceBar({ uploads, downloads }: { uploads: number; downloads: number
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
         {downloads > 0
-          ? `${(downloads / Math.max(uploads, 1)).toFixed(1)}× events per photo (avg.)`
+          ? `${(downloads / Math.max(uploads, 1)).toFixed(1)}× download events per photo added${range === 'month' ? ' (month)' : ''} (avg.)`
           : 'No downloads yet'}
       </div>
     </div>

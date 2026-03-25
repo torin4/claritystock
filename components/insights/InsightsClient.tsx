@@ -1,6 +1,6 @@
 'use client'
 import { useRouter } from 'next/navigation'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import { useInView } from '@/lib/hooks/useInView'
@@ -20,13 +20,20 @@ interface TopPhoto {
   collection?: { name: string } | null
 }
 
-interface Props {
+type InsightsRangeBundle = {
   stats: InsightsStats
-  topPhotos: TopPhoto[]
   downloadsByUser: DownloadByUser[]
+  topPhotos: TopPhoto[]
+}
+
+interface Props {
+  allTime: InsightsRangeBundle
+  thisMonth: InsightsRangeBundle
   topContributors: TopContributor[]
   userId: string
 }
+
+type RangeKey = 'all' | 'month'
 
 const AVATAR_COLORS = [
   { bg: '#1a7a47', text: '#6ee8a2' },
@@ -36,14 +43,23 @@ const AVATAR_COLORS = [
   { bg: '#1a2832', text: '#6ab4c4' },
 ]
 
-export default function InsightsClient({ stats, topPhotos, downloadsByUser, topContributors, userId }: Props) {
+export default function InsightsClient({ allTime, thisMonth, topContributors, userId }: Props) {
   const router = useRouter()
   const { openUpload } = useUIStore()
+  const [range, setRange] = useState<RangeKey>('all')
+  const active = range === 'all' ? allTime : thisMonth
+  const { stats, topPhotos, downloadsByUser } = active
+
   const heroCandidate = topPhotos[0] ?? null
-  /** Leaderboard is sorted by downloads_count; only show hero when someone has actually downloaded. */
+  /** Leaderboard is sorted by downloads_count (all-time totals or uses in the selected month). */
   const hasTopPerforming = (heroCandidate?.downloads_count ?? 0) > 0
   const heroPhoto = hasTopPerforming ? heroCandidate : null
-  const maxDownloads = downloadsByUser[0]?.count ?? 1
+  const maxDownloads = Math.max(1, downloadsByUser[0]?.count ?? 1)
+
+  const thirdStatValue = range === 'all' ? stats.thisMonthDownloads : downloadsByUser.length
+  const thirdStatLabel = range === 'all' ? 'This month' : 'Downloaders'
+  const usesSubtitle =
+    range === 'all' ? `${stats.totalDownloads.toLocaleString()} total uses` : `${stats.totalDownloads.toLocaleString()} uses this month`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -51,7 +67,25 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
       <div className="ph">
         <div>
           <div className="ph-title">Insights</div>
-          <div className="ph-sub">Your Library contribution · all time</div>
+          <div className="ph-sub">
+            Your library contribution · {range === 'all' ? 'All time' : 'This month (UTC)'}
+          </div>
+          <div className="browse-mode-row" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className={`browse-mode-btn ${range === 'all' ? 'active' : ''}`}
+              onClick={() => setRange('all')}
+            >
+              All time
+            </button>
+            <button
+              type="button"
+              className={`browse-mode-btn ${range === 'month' ? 'active' : ''}`}
+              onClick={() => setRange('month')}
+            >
+              This month
+            </button>
+          </div>
         </div>
         <button
           type="button"
@@ -75,10 +109,19 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
         id="insight-cards"
         style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--gap)', padding: '16px 20px 0' }}
       >
-        <StatCard value={stats.totalPhotos} label="Photos added" />
-        <StatCard value={stats.totalDownloads} label="Total downloads" />
-        <StatCard value={stats.thisMonthDownloads} label="This month" />
-        <StatCard value={stats.favoritedCount} label="Favorited" />
+        <StatCard
+          value={stats.totalPhotos}
+          label={range === 'all' ? 'Photos added' : 'Photos uploaded'}
+        />
+        <StatCard
+          value={stats.totalDownloads}
+          label={range === 'all' ? 'Total downloads' : 'Download uses'}
+        />
+        <StatCard value={thirdStatValue} label={thirdStatLabel} />
+        <StatCard
+          value={stats.favoritedCount}
+          label={range === 'all' ? 'Your favorites' : 'Favorites added'}
+        />
       </div>
 
       {/* Hero: top photo when there are downloads; otherwise explain empty state */}
@@ -125,7 +168,7 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
                     marginBottom: 8,
                   }}
                 >
-                  Your top performing photo
+                  {range === 'all' ? 'Your top performing photo' : 'Your top photo this month'}
                 </div>
                 <div
                   className="insights-hero-title"
@@ -162,7 +205,7 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
                   <span
                     style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-mono)' }}
                   >
-                    downloads
+                    {range === 'all' ? 'downloads' : 'uses'}
                   </span>
                 </div>
               </div>
@@ -204,7 +247,11 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
                   marginBottom: 8,
                 }}
               >
-                {!heroCandidate ? 'Nothing to show yet' : 'No downloads yet'}
+                {!heroCandidate
+                  ? 'Nothing to show yet'
+                  : range === 'month'
+                    ? 'No downloads this month'
+                    : 'No downloads yet'}
               </div>
               <p
                 style={{
@@ -217,7 +264,9 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
               >
                 {!heroCandidate
                   ? 'Add photos to your library first. Once they’re in the pool, download counts and your leader shot will show up here.'
-                  : 'None of your photos have been downloaded yet. When teammates save your work from the library, your most-used photo will appear here.'}
+                  : range === 'month'
+                    ? 'No one downloaded your photos during the current UTC month yet. Switch to All time to see lifetime performance.'
+                    : 'None of your photos have been downloaded yet. When teammates save your work from the library, your most-used photo will appear here.'}
               </p>
             </div>
           </div>
@@ -234,13 +283,13 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 12, fontWeight: 600 }}>Who used your photos</span>
             <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-              {stats.totalDownloads} total uses
+              {usesSubtitle}
             </span>
           </div>
           <div className="bar-chart">
             {downloadsByUser.length === 0 ? (
               <div style={{ padding: '16px 0', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
-                No downloads yet
+                {range === 'month' ? 'No downloads this month' : 'No downloads yet'}
               </div>
             ) : downloadsByUser.map((u, i) => {
               const pct = Math.round((u.count / maxDownloads) * 100)
@@ -272,19 +321,23 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
         {/* Top photos — table on desktop, full-width list on mobile */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
-            Your top photos
+            {range === 'all' ? 'Your top photos' : 'Top photos this month'}
           </div>
           <table className="utbl insights-top-photos-table-desktop">
             <thead>
               <tr>
                 <th>Photo</th>
                 <th>Collection</th>
-                <th>Uses</th>
+                <th>{range === 'all' ? 'Uses' : 'Uses (month)'}</th>
               </tr>
             </thead>
             <tbody>
               {topPhotos.length === 0 ? (
-                <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-3)' }}>No photos yet</td></tr>
+                <tr>
+                  <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-3)' }}>
+                    {range === 'month' ? 'No download activity on your photos this month' : 'No photos yet'}
+                  </td>
+                </tr>
               ) : topPhotos.map(p => (
                 <tr key={p.id}>
                   <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -296,7 +349,7 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
               ))}
             </tbody>
           </table>
-          <TopPhotosMobileList photos={topPhotos} />
+          <TopPhotosMobileList photos={topPhotos} range={range} />
         </div>
       </div>
 
@@ -329,9 +382,9 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
 
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
-            Recent downloads
+            {range === 'all' ? 'Recent activity' : 'Spotlight'}
           </div>
-          <RecentActivity topPhotos={topPhotos} />
+          <RecentActivity topPhotos={topPhotos} range={range} />
         </div>
       </div>
 
@@ -340,16 +393,19 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, topC
   )
 }
 
-function TopPhotosMobileList({ photos }: { photos: TopPhoto[] }) {
+function TopPhotosMobileList({ photos, range }: { photos: TopPhoto[]; range: RangeKey }) {
+  const label = range === 'all' ? 'Your top photos' : 'Top photos this month'
   if (photos.length === 0) {
     return (
-      <ul className="insights-top-photos-mobile" aria-label="Your top photos">
-        <li className="insights-top-photos-mobile-empty">No photos yet</li>
+      <ul className="insights-top-photos-mobile" aria-label={label}>
+        <li className="insights-top-photos-mobile-empty">
+          {range === 'month' ? 'No download activity this month' : 'No photos yet'}
+        </li>
       </ul>
     )
   }
   return (
-    <ul className="insights-top-photos-mobile" aria-label="Your top photos">
+    <ul className="insights-top-photos-mobile" aria-label={label}>
       {photos.map(p => (
         <li key={p.id} className="insights-top-photos-mobile-row">
           <div className="insights-top-photos-mobile-main">
@@ -450,7 +506,7 @@ function InsightsHeroBackdrop({
   )
 }
 
-function RecentActivityRow({ p }: { p: TopPhoto }) {
+function RecentActivityRow({ p, range }: { p: TopPhoto; range: RangeKey }) {
   const rowRef = useRef<HTMLDivElement>(null)
   const inView = useInView(rowRef, { rootMargin: '80px' })
   const path = p.thumbnail_path ?? p.storage_path
@@ -474,18 +530,20 @@ function RecentActivityRow({ p }: { p: TopPhoto }) {
           {p.title}
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-          {p.downloads_count} download{p.downloads_count !== 1 ? 's' : ''}
+          {p.downloads_count} {range === 'all' ? 'download' : 'use'}
+          {p.downloads_count !== 1 ? 's' : ''}
+          {range === 'month' ? ' this month' : ''}
         </div>
       </div>
     </div>
   )
 }
 
-function RecentActivity({ topPhotos }: { topPhotos: TopPhoto[] }) {
+function RecentActivity({ topPhotos, range }: { topPhotos: TopPhoto[]; range: RangeKey }) {
   if (!topPhotos.length) {
     return (
       <div style={{ padding: '16px', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
-        No recent activity
+        {range === 'all' ? 'No recent activity' : 'No activity this month'}
       </div>
     )
   }
@@ -493,7 +551,7 @@ function RecentActivity({ topPhotos }: { topPhotos: TopPhoto[] }) {
   return (
     <div>
       {topPhotos.map(p => (
-        <RecentActivityRow key={p.id} p={p} />
+        <RecentActivityRow key={p.id} p={p} range={range} />
       ))}
     </div>
   )

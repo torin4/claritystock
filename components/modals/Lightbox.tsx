@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, type MouseEvent } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { recordDownload, updateJobRef } from '@/lib/actions/downloads.actions'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
@@ -147,13 +147,19 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
   const showLoadingOverlay = !!displayPath && !showDisplayImage
   const isDone = !!downloadId
 
+  /** Block “Save image as…” on photos; keep default menu on prev/next (buttons). */
+  const handleImageAreaContextMenu = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    e.preventDefault()
+  }, [])
+
   if (!lightboxOpen) return null
 
   return (
     <div className={`lightbox ${lightboxOpen ? 'open' : ''}`}>
       <div className="lb-body">
         {/* Image area */}
-        <div className="lb-img-area">
+        <div className="lb-img-area" onContextMenu={handleImageAreaContextMenu}>
           {backdropUrl ? (
             <div className="lb-img-backdrop-layer" aria-hidden>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -161,6 +167,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
                 className={`lb-img-backdrop${showDisplayImage ? ' is-settled' : ''}`}
                 src={backdropUrl}
                 alt=""
+                draggable={false}
               />
             </div>
           ) : (
@@ -182,6 +189,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
                 className={`lb-img lb-img-display${showDisplayImage ? ' is-ready' : ''}`}
                 src={displayImageUrl}
                 alt={photo?.title}
+                draggable={false}
                 onLoad={() => setDisplayImageLoaded(true)}
               />
             ) : null}

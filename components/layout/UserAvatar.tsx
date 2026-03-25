@@ -27,7 +27,6 @@ export default function UserAvatar({ avatarUrl, initials, size = 44, className }
         fontSize: Math.max(10, Math.round(size * 0.28)),
         borderRadius: '50%',
         background: 'var(--accent-dim)',
-        border: '1px solid var(--accent)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

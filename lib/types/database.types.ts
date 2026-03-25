@@ -105,8 +105,17 @@ export interface ExifResult {
 
 export interface InsightsStats {
   totalPhotos: number
+  /**
+   * Personal Insights: sum of `downloads_count` on your photos.
+   * Admin: `COUNT(*)` from `downloads` (events). These match when DB counters stay in sync.
+   */
   totalDownloads: number
+  /** Download rows with `created_at` ≥ start of current month (UTC). */
   thisMonthDownloads: number
+  /**
+   * Personal Insights: photos you favorited (`favorites.user_id` = you).
+   * Admin: all favorite rows in the library.
+   */
   favoritedCount: number
 }
 
