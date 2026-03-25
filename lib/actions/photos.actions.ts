@@ -4,6 +4,17 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { assertOwnerOrAdmin, isUserAdmin } from '@/lib/auth/admin'
 import type { PhotoFormValues } from '@/lib/types/database.types'
+import type { PostgrestError } from '@supabase/supabase-js'
+
+/** PostgREST when a column is not in the live schema (migration not applied yet). */
+function isMissingColumnError(error: PostgrestError | null, column: string): boolean {
+  if (!error?.message) return false
+  const m = error.message
+  return (
+    m.includes(column) &&
+    (m.includes('schema cache') || m.includes('does not exist') || m.includes('Could not find'))
+  )
+}
 
 async function assertOwnedCollectionId(
   collectionId: string | null | undefined,
@@ -255,7 +266,7 @@ export async function publishPhoto(
     collectionId = newColl.id
   }
 
-  const { error } = await supabase.from('photos').insert({
+  const baseRow = {
     title: formValues.title,
     photographer_id: photographerId,
     collection_id: collectionId,
@@ -269,9 +280,22 @@ export async function publishPhoto(
     storage_path: storagePath,
     thumbnail_path: paths?.thumbnailPath ?? null,
     display_path: paths?.displayPath ?? null,
-    content_hash: paths?.contentHash ?? null,
     downloads_count: 0,
-  })
+  }
+
+  const withHash =
+    paths?.contentHash && paths.contentHash.length > 0
+      ? { ...baseRow, content_hash: paths.contentHash }
+      : baseRow
+
+  let { error } = await supabase.from('photos').insert(withHash)
+
+  if (error && paths?.contentHash && isMissingColumnError(error, 'content_hash')) {
+    console.warn(
+      '[publishPhoto] content_hash column missing — retry without it. Run migration 20260325210000_photos_content_hash.sql',
+    )
+    ;({ error } = await supabase.from('photos').insert(baseRow))
+  }
 
   if (error) throw error
   revalidatePath('/')
