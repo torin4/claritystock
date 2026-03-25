@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { deleteMyAccount } from '@/lib/actions/account.actions'
+import { isMissingHideOwnPhotosColumnError } from '@/lib/preferences/hideOwnPhotosInBrowse'
 import { deleteAllMyPhotos } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useBrowsePrefsStore } from '@/stores/browsePrefs.store'
@@ -194,9 +195,24 @@ export default function SettingsPanel({
                       .from('users')
                       .update({ hide_own_photos_in_browse: next })
                       .eq('id', userId)
-                    if (error) throw error
-                    useBrowsePrefsStore.getState().setHideOwnPhotosInBrowseOverride(next)
-                    router.refresh()
+
+                    if (!error) {
+                      useBrowsePrefsStore.getState().setHideOwnPhotosInBrowseOverride(next)
+                      router.refresh()
+                      return
+                    }
+
+                    if (isMissingHideOwnPhotosColumnError(error)) {
+                      const { error: authErr } = await supabase.auth.updateUser({
+                        data: { hide_own_photos_in_browse: next },
+                      })
+                      if (authErr) throw authErr
+                      useBrowsePrefsStore.getState().setHideOwnPhotosInBrowseOverride(next)
+                      router.refresh()
+                      return
+                    }
+
+                    throw error
                   } catch (err) {
                     console.error(err)
                     setHideOwnInBrowse(!next)

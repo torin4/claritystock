@@ -1,5 +1,6 @@
 'use client'
 
+import { GOOGLE_WORKSPACE_CHAT_URL } from '@/lib/admin/googleChatDm'
 import type { UsageAlertConfig } from '@/lib/admin/usageAlert'
 import { usageExceedsAlert } from '@/lib/admin/usageAlert'
 import type { UsageLedgerRow } from '@/lib/types/database.types'
@@ -14,22 +15,8 @@ const JAR_H = 72
 /** `true` = always show Email / Google Chat (for testing). Set to `false` to show contact only when over alert thresholds. */
 const SHOW_CONTACT_ALWAYS = true
 
-async function openGoogleChatDm(email: string) {
-  const res = await fetch('/api/admin/google-chat-dm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  })
-  const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
-  if (!res.ok) {
-    window.alert(data.error ?? `Could not open Chat (${res.status})`)
-    return
-  }
-  if (typeof data.url === 'string' && data.url) {
-    window.location.assign(data.url)
-  } else {
-    window.alert('Invalid response from server')
-  }
+function openGoogleWorkspaceChat() {
+  window.open(GOOGLE_WORKSPACE_CHAT_URL, '_blank', 'noopener,noreferrer')
 }
 
 function formatRatio(r: number) {
@@ -102,7 +89,6 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
                     row.email && row.email.includes('@')
                       ? `mailto:${row.email}?subject=${subj}&body=${body}`
                       : null
-                  const chatEmail = row.email && row.email.includes('@') ? row.email : null
                   return (
                     <tr key={row.userId} style={hot ? { background: 'color-mix(in srgb, var(--red) 6%, transparent)' } : undefined}>
                       <td>
@@ -167,16 +153,14 @@ export default function AdminPennyJarBandit({ rows, alert }: Props) {
                                 No email synced — run DB migration backfill or sign out/in once
                               </span>
                             )}
-                            {chatEmail ? (
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                title="Uses your Google Chat connection (Admin → Connect Google Chat). Opens in this window."
-                                onClick={() => void openGoogleChatDm(chatEmail)}
-                              >
-                                Google Chat
-                              </button>
-                            ) : null}
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              title="Opens Google Chat in a new tab"
+                              onClick={() => openGoogleWorkspaceChat()}
+                            >
+                              Google Chat
+                            </button>
                           </div>
                         ) : (
                           <span style={{ fontSize: 11, color: 'var(--text-3)' }}>—</span>

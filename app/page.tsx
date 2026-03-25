@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { attachSignedCollectionPreviewUrls, attachSignedThumbnailUrls } from '@/lib/photos/serverSignedUrls'
 import { getCollections } from '@/lib/queries/collections.queries'
 import { BROWSE_PAGE_SIZE, PHOTO_CARD_SELECT } from '@/lib/queries/photoSelects'
+import { resolveHideOwnPhotosInBrowse } from '@/lib/preferences/hideOwnPhotosInBrowse'
 import { getServerUser } from '@/lib/supabase/request-context'
 import type { Photo } from '@/lib/types/database.types'
 import BrowseClient from '@/components/browse/BrowseClient'
@@ -21,8 +22,11 @@ export default async function BrowsePage() {
     getCollections(supabase, { excludeCreatedBy: uid ?? null }),
   ])
 
-  const hideOwnPhotosInBrowse =
-    !prefsRes.error && prefsRes.data?.hide_own_photos_in_browse === true
+  const hideOwnPhotosInBrowse = resolveHideOwnPhotosInBrowse({
+    authUser: user,
+    dbError: prefsRes.error,
+    dbData: prefsRes.data,
+  })
 
   let photosQuery = supabase.from('photos').select(PHOTO_CARD_SELECT)
   if (hideOwnPhotosInBrowse && uid) {

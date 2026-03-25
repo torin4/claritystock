@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { resolveHideOwnPhotosInBrowse } from '@/lib/preferences/hideOwnPhotosInBrowse'
 import { createClient } from '@/lib/supabase/server'
 import type { User } from '@/lib/types/database.types'
 
@@ -27,15 +28,16 @@ export const getServerProfile = cache(async (): Promise<Pick<User, 'name' | 'ini
   }
   if (!data) return null
 
-  let hide_own_photos_in_browse = false
   const hideRes = await supabase
     .from('users')
     .select('hide_own_photos_in_browse')
     .eq('id', user.id)
     .maybeSingle()
-  if (!hideRes.error && hideRes.data?.hide_own_photos_in_browse === true) {
-    hide_own_photos_in_browse = true
-  }
+  const hide_own_photos_in_browse = resolveHideOwnPhotosInBrowse({
+    authUser: user,
+    dbError: hideRes.error,
+    dbData: hideRes.data,
+  })
 
   return { ...data, hide_own_photos_in_browse }
 })
