@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useBrowsePrefsStore } from '@/stores/browsePrefs.store'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -34,6 +35,16 @@ export default function BrowseClient({
   userId,
   hideOwnPhotosInBrowse = false,
 }: BrowseClientProps) {
+  const hideOverride = useBrowsePrefsStore((s) => s.hideOwnPhotosInBrowseOverride)
+  const hideEffective =
+    hideOverride !== null ? hideOverride : hideOwnPhotosInBrowse
+
+  useEffect(() => {
+    if (hideOverride !== null && hideOverride === hideOwnPhotosInBrowse) {
+      useBrowsePrefsStore.getState().setHideOwnPhotosInBrowseOverride(null)
+    }
+  }, [hideOwnPhotosInBrowse, hideOverride])
+
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -152,7 +163,7 @@ export default function BrowseClient({
       if (neighborhood) query = query.eq('neighborhood', neighborhood)
       if (collectionId) query = query.eq('collection_id', collectionId)
 
-      if (hideOwnPhotosInBrowse && userId) {
+      if (hideEffective && userId) {
         query = query.or(`photographer_id.is.null,photographer_id.neq.${userId}`)
       }
 
@@ -211,7 +222,7 @@ export default function BrowseClient({
         setLoading(false)
       }
     }
-  }, [search, category, neighborhood, collectionId, sort, quickFilter, userId, hideOwnPhotosInBrowse])
+  }, [search, category, neighborhood, collectionId, sort, quickFilter, userId, hideEffective])
 
   useEffect(() => {
     if (!didRunInitialFetch.current) {

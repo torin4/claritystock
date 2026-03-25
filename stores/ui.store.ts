@@ -13,6 +13,10 @@ interface UIState {
   notifPopoverOpen: boolean
   /** Increment to tell Sidebar to refetch “Recent collections”. */
   sidebarCollectionsEpoch: number
+  /**
+   * After saving display name in Settings; shown in Sidebar until server props catch up (router.refresh).
+   */
+  optimisticDisplayName: string | null
 }
 
 interface UIActions {
@@ -33,6 +37,7 @@ interface UIActions {
   bumpSidebarCollections: () => void
   /** Single update: close overlays that should not survive a client route change. */
   resetNavigationUi: () => void
+  setOptimisticDisplayName: (name: string | null) => void
 }
 
 const defaultState: UIState = {
@@ -45,24 +50,41 @@ const defaultState: UIState = {
   sidebarOpen: false,
   notifPopoverOpen: false,
   sidebarCollectionsEpoch: 0,
+  optimisticDisplayName: null,
 }
 
 export const useUIStore = create<UIState & UIActions>((set) => ({
   ...defaultState,
 
-  openLightbox: (photoId) => set({ ...defaultState, lightboxOpen: true, lightboxPhotoId: photoId }),
+  openLightbox: (photoId) =>
+    set((s) => ({
+      ...defaultState,
+      optimisticDisplayName: s.optimisticDisplayName,
+      lightboxOpen: true,
+      lightboxPhotoId: photoId,
+    })),
   closeLightbox: () => set({ lightboxOpen: false, lightboxPhotoId: null }),
 
   openUpload: () => set((s) => ({ uploadModalOpen: true, lightboxOpen: false, editModalPhotoId: null, notifPopoverOpen: false })),
   closeUpload: () => set({ uploadModalOpen: false }),
 
-  openEdit: (photoId) => set({ ...defaultState, editModalPhotoId: photoId }),
+  openEdit: (photoId) =>
+    set((s) => ({
+      ...defaultState,
+      optimisticDisplayName: s.optimisticDisplayName,
+      editModalPhotoId: photoId,
+    })),
   closeEdit: () => set({ editModalPhotoId: null }),
 
   openFilter: () => set((s) => ({ filterDrawerOpen: true, notifPopoverOpen: false })),
   closeFilter: () => set({ filterDrawerOpen: false }),
 
-  openSettings: () => set({ ...defaultState, settingsPanelOpen: true }),
+  openSettings: () =>
+    set((s) => ({
+      ...defaultState,
+      optimisticDisplayName: s.optimisticDisplayName,
+      settingsPanelOpen: true,
+    })),
   closeSettings: () => set({ settingsPanelOpen: false }),
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -84,5 +106,8 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
       settingsPanelOpen: false,
       editModalPhotoId: null,
       sidebarOpen: false,
+      optimisticDisplayName: null,
     }),
+
+  setOptimisticDisplayName: (name) => set({ optimisticDisplayName: name }),
 }))

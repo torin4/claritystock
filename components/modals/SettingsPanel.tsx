@@ -1,10 +1,14 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { useUIStore } from '@/stores/ui.store'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { deleteMyAccount } from '@/lib/actions/account.actions'
 import { deleteAllMyPhotos } from '@/lib/actions/photos.actions'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useBrowsePrefsStore } from '@/stores/browsePrefs.store'
+import { useUIStore } from '@/stores/ui.store'
 import UserAvatar from '@/components/layout/UserAvatar'
 import { useRouter } from 'next/navigation'
+
+const DELETE_ACCOUNT_PHRASE = 'delete my account'
 
 interface SettingsPanelProps {
   userId: string
@@ -23,18 +27,39 @@ export default function SettingsPanel({
   userRole,
   hideOwnPhotosInBrowse: hideOwnInitial,
 }: SettingsPanelProps) {
-  const { settingsPanelOpen, closeSettings } = useUIStore()
+  const { settingsPanelOpen, closeSettings, optimisticDisplayName, setOptimisticDisplayName } = useUIStore()
   const [displayName, setDisplayName] = useState(userName)
   const [hideOwnInBrowse, setHideOwnInBrowse] = useState(hideOwnInitial)
   const [hideOwnSaving, setHideOwnSaving] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
   const [removingPhotos, setRemovingPhotos] = useState(false)
+  const [showAccountDeletion, setShowAccountDeletion] = useState(false)
+  const [deleteAccountPhrase, setDeleteAccountPhrase] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
   const router = useRouter()
+
+  const deletePhraseMatches =
+    deleteAccountPhrase.trim().toLowerCase() === DELETE_ACCOUNT_PHRASE
 
   useEffect(() => {
     setHideOwnInBrowse(hideOwnInitial)
   }, [hideOwnInitial])
 
+  useEffect(() => {
+    if (!settingsPanelOpen) {
+      setShowAccountDeletion(false)
+      setDeleteAccountPhrase('')
+      setDeletingAccount(false)
+    }
+  }, [settingsPanelOpen])
+
+  useEffect(() => {
+    if (!settingsPanelOpen) return
+    setDisplayName((optimisticDisplayName ?? userName) || '')
+  }, [settingsPanelOpen, optimisticDisplayName, userName])
+
   const handleLogout = async () => {
+    useUIStore.getState().setOptimisticDisplayName(null)
     const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
     router.push('/login')
@@ -100,7 +125,7 @@ export default function SettingsPanel({
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
               <UserAvatar avatarUrl={userAvatarUrl} initials={userInitials} size={46} />
               <div>
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{userName}</div>
+                <div style={{ fontSize: '14px', fontWeight: 500 }}>{displayName || userName}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{userRole}</div>
               </div>
             </div>
@@ -113,14 +138,33 @@ export default function SettingsPanel({
               />
             </div>
             <button
+              type="button"
               className="btn btn-primary btn-sm"
               style={{ width: '100%' }}
+              disabled={profileSaving}
               onClick={async () => {
-                const supabase = getSupabaseBrowserClient()
-                await supabase.from('users').update({ name: displayName }).eq('id', userId)
+                const trimmed = displayName.trim()
+                if (!trimmed) {
+                  alert('Display name can’t be empty.')
+                  return
+                }
+                setProfileSaving(true)
+                try {
+                  const supabase = getSupabaseBrowserClient()
+                  const { error } = await supabase.from('users').update({ name: trimmed }).eq('id', userId)
+                  if (error) throw error
+                  setOptimisticDisplayName(trimmed)
+                  setDisplayName(trimmed)
+                  router.refresh()
+                } catch (err) {
+                  console.error(err)
+                  alert(err instanceof Error ? err.message : 'Could not save display name')
+                } finally {
+                  setProfileSaving(false)
+                }
               }}
             >
-              Save changes
+              {profileSaving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
 
@@ -151,6 +195,7 @@ export default function SettingsPanel({
                       .update({ hide_own_photos_in_browse: next })
                       .eq('id', userId)
                     if (error) throw error
+                    useBrowsePrefsStore.getState().setHideOwnPhotosInBrowseOverride(next)
                     router.refresh()
                   } catch (err) {
                     console.error(err)
@@ -246,9 +291,127 @@ export default function SettingsPanel({
             >
               {removingPhotos ? 'Removing…' : '✕ Remove all my photos from Library'}
             </button>
-            <button className="sp-danger" style={{ display: 'block', fontSize: '12px', color: 'var(--red)', cursor: 'pointer', background: 'none', border: 'none', padding: '4px 0', fontFamily: 'var(--font-body)', marginTop: '4px' }}>
-              ✕ Delete my account
-            </button>
+
+            {!showAccountDeletion ? (
+              <button
+                type="button"
+                className="sp-danger"
+                disabled={deletingAccount}
+                style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  color: 'var(--red)',
+                  cursor: deletingAccount ? 'not-allowed' : 'pointer',
+                  opacity: deletingAccount ? 0.6 : 1,
+                  background: 'none',
+                  border: 'none',
+                  padding: '4px 0',
+                  fontFamily: 'var(--font-body)',
+                  marginTop: '10px',
+                  textAlign: 'left',
+                }}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      'Continue to account deletion? On the next step you must type a confirmation phrase. Your uploaded photos will be removed and your sign-in for this app will be permanently deleted. This cannot be undone.',
+                    )
+                  ) {
+                    return
+                  }
+                  setShowAccountDeletion(true)
+                }}
+              >
+                ✕ Delete my account
+              </button>
+            ) : (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  background: 'var(--surface-2)',
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-2)',
+                    lineHeight: 1.45,
+                    margin: '0 0 10px',
+                  }}
+                >
+                  This permanently deletes your workspace profile and sign-in. All photos you uploaded are removed first.{' '}
+                  <strong style={{ color: 'var(--text)' }}>Type the phrase below</strong> (capitalization doesn’t matter).
+                </p>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    color: 'var(--text-3)',
+                    marginBottom: 6,
+                  }}
+                >
+                  Required phrase:{' '}
+                  <span style={{ color: 'var(--text)' }}>{DELETE_ACCOUNT_PHRASE}</span>
+                </div>
+                <input
+                  className="sp-input ui"
+                  value={deleteAccountPhrase}
+                  onChange={(e) => setDeleteAccountPhrase(e.target.value)}
+                  placeholder={DELETE_ACCOUNT_PHRASE}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-label="Type delete my account to confirm"
+                  disabled={deletingAccount}
+                  style={{ marginBottom: 10 }}
+                />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={deletingAccount}
+                    onClick={() => {
+                      setShowAccountDeletion(false)
+                      setDeleteAccountPhrase('')
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={!deletePhraseMatches || deletingAccount}
+                    style={{
+                      background: 'var(--red)',
+                      borderColor: 'var(--red)',
+                      color: '#fff',
+                      opacity: !deletePhraseMatches || deletingAccount ? 0.45 : 1,
+                    }}
+                    onClick={async () => {
+                      if (!deletePhraseMatches || deletingAccount) return
+                      setDeletingAccount(true)
+                      try {
+                        await deleteMyAccount()
+                        useUIStore.getState().setOptimisticDisplayName(null)
+                        useBrowsePrefsStore.getState().setHideOwnPhotosInBrowseOverride(null)
+                        const supabase = getSupabaseBrowserClient()
+                        await supabase.auth.signOut()
+                        closeSettings()
+                        router.push('/login')
+                      } catch (e) {
+                        console.error(e)
+                        alert(e instanceof Error ? e.message : 'Could not delete account')
+                      } finally {
+                        setDeletingAccount(false)
+                      }
+                    }}
+                  >
+                    {deletingAccount ? 'Deleting…' : 'Permanently delete my account'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
