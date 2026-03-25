@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import type { Category, SortOption } from '@/lib/types/database.types'
+import { neighborhoodForQuery } from '@/lib/utils/normalizeNeighborhood'
 
 const CATEGORIES: { label: string; value: Category | null }[] = [
   { label: 'All', value: null },
@@ -26,9 +27,10 @@ export default function FilterDrawer({ neighborhoodOptions }: FilterDrawerProps)
   const { category, neighborhood, sort, setCategory, setNeighborhood, setSort, clearAll } = useFilterStore()
 
   const locationChoices = useMemo(() => {
+    const canonical = neighborhood ? neighborhoodForQuery(neighborhood) ?? neighborhood : null
     const set = new Set(neighborhoodOptions)
-    if (neighborhood && !set.has(neighborhood)) {
-      return [...neighborhoodOptions, neighborhood].sort((a, b) => a.localeCompare(b))
+    if (canonical && !set.has(canonical)) {
+      return [...neighborhoodOptions, canonical].sort((a, b) => a.localeCompare(b))
     }
     return neighborhoodOptions
   }, [neighborhoodOptions, neighborhood])
@@ -65,7 +67,7 @@ export default function FilterDrawer({ neighborhoodOptions }: FilterDrawerProps)
             <div className="fd-lbl">Location</div>
             <select
               className="fd-select"
-              value={neighborhood ?? ''}
+              value={neighborhood ? neighborhoodForQuery(neighborhood) ?? neighborhood : ''}
               onChange={e => setNeighborhood(e.target.value || null)}
             >
               <option value="">Anywhere</option>

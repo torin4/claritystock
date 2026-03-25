@@ -510,6 +510,85 @@ REVOKE ALL ON FUNCTION public.get_browse_neighborhoods(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_browse_neighborhoods(uuid) TO authenticated;
 
 -- ---------------------------------------------------------------------------
+-- photos.neighborhood — case + typo normalization (pg_trgm similarity)
+-- ---------------------------------------------------------------------------
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE OR REPLACE FUNCTION public.normalize_neighborhood_case(p_input text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN p_input IS NULL THEN NULL
+    WHEN trim(p_input) = '' THEN NULL
+    ELSE initcap(lower(trim(p_input)))
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.photos_normalize_neighborhood()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  raw text;
+  trimmed text;
+  best text;
+  best_sim real;
+BEGIN
+  IF NEW.neighborhood IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  raw := trim(NEW.neighborhood);
+  IF raw = '' THEN
+    NEW.neighborhood := NULL;
+    RETURN NEW;
+  END IF;
+
+  trimmed := initcap(lower(raw));
+
+  SELECT p.neighborhood INTO best
+  FROM public.photos p
+  WHERE p.neighborhood IS NOT NULL
+    AND trim(p.neighborhood) <> ''
+    AND lower(trim(p.neighborhood)) = lower(raw)
+  LIMIT 1;
+
+  IF best IS NOT NULL THEN
+    NEW.neighborhood := best;
+    RETURN NEW;
+  END IF;
+
+  SELECT p.neighborhood, similarity(lower(trim(p.neighborhood)), lower(raw))
+  INTO best, best_sim
+  FROM public.photos p
+  WHERE p.neighborhood IS NOT NULL
+    AND trim(p.neighborhood) <> ''
+    AND (TG_OP = 'INSERT' OR p.id IS DISTINCT FROM NEW.id)
+  ORDER BY similarity(lower(trim(p.neighborhood)), lower(raw)) DESC
+  LIMIT 1;
+
+  IF best IS NOT NULL AND best_sim IS NOT NULL AND best_sim >= 0.45 THEN
+    NEW.neighborhood := best;
+    RETURN NEW;
+  END IF;
+
+  NEW.neighborhood := trimmed;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS photos_normalize_neighborhood_trigger ON public.photos;
+CREATE TRIGGER photos_normalize_neighborhood_trigger
+  BEFORE INSERT OR UPDATE OF neighborhood ON public.photos
+  FOR EACH ROW
+  EXECUTE FUNCTION public.photos_normalize_neighborhood();
+
+-- ---------------------------------------------------------------------------
 -- RPC — top contributors for Insights (by cumulative uses on their photos)
 -- ---------------------------------------------------------------------------
 

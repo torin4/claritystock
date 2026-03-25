@@ -7,6 +7,7 @@ import {
   PHOTO_DETAIL_SELECT,
   PHOTO_MY_LIBRARY_CARD_SELECT,
 } from '@/lib/queries/photoSelects'
+import { neighborhoodForQuery } from '@/lib/utils/normalizeNeighborhood'
 
 export async function getPhotos(
   supabase: SupabaseClient,
@@ -28,8 +29,9 @@ export async function getPhotos(
   if (filters.category) {
     query = query.eq('category', filters.category)
   }
-  if (filters.neighborhood) {
-    query = query.eq('neighborhood', filters.neighborhood)
+  {
+    const n = neighborhoodForQuery(filters.neighborhood)
+    if (n) query = query.eq('neighborhood', n)
   }
   if (filters.collectionId) {
     query = query.eq('collection_id', filters.collectionId)

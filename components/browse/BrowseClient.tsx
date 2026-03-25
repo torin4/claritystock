@@ -19,6 +19,7 @@ import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import type { Photo, Collection } from '@/lib/types/database.types'
 import { devError } from '@/lib/utils/devLog'
+import { neighborhoodForQuery } from '@/lib/utils/normalizeNeighborhood'
 
 interface BrowseClientProps {
   initialPhotos: Photo[]
@@ -65,6 +66,8 @@ export default function BrowseClient({
   const search = useFilterStore((s) => s.search)
   const category = useFilterStore((s) => s.category)
   const neighborhood = useFilterStore((s) => s.neighborhood)
+  /** Matches DB / trigger casing so `.eq` and filter keys stay consistent. */
+  const neighborhoodQuery = useMemo(() => neighborhoodForQuery(neighborhood), [neighborhood])
   const sort = useFilterStore((s) => s.sort)
   const quickFilter = useFilterStore((s) => s.quickFilter)
   const collectionId = useFilterStore((s) => s.collectionId)
@@ -85,7 +88,7 @@ export default function BrowseClient({
       [
         search,
         category ?? '',
-        neighborhood ?? '',
+        neighborhoodQuery ?? '',
         sort,
         quickFilter,
         collectionId ?? '',
@@ -93,7 +96,7 @@ export default function BrowseClient({
     [
       search,
       category,
-      neighborhood,
+      neighborhoodQuery,
       sort,
       quickFilter,
       collectionId,
@@ -195,7 +198,7 @@ export default function BrowseClient({
         query = query.textSearch('fts', search, { type: 'websearch' })
       }
       if (category) query = query.eq('category', category)
-      if (neighborhood) query = query.eq('neighborhood', neighborhood)
+      if (neighborhoodQuery) query = query.eq('neighborhood', neighborhoodQuery)
       if (collectionId) query = query.eq('collection_id', collectionId)
 
       if (hideEffective && userId) {
@@ -270,7 +273,7 @@ export default function BrowseClient({
         setLoading(false)
       }
     }
-  }, [search, category, neighborhood, collectionId, sort, quickFilter, userId, hideEffective])
+  }, [search, category, neighborhoodQuery, collectionId, sort, quickFilter, userId, hideEffective])
 
   useEffect(() => {
     if (!didRunInitialFetch.current) {
@@ -355,7 +358,7 @@ export default function BrowseClient({
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, is_downloaded_by_me: true } : p))
   }, [])
 
-  const hasActiveFilters = !!(category || neighborhood || (search && search.length > 0))
+  const hasActiveFilters = !!(category || neighborhoodQuery || (search && search.length > 0))
   const filteredCollections = useMemo(() => {
     const q = search.trim().toLowerCase()
     return collections.filter((c) => {
