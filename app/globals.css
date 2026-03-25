@@ -1433,6 +1433,9 @@ body {
     z-index: 300;
     width: 220px !important;
     min-width: 220px !important;
+    height: 100dvh;
+    min-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     transition: left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   }
   nav.sidebar.open {

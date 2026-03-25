@@ -167,9 +167,11 @@ export default function Sidebar({
     borderRight: '1px solid var(--border)',
     display: 'flex',
     flexDirection: 'column',
-    height: '100vh',
+    height: '100dvh',
+    minHeight: '100dvh',
     overflow: 'hidden',
     position: 'relative',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
   }
 
   return (
