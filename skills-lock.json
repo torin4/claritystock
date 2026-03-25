@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "routing-middleware": {
+      "source": "vercel-labs/vercel-plugin",
+      "sourceType": "github",
+      "computedHash": "7a54bf7af88907ed73ccbad12b98813ed1747ae1891a9757f56042c73bb4de9a"
+    }
+  }
+}
