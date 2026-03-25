@@ -1271,6 +1271,47 @@ body {
 .bar-fill-lbl { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); font-family: var(--font-mono); }
 .bar-count { font-size: 11px; font-weight: 500; min-width: 28px; text-align: right; font-family: var(--font-mono); }
 
+.insights-contributor-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.insights-contributor-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.insights-contributor-meta {
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: 400;
+  line-height: 1.2;
+}
+.insights-contributor-you-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+.insights-contributor-row {
+  align-items: flex-start;
+}
+.insights-contributor-row .bar-av {
+  margin-top: 2px;
+}
+.insights-contributor-row--you {
+  margin: 0 -6px;
+  padding: 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
 /* Insights: full-width top photos on small screens (table stays on md+) */
 .insights-top-photos-mobile {
   list-style: none;

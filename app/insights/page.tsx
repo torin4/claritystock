@@ -10,7 +10,7 @@ export default async function InsightsPage() {
   const user = await getServerUser()
   if (!user) redirect('/login')
 
-  const { stats, topPhotos, downloadsByUser } = await getInsightsPageData(supabase, user.id)
+  const { stats, topPhotos, downloadsByUser, topContributors } = await getInsightsPageData(supabase, user.id)
   const [thumbnailUrls, heroUrl] = await Promise.all([
     getSignedPhotoUrls(topPhotos.map((photo) => photo.thumbnail_path ?? photo.storage_path)),
     getSignedPhotoUrl(topPhotos[0]?.storage_path),
@@ -29,6 +29,7 @@ export default async function InsightsPage() {
       stats={stats}
       topPhotos={initialTopPhotos as never}
       downloadsByUser={downloadsByUser}
+      topContributors={topContributors}
       userId={user.id}
     />
   )

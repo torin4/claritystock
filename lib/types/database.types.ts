@@ -117,6 +117,15 @@ export interface DownloadByUser {
   count: number
 }
 
+/** Insights — library-wide contributor leaderboard (from get_top_contributors RPC). */
+export interface TopContributor {
+  userId: string
+  userName: string
+  initials: string
+  photoCount: number
+  downloadUses: number
+}
+
 /** Admin team analytics — top library asset with owner. */
 export interface AdminTopPhoto {
   id: string

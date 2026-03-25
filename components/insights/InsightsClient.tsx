@@ -7,7 +7,7 @@ import { useInView } from '@/lib/hooks/useInView'
 import UploadModal from '@/components/modals/UploadModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
-import type { InsightsStats, DownloadByUser } from '@/lib/types/database.types'
+import type { InsightsStats, DownloadByUser, TopContributor } from '@/lib/types/database.types'
 
 interface TopPhoto {
   id: string
@@ -24,6 +24,7 @@ interface Props {
   stats: InsightsStats
   topPhotos: TopPhoto[]
   downloadsByUser: DownloadByUser[]
+  topContributors: TopContributor[]
   userId: string
 }
 
@@ -35,7 +36,7 @@ const AVATAR_COLORS = [
   { bg: '#1a2832', text: '#6ab4c4' },
 ]
 
-export default function InsightsClient({ stats, topPhotos, downloadsByUser, userId }: Props) {
+export default function InsightsClient({ stats, topPhotos, downloadsByUser, topContributors, userId }: Props) {
   const router = useRouter()
   const { openUpload } = useUIStore()
   const heroCandidate = topPhotos[0] ?? null
@@ -299,18 +300,31 @@ export default function InsightsClient({ stats, topPhotos, downloadsByUser, user
         </div>
       </div>
 
-      {/* Added vs. download balance + recent activity */}
+      {/* Top contributors + recent activity */}
       <div
         className="insights-bottom-row"
         style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '14px 20px 32px' }}
       >
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600 }}>
-            Added vs. download balance
+        <div
+          className="insights-top-contributors-card"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}
+        >
+          <div
+            style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Top contributors</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+              By total uses · all time
+            </span>
           </div>
-          <div style={{ padding: 16 }}>
-            <BalanceBar uploads={stats.totalPhotos} downloads={stats.totalDownloads} />
-          </div>
+          <TopContributorsPanel contributors={topContributors} currentUserId={userId} />
         </div>
 
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
@@ -358,36 +372,61 @@ function StatCard({ value, label }: { value: number; label: string }) {
   )
 }
 
-function BalanceBar({ uploads, downloads }: { uploads: number; downloads: number }) {
-  const total = uploads + downloads || 1
-  const upPct = Math.round((uploads / total) * 100)
-  const dlPct = 100 - upPct
+function TopContributorsPanel({
+  contributors,
+  currentUserId,
+}: {
+  contributors: TopContributor[]
+  currentUserId: string
+}) {
+  const maxUses = contributors[0]?.downloadUses ?? 1
+
+  if (contributors.length === 0) {
+    return (
+      <div style={{ padding: '16px 0', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
+        No contributors yet
+      </div>
+    )
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', minWidth: 70 }}>Added</div>
-        <div style={{ flex: 1, height: 20, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ width: `${upPct}%`, height: '100%', background: 'var(--accent)', borderRadius: 4 }} />
-        </div>
-        <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', minWidth: 30, textAlign: 'right', color: 'var(--text-2)' }}>
-          {uploads}
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', minWidth: 70 }}>Downloads</div>
-        <div style={{ flex: 1, height: 20, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ width: `${dlPct}%`, height: '100%', background: '#6a9ec4', borderRadius: 4 }} />
-        </div>
-        <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', minWidth: 30, textAlign: 'right', color: 'var(--text-2)' }}>
-          {downloads}
-        </div>
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
-        {downloads > 0
-          ? `${(downloads / Math.max(uploads, 1)).toFixed(1)}× download ratio`
-          : 'No downloads yet'}
-      </div>
+    <div className="bar-chart insights-top-contributors-chart">
+      {contributors.map((c, i) => {
+        const pct = Math.round((c.downloadUses / maxUses) * 100)
+        const colors = AVATAR_COLORS[i % AVATAR_COLORS.length]
+        const isYou = c.userId === currentUserId
+        return (
+          <div
+            key={c.userId}
+            className={`bar-row insights-contributor-row${isYou ? ' insights-contributor-row--you' : ''}`}
+          >
+            <div
+              className="bar-av"
+              style={{ background: colors.bg, color: colors.text }}
+            >
+              {c.initials}
+            </div>
+            <div className="bar-name insights-contributor-name">
+              <div className="insights-contributor-name-line">
+                <span>{c.userName.split(' ')[0]}</span>
+                {isYou ? <span className="insights-contributor-you-badge">You</span> : null}
+              </div>
+              <div className="insights-contributor-meta">
+                {c.photoCount} photo{c.photoCount !== 1 ? 's' : ''}
+              </div>
+            </div>
+            <div className="bar-track">
+              <div
+                className="bar-fill"
+                style={{ width: `${pct}%`, background: `color-mix(in srgb, var(--accent) 70%, ${colors.text})` }}
+              >
+                <span className="bar-fill-lbl">{c.downloadUses}</span>
+              </div>
+            </div>
+            <div className="bar-count" style={{ color: 'var(--text-2)' }}>{c.downloadUses}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }

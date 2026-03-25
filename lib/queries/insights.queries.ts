@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { InsightsStats, DownloadByUser } from '@/lib/types/database.types'
+import type { InsightsStats, DownloadByUser, TopContributor } from '@/lib/types/database.types'
 
 interface InsightPhotoMetricRow {
   id: string
@@ -36,12 +36,25 @@ function groupDownloadsByUser(
     .sort((a, b) => b.count - a.count)
 }
 
+type RpcContributorRow = {
+  user_id: string
+  user_name: string | null
+  user_initials: string | null
+  photo_count: number | string
+  download_uses: number | string
+}
+
 export async function getInsightsPageData(
   supabase: SupabaseClient,
   userId: string,
-): Promise<{ stats: InsightsStats; topPhotos: TopPhotoRow[]; downloadsByUser: DownloadByUser[] }> {
+): Promise<{
+  stats: InsightsStats
+  topPhotos: TopPhotoRow[]
+  downloadsByUser: DownloadByUser[]
+  topContributors: TopContributor[]
+}> {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
-  const [photoMetricsRes, topPhotosRes, favsRes] = await Promise.all([
+  const [photoMetricsRes, topPhotosRes, favsRes, contributorsRes] = await Promise.all([
     supabase.from('photos').select('id, downloads_count').eq('photographer_id', userId),
     supabase
       .from('photos')
@@ -50,10 +63,12 @@ export async function getInsightsPageData(
       .order('downloads_count', { ascending: false })
       .limit(5),
     supabase.from('favorites').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+    supabase.rpc('get_top_contributors', { p_limit: 10 }),
   ])
   if (photoMetricsRes.error) throw photoMetricsRes.error
   if (topPhotosRes.error) throw topPhotosRes.error
   if (favsRes.error) throw favsRes.error
+  if (contributorsRes.error) throw contributorsRes.error
 
   const photoMetrics = (photoMetricsRes.data ?? []) as InsightPhotoMetricRow[]
   const ids = photoMetrics.map((photo) => photo.id)
@@ -76,6 +91,14 @@ export async function getInsightsPageData(
     collection: Array.isArray(photo.collection) ? (photo.collection[0] ?? null) : (photo.collection ?? null),
   }))
 
+  const topContributors: TopContributor[] = ((contributorsRes.data ?? []) as RpcContributorRow[]).map((row) => ({
+    userId: row.user_id,
+    userName: row.user_name ?? 'Unknown',
+    initials: row.user_initials ?? '?',
+    photoCount: Number(row.photo_count) || 0,
+    downloadUses: Number(row.download_uses) || 0,
+  }))
+
   return {
     stats: {
       totalPhotos: photoMetrics.length,
@@ -87,5 +110,6 @@ export async function getInsightsPageData(
     downloadsByUser: groupDownloadsByUser(
       (downloadsRes.data ?? []) as Array<{ downloaded_by: string; downloader: { id: string; name: string; initials: string } | null }>,
     ),
+    topContributors,
   }
 }

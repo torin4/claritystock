@@ -452,6 +452,46 @@ $$;
 GRANT EXECUTE ON FUNCTION public.remove_my_downloads(uuid[]) TO authenticated;
 
 -- ---------------------------------------------------------------------------
+-- RPC — top contributors for Insights (by cumulative uses on their photos)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.get_top_contributors(p_limit int DEFAULT 10)
+RETURNS TABLE (
+  user_id uuid,
+  user_name text,
+  user_initials text,
+  photo_count bigint,
+  download_uses bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  SELECT
+    agg.photographer_id AS user_id,
+    u.name AS user_name,
+    u.initials AS user_initials,
+    agg.photo_count,
+    agg.download_uses
+  FROM (
+    SELECT
+      p.photographer_id,
+      COUNT(*)::bigint AS photo_count,
+      COALESCE(SUM(p.downloads_count), 0)::bigint AS download_uses
+    FROM public.photos p
+    WHERE p.photographer_id IS NOT NULL
+    GROUP BY p.photographer_id
+  ) agg
+  JOIN public.users u ON u.id = agg.photographer_id
+  ORDER BY agg.download_uses DESC, agg.photo_count DESC
+  LIMIT LEAST(GREATEST(COALESCE(p_limit, 10), 1), 50);
+$$;
+
+REVOKE ALL ON FUNCTION public.get_top_contributors(int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_top_contributors(int) TO authenticated;
+
+-- ---------------------------------------------------------------------------
 -- RPC — recent collections for nav (all users’ collections, by last activity)
 -- ---------------------------------------------------------------------------
 
