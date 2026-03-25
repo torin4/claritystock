@@ -53,6 +53,8 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
   /** Detect browser back removing ?collection= so we can clear the store without fighting tile drill. */
   const prevCollectionParamRef = useRef<string | null>(null)
   const fetchAbortRef = useRef<AbortController | null>(null)
+  /** Open lightbox once per `?photo=` deep link after the photo appears in the loaded grid. */
+  const consumedPhotoFromUrlRef = useRef<string | null>(null)
 
   const filterKey = useMemo(
     () =>
@@ -254,6 +256,23 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
     prevCollectionParamRef.current = null
   }, [searchParams, collectionId, setCollection])
 
+  useEffect(() => {
+    const id = searchParams.get('photo')
+    if (!id) {
+      consumedPhotoFromUrlRef.current = null
+      return
+    }
+    if (loading) return
+    if (consumedPhotoFromUrlRef.current === id) return
+    if (!photos.some((p) => p.id === id)) return
+    consumedPhotoFromUrlRef.current = id
+    useUIStore.getState().openLightbox(id)
+    const next = new URLSearchParams(searchParams.toString())
+    next.delete('photo')
+    const href = next.toString() ? `${pathname}?${next.toString()}` : pathname
+    router.replace(href, { scroll: false })
+  }, [loading, photos, pathname, router, searchParams])
+
   const handleFavoriteToggle = useCallback((photoId: string, val: boolean) => {
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, is_favorited: val } : p))
   }, [])
@@ -281,6 +300,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
     setBrowseMode('collections')
     const next = new URLSearchParams(searchParams.toString())
     next.delete('collection')
+    next.delete('photo')
     const href = next.toString() ? `${pathname}?${next.toString()}` : pathname
     router.replace(href, { scroll: false })
   }, [setCollection, searchParams, pathname, router])

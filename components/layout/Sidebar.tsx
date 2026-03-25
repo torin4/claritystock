@@ -7,7 +7,7 @@ import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import NotificationPopover from '@/components/modals/NotificationPopover'
 import SettingsPanel from '@/components/modals/SettingsPanel'
 import BrandTitle from '@/components/layout/BrandTitle'
-import type { Collection } from '@/lib/types/database.types'
+import type { RecentNavItem } from '@/lib/navigation/recentNav'
 
 // SVG icons as components
 function BrowseIcon() {
@@ -64,24 +64,25 @@ interface NavItem {
   icon: React.ReactNode
 }
 
-type RecentCollection = {
-  id: string
-  name: string
-  photos?: Collection['photos']
-}
-
 interface SidebarProps {
   userName: string
   userInitials: string
   userRole: string
   userId: string
-  recentCollections: RecentCollection[]
+  recentItems: RecentNavItem[]
 }
 
-function RecentCollectionThumb({ collection }: { collection: RecentCollection }) {
-  const previewPhoto = collection.photos?.[0]
-  const path = previewPhoto?.thumbnail_path ?? previewPhoto?.storage_path ?? null
-  const url = useSignedPhotoUrl(path, { initialUrl: previewPhoto?.thumbnail_url ?? null })
+function RecentNavThumb({
+  thumbnailPath,
+  storagePath,
+  initialUrl,
+}: {
+  thumbnailPath: string | null
+  storagePath: string | null
+  initialUrl?: string | null
+}) {
+  const path = thumbnailPath ?? storagePath ?? null
+  const url = useSignedPhotoUrl(path, { initialUrl: initialUrl ?? null })
 
   if (!url) {
     return <div style={{ width: '100%', height: '100%', background: 'var(--surface-2)' }} />
@@ -99,7 +100,17 @@ function RecentCollectionThumb({ collection }: { collection: RecentCollection })
   )
 }
 
-export default function Sidebar({ userName, userInitials, userRole, userId, recentCollections }: SidebarProps) {
+function recentItemHref(item: RecentNavItem): string {
+  if (item.kind === 'collection') {
+    return `/?collection=${item.id}`
+  }
+  if (item.collectionId) {
+    return `/?collection=${item.collectionId}&photo=${item.id}`
+  }
+  return `/?photo=${item.id}`
+}
+
+export default function Sidebar({ userName, userInitials, userRole, userId, recentItems }: SidebarProps) {
   const pathname = usePathname()
   const sidebarOpen = useUIStore(s => s.sidebarOpen)
   const openSettings = useUIStore(s => s.openSettings)
@@ -207,14 +218,14 @@ export default function Sidebar({ userName, userInitials, userRole, userId, rece
             </Link>
           ))}
 
-          {/* Collections section */}
-          {recentCollections.length > 0 && (
+          {/* Recents: others’ collections + their uploads (mixed by activity) */}
+          {recentItems.length > 0 && (
             <>
-              <span className="s-section-lbl" style={{ marginTop: '8px' }}>Recent collections</span>
-              {recentCollections.map(c => (
+              <span className="s-section-lbl" style={{ marginTop: '8px' }}>Recents</span>
+              {recentItems.map((item) => (
                 <Link
-                  key={c.id}
-                  href={`/?collection=${c.id}`}
+                  key={item.kind === 'collection' ? `c-${item.id}` : `p-${item.id}`}
+                  href={recentItemHref(item)}
                   className="ni"
                   onClick={handleNavClick}
                   style={{ gap: '8px' }}
@@ -227,10 +238,22 @@ export default function Sidebar({ userName, userInitials, userRole, userId, rece
                     flexShrink: 0,
                     overflow: 'hidden',
                   }}>
-                    <RecentCollectionThumb collection={c} />
+                    {item.kind === 'collection' ? (
+                      <RecentNavThumb
+                        thumbnailPath={item.photos?.[0]?.thumbnail_path ?? null}
+                        storagePath={item.photos?.[0]?.storage_path ?? null}
+                        initialUrl={item.photos?.[0]?.thumbnail_url ?? null}
+                      />
+                    ) : (
+                      <RecentNavThumb
+                        thumbnailPath={item.thumbnail_path}
+                        storagePath={item.storage_path}
+                        initialUrl={item.thumbnail_url ?? null}
+                      />
+                    )}
                   </div>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>
-                    {c.name}
+                    {item.kind === 'collection' ? item.name : item.title}
                   </span>
                 </Link>
               ))}

@@ -5,10 +5,15 @@ import MobileTopBar from '@/components/layout/MobileTopBar'
 import SidebarOverlay from '@/components/layout/SidebarOverlay'
 import NavigationUiReset from '@/components/layout/NavigationUiReset'
 import NotificationProvider from '@/components/providers/NotificationProvider'
-import { attachSignedCollectionPreviewUrls } from '@/lib/photos/serverSignedUrls'
+import { mergeRecentNavItems } from '@/lib/navigation/recentNav'
+import { attachSignedCollectionPreviewUrls, attachSignedThumbnailUrls } from '@/lib/photos/serverSignedUrls'
 import { getCollections } from '@/lib/queries/collections.queries'
+import { getRecentSidebarPhotos } from '@/lib/queries/sidebarRecents.queries'
 import { createClient } from '@/lib/supabase/server'
 import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
+
+const SIDEBAR_RECENTS_POOL = 12
+const SIDEBAR_RECENTS_LIMIT = 8
 
 export const metadata: Metadata = {
   title: 'Clarity Stock',
@@ -17,14 +22,27 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerUser()
-  const [profile, recentCollections] = await Promise.all([
+  const [profile, recentItems] = await Promise.all([
     getServerProfile(),
     user
-      ? getCollections(createClient(), { excludeCreatedBy: user.id, limit: 8 })
-          .then((collections) => attachSignedCollectionPreviewUrls(collections, {
-            limitCollections: 8,
-            photosPerCollection: 1,
-          }))
+      ? (async () => {
+          const supabase = createClient()
+          const [collections, photoRows] = await Promise.all([
+            getCollections(supabase, { excludeCreatedBy: user.id, limit: SIDEBAR_RECENTS_POOL }),
+            getRecentSidebarPhotos(supabase, {
+              excludePhotographerId: user.id,
+              limit: SIDEBAR_RECENTS_POOL,
+            }),
+          ])
+          const [signedCols, signedPhotos] = await Promise.all([
+            attachSignedCollectionPreviewUrls(collections, {
+              limitCollections: SIDEBAR_RECENTS_POOL,
+              photosPerCollection: 1,
+            }),
+            attachSignedThumbnailUrls(photoRows, { limit: SIDEBAR_RECENTS_POOL }),
+          ])
+          return mergeRecentNavItems(signedCols, signedPhotos, SIDEBAR_RECENTS_LIMIT)
+        })()
       : Promise.resolve([]),
   ])
 
@@ -43,7 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 userInitials={profile?.initials ?? ''}
                 userRole={profile?.role ?? 'photographer'}
                 userId={user.id}
-                recentCollections={recentCollections}
+                recentItems={recentItems}
               />
               <main
                 style={{
