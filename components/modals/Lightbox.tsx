@@ -3,6 +3,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, type MouseE
 import Link from 'next/link'
 import { useUIStore } from '@/stores/ui.store'
 import { recordDownload, updateJobRef } from '@/lib/actions/downloads.actions'
+import { downloadFromUrl } from '@/lib/photos/downloadFromUrl'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -101,13 +102,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
       setDownloadId(id)
       setJobLogOpen(true)
       onDownload(photo.id)
-      if (href) {
-        const a = document.createElement('a')
-        a.href = href
-        a.download = photo.title + '.jpg'
-        a.target = '_blank'
-        a.click()
-      }
+      if (href) await downloadFromUrl(href, `${photo.title || 'photo'}.jpg`)
     } catch (err) {
       console.error(err)
     }

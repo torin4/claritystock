@@ -3,6 +3,7 @@ import { memo, useState, useRef, useCallback, useEffect } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { toggleFavorite } from '@/lib/actions/favorites.actions'
 import { recordDownload } from '@/lib/actions/downloads.actions'
+import { downloadFromUrl } from '@/lib/photos/downloadFromUrl'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
 import type { Photo } from '@/lib/types/database.types'
 
@@ -87,11 +88,7 @@ function PhotoTile({
       if (!href) return
       await recordDownload(photo.id)
       onDownload(photo.id)
-      const a = document.createElement('a')
-      a.href = href
-      a.download = photo.title + '.jpg'
-      a.target = '_blank'
-      a.click()
+      await downloadFromUrl(href, `${photo.title || 'photo'}.jpg`)
     } catch (err) {
       console.error(err)
     }
