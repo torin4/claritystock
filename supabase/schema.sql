@@ -514,7 +514,7 @@ AS $$
     GROUP BY p.photographer_id
   ) agg
   JOIN public.users u ON u.id = agg.photographer_id
-  ORDER BY agg.download_uses DESC, agg.photo_count DESC
+  ORDER BY agg.photo_count DESC, agg.download_uses DESC
   LIMIT LEAST(GREATEST(COALESCE(p_limit, 10), 1), 50);
 $$;
 

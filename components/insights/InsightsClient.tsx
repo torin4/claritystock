@@ -373,7 +373,7 @@ export default function InsightsClient({ allTime, thisMonth, topContributors, us
           >
             <span style={{ fontSize: 12, fontWeight: 600 }}>Top contributors</span>
             <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-              By total uses · all time
+              By uploads · all time
             </span>
           </div>
           <TopContributorsPanel contributors={topContributors} currentUserId={userId} />
@@ -434,7 +434,7 @@ function TopContributorsPanel({
   contributors: TopContributor[]
   currentUserId: string
 }) {
-  const maxUses = contributors[0]?.downloadUses ?? 1
+  const maxUploads = contributors[0]?.photoCount ?? 1
 
   if (contributors.length === 0) {
     return (
@@ -447,7 +447,7 @@ function TopContributorsPanel({
   return (
     <div className="bar-chart insights-top-contributors-chart">
       {contributors.map((c, i) => {
-        const pct = Math.round((c.downloadUses / maxUses) * 100)
+        const pct = Math.round((c.photoCount / maxUploads) * 100)
         const colors = AVATAR_COLORS[i % AVATAR_COLORS.length]
         const isYou = c.userId === currentUserId
         return (
@@ -467,7 +467,7 @@ function TopContributorsPanel({
                 {isYou ? <span className="insights-contributor-you-badge">You</span> : null}
               </div>
               <div className="insights-contributor-meta">
-                {c.photoCount} photo{c.photoCount !== 1 ? 's' : ''}
+                Uploads
               </div>
             </div>
             <div className="bar-track">
@@ -475,10 +475,10 @@ function TopContributorsPanel({
                 className="bar-fill"
                 style={{ width: `${pct}%`, background: `color-mix(in srgb, var(--accent) 70%, ${colors.text})` }}
               >
-                <span className="bar-fill-lbl">{c.downloadUses}</span>
+                <span className="bar-fill-lbl">{c.photoCount}</span>
               </div>
             </div>
-            <div className="bar-count" style={{ color: 'var(--text-2)' }}>{c.downloadUses}</div>
+            <div className="bar-count" style={{ color: 'var(--text-2)' }}>{c.photoCount}</div>
           </div>
         )
       })}
