@@ -2,10 +2,10 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { useUploadStore } from '@/stores/upload.store'
-import { fileToBase64 } from '@/lib/utils/fileToBase64'
+import { blobToBase64, fileToBase64 } from '@/lib/utils/fileToBase64'
 import { extractGps } from '@/lib/utils/exif'
 import { uploadDisplayImage, uploadPhoto, uploadThumbnail } from '@/lib/utils/storage'
-import { createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
+import { createJpegForAiTagging, createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
@@ -155,14 +155,26 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       }
       if (neighborhood) store.updateForm(i, { neighborhood })
 
-      // Gemini AI tagging
+      // Gemini AI tagging — downscale first so JSON body stays under platform limits (e.g. Vercel 4.5MB)
       store.setAiScanning(i, true)
       try {
-        const b64 = await fileToBase64(file)
+        const tagBlob = await createJpegForAiTagging(file)
+        let b64: string
+        let mimeType: string
+        if (tagBlob) {
+          b64 = await blobToBase64(tagBlob)
+          mimeType = 'image/jpeg'
+        } else if (file.size <= 2 * 1024 * 1024) {
+          b64 = await fileToBase64(file)
+          mimeType = file.type
+        } else {
+          console.warn('[Add Photos] AI tag skipped: could not downscale and file is too large to POST')
+          return
+        }
         const res = await fetch('/api/ai/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: b64, mimeType: file.type }),
+          body: JSON.stringify({ imageBase64: b64, mimeType }),
         })
         if (res.ok) {
           const ai = await res.json()

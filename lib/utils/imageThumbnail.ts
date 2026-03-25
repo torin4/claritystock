@@ -13,6 +13,12 @@ const DISPLAY_OPTIONS: DerivativeOptions = {
   quality: 0.86,
 }
 
+/** Small enough for JSON POST limits (e.g. Vercel ~4.5MB) while keeping vision detail. */
+const AI_TAG_OPTIONS: DerivativeOptions = {
+  maxDimension: 1280,
+  quality: 0.78,
+}
+
 async function bitmapToJpegBlob(
   bitmap: ImageBitmap,
   options: DerivativeOptions,
@@ -65,4 +71,20 @@ export async function createJpegThumbnail(file: File): Promise<Blob | null> {
 export async function createJpegDisplayImage(file: File): Promise<Blob | null> {
   const { display } = await createPhotoDerivatives(file)
   return display
+}
+
+/**
+ * Downscaled JPEG for `/api/ai/tag` — avoids 413 on large originals when sent as base64 JSON.
+ */
+export async function createJpegForAiTagging(file: File): Promise<Blob | null> {
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      return await bitmapToJpegBlob(bitmap, AI_TAG_OPTIONS)
+    } finally {
+      bitmap.close()
+    }
+  } catch {
+    return null
+  }
 }
