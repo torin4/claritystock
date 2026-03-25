@@ -4,6 +4,7 @@ import type { Notification } from '@/lib/types/database.types'
 interface NotificationsState {
   notifications: Notification[]
   unreadCount: number
+  userId: string | null
 }
 
 interface NotificationsActions {
@@ -12,6 +13,7 @@ interface NotificationsActions {
     downloaderName: string
     createdAt: string
   }) => void
+  setUserId: (userId: string) => void
   markAllRead: () => void
   clearAll: () => void
 }
@@ -19,6 +21,7 @@ interface NotificationsActions {
 export const useNotificationsStore = create<NotificationsState & NotificationsActions>((set) => ({
   notifications: [],
   unreadCount: 0,
+  userId: null,
 
   addNotification: (event) =>
     set((s) => {
@@ -62,13 +65,30 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
       }
     }),
 
+  setUserId: (userId: string) => set({ userId }),
+
   markAllRead: () =>
-    set((s) => ({
-      // Treat "read" as "dismiss": clear the list so the popover can show
-      // the "All caught up" state immediately.
-      notifications: [],
-      unreadCount: 0,
-    })),
+    set((s) => {
+      const uid = s.userId
+      if (uid) {
+        const maxCreatedAt = s.notifications.reduce<string | null>((acc, n) => {
+          if (!acc) return n.createdAt
+          return new Date(n.createdAt).getTime() > new Date(acc).getTime() ? n.createdAt : acc
+        }, null)
+
+        const key = `claritystock:lastSeenAt:${uid}`
+        try {
+          // If we had notifications, store the newest one’s timestamp.
+          // Otherwise, storing “now” avoids replay if the user immediately refreshes.
+          window.localStorage.setItem(key, maxCreatedAt ?? new Date().toISOString())
+        } catch {
+          // ignore
+        }
+      }
+
+      // Dismiss the current list so the popover can show "All caught up" immediately.
+      return { notifications: [], unreadCount: 0 }
+    }),
 
   clearAll: () => set({ notifications: [], unreadCount: 0 }),
 }))

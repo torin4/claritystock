@@ -5,6 +5,7 @@ import { useNotificationsStore } from '@/stores/notifications.store'
 
 export default function NotificationProvider({ userId }: { userId: string }) {
   const addNotification = useNotificationsStore(s => s.addNotification)
+  const setUserId = useNotificationsStore(s => s.setUserId)
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
@@ -12,34 +13,18 @@ export default function NotificationProvider({ userId }: { userId: string }) {
     let stopped = false
     const seen = new Set<string>()
     const latestSeenAtKey = `claritystock:lastSeenAt:${userId}`
-    let latestSeenAt: string | null = null
-
-    try {
-      latestSeenAt = window.localStorage.getItem(latestSeenAtKey)
-    } catch {
-      // localStorage might be blocked (private mode). Notifications will still work, just less "sticky".
-    }
-
-    const persistLatestSeenAt = (ts: string) => {
-      latestSeenAt = ts
-      try {
-        window.localStorage.setItem(latestSeenAtKey, ts)
-      } catch {
-        // ignore
-      }
-    }
-
-    const updateLatestSeenAtMax = (ts: string) => {
-      if (!latestSeenAt) return persistLatestSeenAt(ts)
-      const a = new Date(latestSeenAt).getTime()
-      const b = new Date(ts).getTime()
-      if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return
-      persistLatestSeenAt(ts)
-    }
+    setUserId(userId)
 
     async function fetchRecentDownloads() {
       if (stopped) return
       try {
+        let latestSeenAt: string | null = null
+        try {
+          latestSeenAt = window.localStorage.getItem(latestSeenAtKey)
+        } catch {
+          // ignore
+        }
+
         const q = supabase
           .from('downloads')
           .select('id, photo_id, downloaded_by, created_at, photos!inner(id, photographer_id), downloader:users!downloaded_by(name)')
@@ -75,10 +60,6 @@ export default function NotificationProvider({ userId }: { userId: string }) {
             createdAt: r.created_at,
           })
         }
-
-        if (rows.length) {
-          persistLatestSeenAt(rows[0].created_at)
-        }
       } catch (e) {
       }
     }
@@ -105,8 +86,6 @@ export default function NotificationProvider({ userId }: { userId: string }) {
             .eq('id', payload.new.downloaded_by)
             .single()
 
-          // Prevent already-notified items from reappearing after a hard refresh.
-          updateLatestSeenAtMax(payload.new.created_at)
           addNotification({
             downloaderId: payload.new.downloaded_by,
             downloaderName: downloader?.name ?? 'A team member',
@@ -125,7 +104,7 @@ export default function NotificationProvider({ userId }: { userId: string }) {
       window.clearInterval(interval)
       supabase.removeChannel(channel)
     }
-  }, [userId, addNotification])
+  }, [userId, addNotification, setUserId])
 
   return null
 }
