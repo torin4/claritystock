@@ -9,6 +9,8 @@ export default function NotificationProvider({ userId }: { userId: string }) {
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
+    // eslint-disable-next-line no-console
+    console.log('[notifications] provider mounted', { userId })
 
     const channel = supabase
       .channel('downloads-realtime')
@@ -16,6 +18,9 @@ export default function NotificationProvider({ userId }: { userId: string }) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'downloads' },
         async (payload) => {
+          // eslint-disable-next-line no-console
+          console.log('[notifications] downloads INSERT', payload)
+
           // Check if the photo belongs to current user
           const { data: photo } = await supabase
             .from('photos')
@@ -43,7 +48,10 @@ export default function NotificationProvider({ userId }: { userId: string }) {
           addNotification(n)
         }
       )
-      .subscribe()
+      .subscribe((status, err) => {
+        // eslint-disable-next-line no-console
+        console.log('[notifications] subscribe status', status, err ?? null)
+      })
 
     return () => { supabase.removeChannel(channel) }
   }, [userId, addNotification])
