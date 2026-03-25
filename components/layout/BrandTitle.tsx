@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 /** Matches `public/logo-mark.png` intrinsic size (portrait). */
 const LOGO_SRC_W = 310
 const LOGO_SRC_H = 343
@@ -38,13 +40,16 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
   if (layout === 'stack') {
     const stackLogo = logoDimensions(STACK_BRAND.img)
     return (
-      <div
+      <Link
+        href="/"
         style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           gap: STACK_BRAND.gap,
           textAlign: 'center',
+          textDecoration: 'none',
+          color: 'inherit',
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- static asset; avoids next/image aspect warnings */}
@@ -73,7 +78,7 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
         >
           Clarity <span style={{ color: 'var(--accent)' }}>Stock</span>
         </div>
-      </div>
+      </Link>
     )
   }
 
@@ -81,7 +86,16 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
   const inlineLogo = logoDimensions(img)
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <Link
+      href="/"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        textDecoration: 'none',
+        color: 'inherit',
+      }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/logo-mark.png"
