@@ -8,6 +8,7 @@ import { uploadDisplayImage, uploadPhoto, uploadThumbnail } from '@/lib/utils/st
 import { createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { sha256HexFromFile } from '@/lib/utils/sha256File'
 import type { Collection, Category } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 
@@ -66,6 +67,41 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     handleClose()
   }
 
+  /** SHA-256 match against library + used for per-batch duplicate hints */
+  const runDuplicateFingerprint = useCallback(async (files: File[]) => {
+    if (!files.length) return
+    let hashes: string[]
+    try {
+      hashes = await Promise.all(files.map((f) => sha256HexFromFile(f)))
+    } catch (e) {
+      console.warn('[Add Photos] Could not hash files for duplicate check:', e)
+      return
+    }
+    if (useUploadStore.getState().files.length !== files.length) return
+    let rows: { id: string; title: string; content_hash: string | null }[] = []
+    try {
+      const unique = Array.from(new Set(hashes))
+      if (unique.length) {
+        const supabase = getSupabaseBrowserClient()
+        const { data } = await supabase.from('photos').select('id, title, content_hash').in('content_hash', unique)
+        rows = data ?? []
+      }
+    } catch (e) {
+      console.warn('[Add Photos] Duplicate library lookup failed:', e)
+    }
+    if (useUploadStore.getState().files.length !== files.length) return
+    const byHash = new Map<string, { id: string; title: string }[]>()
+    for (const row of rows) {
+      if (!row.content_hash) continue
+      const list = byHash.get(row.content_hash) ?? []
+      list.push({ id: row.id, title: row.title })
+      byHash.set(row.content_hash, list)
+    }
+    useUploadStore.getState().setAllFileFingerprints(
+      hashes.map((h) => ({ contentHash: h, libraryDuplicates: byHash.get(h) ?? [] })),
+    )
+  }, [])
+
   const processFiles = useCallback(async (files: File[]) => {
     const images = files.filter(f => f.type.startsWith('image/'))
     const tooLarge = images.filter(f => f.size > MAX_UPLOAD_BYTES)
@@ -100,6 +136,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       }
     }
     store.setStep(2)
+    void runDuplicateFingerprint(valid)
 
     for (let i = 0; i < valid.length; i++) {
       const file = valid[i]
@@ -140,7 +177,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         store.setAiScanning(i, false)
       }
     }
-  }, [store, defaultCollectionId])
+  }, [store, defaultCollectionId, runDuplicateFingerprint])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -156,6 +193,22 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const current = store.files[store.currentIndex]
   const currentForm = current?.form
   const anyAiScanning = store.files.some(f => f.aiScanning)
+
+  const dupHints = useMemo(() => {
+    return store.files.map((f, i) => {
+      const h = f.contentHash
+      const inBatch = !!h && store.files.some((g, j) => j !== i && g.contentHash === h)
+      const inLibrary = (f.libraryDuplicates?.length ?? 0) > 0
+      return { inBatch, inLibrary }
+    })
+  }, [store.files])
+
+  const dupWarningCount = useMemo(
+    () => dupHints.filter((d) => d.inLibrary || d.inBatch).length,
+    [dupHints],
+  )
+
+  const currentDup = current ? dupHints[store.currentIndex] : null
 
   const handlePublish = async () => {
     const oversize = store.files.filter(f => f.file.size > MAX_UPLOAD_BYTES)
@@ -199,7 +252,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
             { ...f.form, description: f.ai?.description },
             storagePath,
             userId,
-            { thumbnailPath, displayPath },
+            { thumbnailPath, displayPath, contentHash: f.contentHash },
           )
           store.markPublished(i)
         } catch (err) {
@@ -338,10 +391,11 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               <div className="filmstrip">
                 {store.files.map((f, i) => {
                   const previewUrl = URL.createObjectURL(f.file)
+                  const dup = dupHints[i]?.inLibrary || dupHints[i]?.inBatch
                   return (
                     <div
                       key={i}
-                      className={`ft ${store.currentIndex === i ? 'active' : ''} ${f.ai ? 'reviewed' : ''}`}
+                      className={`ft ${store.currentIndex === i ? 'active' : ''} ${f.ai ? 'reviewed' : ''} ${dup ? 'dup' : ''}`}
                       onClick={() => store.setCurrentIndex(i)}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -355,6 +409,26 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               <div className="upload-card">
                 <UploadPreview file={current.file} />
                 <div className="uc-body">
+                  {current.libraryDuplicates === null && (
+                    <div className="upload-dup-hint upload-dup-hint--pending" role="status">
+                      Checking for identical files in the library…
+                    </div>
+                  )}
+                  {currentDup?.inBatch && (
+                    <div className="upload-dup-hint upload-dup-hint--warn" role="alert">
+                      Same file appears more than once in this upload — you can remove extras before publishing.
+                    </div>
+                  )}
+                  {currentDup?.inLibrary && current.libraryDuplicates && current.libraryDuplicates.length > 0 && (
+                    <div className="upload-dup-hint upload-dup-hint--warn" role="alert">
+                      <div className="upload-dup-hint-title">Already in the library (identical file)</div>
+                      <ul className="upload-dup-list">
+                        {current.libraryDuplicates.map((m) => (
+                          <li key={m.id}>{m.title}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {/* Title */}
                   <div className="uf">
                     <div className="ul-row">
@@ -515,6 +589,11 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 <div className="upload-summary-stats">
                   <span><b>{store.files.length}</b> photos selected</span>
                   <span><b>{reviewedCount}</b> AI-tagged</span>
+                  {dupWarningCount > 0 && (
+                    <span style={{ color: 'var(--amber)' }}>
+                      <b>{dupWarningCount}</b> duplicate{dupWarningCount !== 1 ? 's' : ''} flagged
+                    </span>
+                  )}
                   <span>Limit <b>{MAX_UPLOAD_MB}MB</b> each</span>
                 </div>
               </div>

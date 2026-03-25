@@ -233,6 +233,7 @@ export async function publishPhoto(
   paths?: {
     thumbnailPath?: string | null
     displayPath?: string | null
+    contentHash?: string | null
   },
 ) {
   const { supabase, actingAsAdmin } = await assertOwnerOrAdmin(photographerId)
@@ -268,6 +269,7 @@ export async function publishPhoto(
     storage_path: storagePath,
     thumbnail_path: paths?.thumbnailPath ?? null,
     display_path: paths?.displayPath ?? null,
+    content_hash: paths?.contentHash ?? null,
     downloads_count: 0,
   })
 

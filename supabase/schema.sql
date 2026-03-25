@@ -55,12 +55,20 @@ CREATE TABLE IF NOT EXISTS public.photos (
   storage_path     text,
   thumbnail_path   text,
   display_path     text,
+  content_hash     text,
   downloads_count  int         NOT NULL DEFAULT 0,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
 ALTER TABLE public.photos
   ADD COLUMN IF NOT EXISTS display_path text;
+
+ALTER TABLE public.photos
+  ADD COLUMN IF NOT EXISTS content_hash text;
+
+CREATE INDEX IF NOT EXISTS photos_content_hash_idx
+  ON public.photos (content_hash)
+  WHERE content_hash IS NOT NULL;
 
 -- 4. downloads
 CREATE TABLE IF NOT EXISTS public.downloads (

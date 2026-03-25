@@ -48,6 +48,8 @@ export interface Photo {
   storage_path: string | null
   thumbnail_path: string | null
   display_path?: string | null
+  /** SHA-256 hex of original file; used for exact duplicate detection */
+  content_hash?: string | null
   downloads_count: number
   created_at: string
   // Joined fields

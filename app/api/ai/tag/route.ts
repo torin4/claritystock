@@ -4,21 +4,90 @@ import {
   type GenerateContentResult,
   type ResponseSchema,
 } from '@google/generative-ai'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { Category } from '@/lib/types/database.types'
 
-const PROMPT = `You are a real estate photography assistant for a luxury Pacific Northwest property library.
+type InlinePart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
 
-Look at the image carefully (Gemini Vision). Then return JSON with:
+const CATEGORY_REF_DIR = join(process.cwd(), 'lib', 'ai', 'category-refs')
+const CATEGORY_REF_MIME = 'image/png' as const
+
+const PROMPT = `You are a real estate photography assistant for a luxury Pacific Northwest property library.
+Study the **final** image in this message (the photographer's upload), then assign exactly ONE category as a lowercase string: neighborhood, city, or condo.
+
+## Category rules (apply in this order)
+
+1) **condo** — **Shared building amenities and common areas** in a condominium or townhome **development**: lobby, mail/package room, resident lounge/clubroom, **building** gym or pool, spa, shared roof deck or courtyard **for residents**, interior corridors as common space. Also the **exterior of the condo/townhome building** as the hero subject (architectural shot of the tower or townhome façade—residential high-rise with balconies/unit rhythm, not a whole-city vista). **Do not** use condo for **private unit interiors** (someone’s kitchen, living room, bedroom, bath, or a staged unit) — those are **neighborhood**. When reference images are provided, **match this category to the reference labeled condo** when the upload is that kind of residential-building-as-hero (or shared amenity space), not the wide **city** benchmark or the **neighborhood** benchmark.
+
+2) **city** — The image is **clearly showing the city itself** at a **broad, unmistakably metropolitan** scale: recognizable **skyline**, downtown **massing** of towers, major **civic** landmarks (courthouse, stadium, central library), wide commercial arterials dominated by high-rises, iconic **waterfront city** views where the point is “this is Seattle / Bellevue / Kirkland **downtown**,” not a quiet side street. If a viewer would say “that’s **the city**” rather than “that’s **a neighborhood**,” pick city. When reference images are provided, **match this category to the reference labeled city** when the upload resembles that benchmark more than the neighborhood reference.
+
+3) **neighborhood** — **Closer-in, human scale**: streets and blocks that feel **local** — front yards, porches, single-family and small multi-family, tree-lined residential blocks, pocket parks, schools, suburban subdivisions, quiet retail on a residential corner. Same metro area can be neighborhood if the frame is **tight and intimate** (one block, one row of homes) rather than selling the **whole city**. Also all **private residence interiors** (including condo/townhome **units**: kitchen, living, bedroom, bath, staged models). When reference images are provided, **match this category to the reference labeled neighborhood** when the upload resembles that benchmark more than the city reference.
+
+## Tie-breakers
+
+- Rooftop or terrace → **condo** if clearly a **shared** amenity deck; **neighborhood** if a **private** balcony/terrace; **city** if the shot is mostly **skyline / downtown** beyond the railing.
+- Park with towers behind → **city** if skyline/civic drama dominates; **neighborhood** if it reads as a **local** park on an ordinary block.
+- **City vs neighborhood:** if the subject is **block-scale or interior** → neighborhood; if the subject is **the recognizable city / downtown as a whole** → city. When in doubt at **street level** (could be downtown side street) → **neighborhood** unless towers/skyline/civic landmark clearly dominate the frame.
+
+## Output JSON only (no markdown, no code fences)
+
 - "title": short descriptive title, 5–8 words (e.g. "Kirkland Marina at golden hour")
 - "tags": array of 5–8 specific lowercase tags for search (e.g. "waterfront", "marina", "golden hour", "Lake Washington", "boat dock")
 - "category": exactly one of: neighborhood, city, condo
-- "description": one sentence describing the photo for search
+- "description": one sentence describing the photo for search`
 
-Use "neighborhood" for residential areas and local character; "city" for downtown, skyline, urban streets, civic spaces; "condo" for condo buildings, lobbies, units, and building interiors. Pacific Northwest context.
+let categoryRefCache: { neighborhood: string; city: string; condo: string } | null | undefined
 
-Return only a single JSON object (no markdown, no code fences).`
+/** Calibrated examples: neighborhood.png, city.png, condo.png (see lib/ai/category-refs/). */
+function loadCategoryRefBase64(): { neighborhood: string; city: string; condo: string } | null {
+  if (categoryRefCache !== undefined) return categoryRefCache
+  try {
+    categoryRefCache = {
+      neighborhood: readFileSync(join(CATEGORY_REF_DIR, 'neighborhood.png')).toString('base64'),
+      city: readFileSync(join(CATEGORY_REF_DIR, 'city.png')).toString('base64'),
+      condo: readFileSync(join(CATEGORY_REF_DIR, 'condo.png')).toString('base64'),
+    }
+    return categoryRefCache
+  } catch {
+    categoryRefCache = null
+    return null
+  }
+}
+
+function buildVisionParts(uploadMimeType: string, uploadBase64: string): InlinePart[] {
+  const refs = loadCategoryRefBase64()
+  if (!refs) {
+    return [{ text: PROMPT }, { inlineData: { mimeType: uploadMimeType, data: uploadBase64 } }]
+  }
+
+  return [
+    {
+      text: `Three reference images calibrate **neighborhood**, **city**, and **condo** for this library. Use them only as visual benchmarks; your JSON output must describe the **last** image (the photographer's upload), not the references.
+
+REFERENCE — **neighborhood** (example the team labeled neighborhood):`,
+    },
+    { inlineData: { mimeType: CATEGORY_REF_MIME, data: refs.neighborhood } },
+    {
+      text: `REFERENCE — **city** (example the team labeled city):`,
+    },
+    { inlineData: { mimeType: CATEGORY_REF_MIME, data: refs.city } },
+    {
+      text: `REFERENCE — **condo** (example the team labeled condo — e.g. residential tower/façade as hero, not a whole-city vista):`,
+    },
+    { inlineData: { mimeType: CATEGORY_REF_MIME, data: refs.condo } },
+    {
+      text: `${PROMPT}
+
+The image immediately after this text is the **only** photo to title, tag, and categorize. Do not copy titles or tags from the reference images.`,
+    },
+    { inlineData: { mimeType: uploadMimeType, data: uploadBase64 } },
+  ]
+}
 
 type GenMode = 'plain' | 'json' | 'json_schema'
 
@@ -52,7 +121,8 @@ const TAG_RESPONSE_SCHEMA: ResponseSchema = {
     },
     category: {
       type: SchemaType.STRING,
-      description: 'neighborhood | city | condo',
+      description:
+        'Exactly one: neighborhood, city, or condo — align with the three reference images when present (condo = residential building-as-hero or shared amenities, not private unit interiors)',
     },
     description: { type: SchemaType.STRING, description: 'One sentence' },
   },
@@ -175,10 +245,7 @@ export async function POST(request: NextRequest) {
           contents: [
             {
               role: 'user',
-              parts: [
-                { text: PROMPT },
-                { inlineData: { mimeType, data: imageBase64 } },
-              ],
+              parts: buildVisionParts(mimeType, imageBase64),
             },
           ],
         })

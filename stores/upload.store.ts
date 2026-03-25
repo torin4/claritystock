@@ -3,6 +3,11 @@ import type { AiTagResult, ExifResult, PhotoFormValues } from '@/lib/types/datab
 
 export type UploadStep = 1 | 2 | 3
 
+export interface LibraryDuplicateMatch {
+  id: string
+  title: string
+}
+
 export interface UploadFileState {
   file: File
   exif: ExifResult | null
@@ -13,6 +18,10 @@ export interface UploadFileState {
   reviewed: boolean
   published: boolean
   error: string | null
+  /** SHA-256 hex of original bytes; null until computed */
+  contentHash: string | null
+  /** Existing library rows with the same content hash */
+  libraryDuplicates: LibraryDuplicateMatch[] | null
 }
 
 interface UploadState {
@@ -32,6 +41,10 @@ interface UploadActions {
   markReviewed: (i: number) => void
   markPublished: (i: number) => void
   setError: (i: number, error: string | null) => void
+  /** One entry per file, same order as files[] — sets contentHash + libraryDuplicates after hashing */
+  setAllFileFingerprints: (
+    fingerprints: { contentHash: string; libraryDuplicates: LibraryDuplicateMatch[] }[],
+  ) => void
   reset: () => void
 }
 
@@ -63,6 +76,8 @@ export const useUploadStore = create<UploadState & UploadActions>((set) => ({
         reviewed: false,
         published: false,
         error: null,
+        contentHash: null,
+        libraryDuplicates: null,
       })),
     }),
 
@@ -127,6 +142,18 @@ export const useUploadStore = create<UploadState & UploadActions>((set) => ({
       const files = [...s.files]
       files[i] = { ...files[i], error }
       return { files }
+    }),
+
+  setAllFileFingerprints: (fingerprints) =>
+    set((s) => {
+      if (fingerprints.length !== s.files.length) return {}
+      return {
+        files: s.files.map((f, i) => ({
+          ...f,
+          contentHash: fingerprints[i].contentHash,
+          libraryDuplicates: fingerprints[i].libraryDuplicates,
+        })),
+      }
     }),
 
   reset: () => set({ step: 1, files: [], currentIndex: 0 }),
