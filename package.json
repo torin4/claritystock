@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "backfill:display": "node --env-file=.env scripts/backfill-display-images.mjs"
+    "backfill:display": "node --env-file=.env scripts/backfill-display-images.mjs",
+    "backfill:content-hash": "node --env-file=.env scripts/backfill-content-hash.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
