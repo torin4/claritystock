@@ -2,7 +2,6 @@
 import { useEffect } from 'react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useNotificationsStore } from '@/stores/notifications.store'
-import type { Notification } from '@/lib/types/database.types'
 
 export default function NotificationProvider({ userId }: { userId: string }) {
   const addNotification = useNotificationsStore(s => s.addNotification)
@@ -71,13 +70,10 @@ export default function NotificationProvider({ userId }: { userId: string }) {
           if (seen.has(r.id)) continue
           seen.add(r.id)
           addNotification({
-            id: r.id,
-            photoId: r.photo_id,
-            photoThumbUrl: null,
+            downloaderId: r.downloaded_by,
             downloaderName: r.downloader?.name ?? 'A team member',
             createdAt: r.created_at,
-            read: false,
-          } satisfies Notification)
+          })
         }
 
         if (rows.length) {
@@ -109,18 +105,13 @@ export default function NotificationProvider({ userId }: { userId: string }) {
             .eq('id', payload.new.downloaded_by)
             .single()
 
-          const n: Notification = {
-            id: payload.new.id,
-            photoId: photo.id,
-            photoThumbUrl: null, // would need storage URL
-            downloaderName: downloader?.name ?? 'A team member',
-            createdAt: payload.new.created_at,
-            read: false,
-          }
-
           // Prevent already-notified items from reappearing after a hard refresh.
           updateLatestSeenAtMax(payload.new.created_at)
-          addNotification(n)
+          addNotification({
+            downloaderId: payload.new.downloaded_by,
+            downloaderName: downloader?.name ?? 'A team member',
+            createdAt: payload.new.created_at,
+          })
         }
       )
       .subscribe()

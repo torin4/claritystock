@@ -181,11 +181,16 @@ export interface UsageLedgerRow {
 }
 
 export interface Notification {
+  /**
+   * Aggregated by downloader (same photographer downloading multiple photos).
+   * We use downloaderId as the stable card id.
+   */
   id: string
-  photoId: string
-  photoThumbUrl: string | null
+  downloaderId: string
   downloaderName: string
   createdAt: string
+  /** How many photos have been downloaded from this photographer (since last read/refresh). */
+  count: number
   read: boolean
 }
 
