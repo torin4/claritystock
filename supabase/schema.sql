@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS public.users (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS hide_own_photos_in_browse boolean NOT NULL DEFAULT false;
+
 -- 1b. Google OAuth refresh token vault (Chat API); ciphertext from app, RLS own-row only
 CREATE TABLE IF NOT EXISTS public.user_google_credentials (
   user_id             uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,

@@ -11,11 +11,16 @@ import {
 export async function getPhotos(
   supabase: SupabaseClient,
   userId: string,
-  filters: Partial<BrowseFilters> = {}
+  filters: Partial<BrowseFilters> = {},
+  options: { hideOwnPhotosInBrowse?: boolean } = {},
 ) {
   let query = supabase
     .from('photos')
     .select(PHOTO_CARD_SELECT)
+
+  if (options.hideOwnPhotosInBrowse && userId) {
+    query = query.or(`photographer_id.is.null,photographer_id.neq.${userId}`)
+  }
 
   if (filters.search) {
     query = query.textSearch('fts', filters.search, { type: 'websearch' })

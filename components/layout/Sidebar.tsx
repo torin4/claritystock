@@ -72,6 +72,7 @@ interface SidebarProps {
   userAvatarUrl: string | null
   userRole: string
   userId: string
+  hideOwnPhotosInBrowse: boolean
   recentItems: RecentNavItem[]
 }
 
@@ -119,6 +120,7 @@ export default function Sidebar({
   userAvatarUrl,
   userRole,
   userId,
+  hideOwnPhotosInBrowse,
   recentItems,
 }: SidebarProps) {
   const pathname = usePathname()
@@ -304,6 +306,7 @@ export default function Sidebar({
         userInitials={userInitials}
         userAvatarUrl={userAvatarUrl}
         userRole={userRole}
+        hideOwnPhotosInBrowse={hideOwnPhotosInBrowse}
       />
     </>
   )

@@ -105,11 +105,9 @@ function aggregatePhotographerImpactFromDownloadRows(rows: DownloadPhotoRow[]): 
 
 /** Team-wide library stats (parallel to personal Insights). */
 export async function getAdminLibraryStats(supabase: SupabaseClient): Promise<InsightsStats> {
-  const monthStart = utcThisMonthStartIso()
-  const [photosRes, downloadsRes, monthDlRes, favsRes] = await Promise.all([
+  const [photosRes, downloadsRes, favsRes] = await Promise.all([
     supabase.from('photos').select('id', { count: 'exact', head: true }),
     supabase.from('downloads').select('id', { count: 'exact', head: true }),
-    supabase.from('downloads').select('id', { count: 'exact', head: true }).gte('created_at', monthStart),
     supabase.from('favorites').select('id', { count: 'exact', head: true }),
   ])
 
@@ -120,7 +118,6 @@ export async function getAdminLibraryStats(supabase: SupabaseClient): Promise<In
   return {
     totalPhotos: photosRes.count ?? 0,
     totalDownloads: downloadsRes.count ?? 0,
-    thisMonthDownloads: monthDlRes.count ?? 0,
     favoritedCount: favsRes.count ?? 0,
   }
 }
@@ -136,7 +133,6 @@ export async function getAdminLibraryStatsThisMonth(supabase: SupabaseClient): P
   return {
     totalPhotos: photosRes.count ?? 0,
     totalDownloads: downloadsRes.count ?? 0,
-    thisMonthDownloads: 0,
     favoritedCount: favsRes.count ?? 0,
   }
 }

@@ -212,21 +212,16 @@ export async function getInsightsPageData(
     stats: {
       totalPhotos: photoMetrics.length,
       totalDownloads: photoMetrics.reduce((sum, photo) => sum + (Number(photo.downloads_count) || 0), 0),
-      thisMonthDownloads: monthDownloadEvents,
       favoritedCount: favsAllRes.count ?? 0,
     },
     downloadsByUser: groupDownloadsByUser(downloadsAllTyped),
     topPhotos: topPhotosAll,
   }
 
-  /**
-   * This-month slice: stats.thisMonthDownloads is unused (UI uses downloadsByUser.length for “Downloaders”).
-   */
   const thisMonth: InsightsRangeData = {
     stats: {
       totalPhotos: photosUploadedMonthRes.count ?? 0,
       totalDownloads: monthDownloadEvents,
-      thisMonthDownloads: 0,
       favoritedCount: favsMonthRes.count ?? 0,
     },
     downloadsByUser: groupDownloadsByUser(downloadsMonthTyped),

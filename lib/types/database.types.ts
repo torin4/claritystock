@@ -19,6 +19,8 @@ export interface User {
   /** Workspace email when synced from OAuth (public.users.email). */
   email?: string | null
   created_at: string
+  /** When true, main Library browse hides your uploads (My Photos still shows them). */
+  hide_own_photos_in_browse?: boolean
 }
 
 export interface Collection {
@@ -106,12 +108,11 @@ export interface ExifResult {
 export interface InsightsStats {
   totalPhotos: number
   /**
-   * Personal Insights: sum of `downloads_count` on your photos.
-   * Admin: `COUNT(*)` from `downloads` (events). These match when DB counters stay in sync.
+   * Personal Insights — all-time bundle: sum of `downloads_count` on your photos.
+   * Personal — month bundle: download events on your photos this UTC month.
+   * Admin all-time: total library download events. Admin month: events this UTC month.
    */
   totalDownloads: number
-  /** Download rows with `created_at` ≥ start of current month (UTC). */
-  thisMonthDownloads: number
   /**
    * Personal Insights: photos you favorited (`favorites.user_id` = you).
    * Admin: all favorite rows in the library.

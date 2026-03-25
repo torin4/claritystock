@@ -47,6 +47,7 @@ function PhotoTile({
   onToggleSelected,
 }: Props) {
   const allowEdit = canEditPhoto ? canEditPhoto(photo) : Boolean(showEdit)
+  const isOwnUpload = Boolean(userId && photo.photographer_id && photo.photographer_id === userId)
   const { openLightbox } = useUIStore()
   const [favLoading, setFavLoading] = useState(false)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -220,6 +221,10 @@ function PhotoTile({
                 <path d="M9 2L11 4L5 10H3V8L9 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
               </svg>
             </button>
+          ) : isOwnUpload ? (
+            <span className="ptile-own-badge" title="Your upload — download from My Photos">
+              Yours
+            </span>
           ) : (
             <button
               className={`ptile-dl${photo.is_downloaded_by_me ? ' ptile-dl-saved' : ''}`}

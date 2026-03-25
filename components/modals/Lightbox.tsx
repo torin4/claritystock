@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, type MouseEvent } from 'react'
+import Link from 'next/link'
 import { useUIStore } from '@/stores/ui.store'
 import { recordDownload, updateJobRef } from '@/lib/actions/downloads.actions'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
@@ -146,6 +147,9 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
   const backdropUrl = previewUrl ?? displayImageUrl
   const showLoadingOverlay = !!displayPath && !showDisplayImage
   const isDone = !!downloadId
+  const isOwnPhoto = Boolean(
+    userId && photo?.photographer_id && photo.photographer_id === userId,
+  )
 
   /** Block “Save image as…” on photos; keep default menu on prev/next (buttons). */
   const handleImageAreaContextMenu = useCallback((e: MouseEvent<HTMLDivElement>) => {
@@ -255,44 +259,54 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
             </div>
           </div>
 
-          {/* Download button */}
-          <button
-            type="button"
-            className={`lb-dl-btn${isDone ? ' lb-dl-saved' : ''}`}
-            onClick={isDone ? undefined : handleDownload}
-            disabled={isDone}
-          >
-            {isDone ? (
-              <>
-                <svg className="lb-dl-ic lb-dl-check" width="16" height="16" viewBox="0 0 12 12" fill="none" aria-hidden>
-                  <path
-                    d="M2.5 6L5 8.5L9.5 3.5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span>In your library</span>
-              </>
-            ) : (
-              <>
-                <svg className="lb-dl-ic" width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden>
-                  <path
-                    d="M6.5 1v8M3 6.5l3.5 3.5L10 6.5M2 12h9"
-                    stroke="currentColor"
-                    strokeWidth="1.3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span>Download</span>
-              </>
-            )}
-          </button>
+          {/* Download (others’ photos) or own-upload hint */}
+          {isOwnPhoto ? (
+            <div className="lb-own-upload">
+              <span className="lb-own-upload-title">Your upload</span>
+              <span className="lb-own-upload-sub">Files are in My Photos</span>
+              <Link href="/my-photos" className="lb-own-upload-link" onClick={() => closeLightbox()}>
+                Open My Photos
+              </Link>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={`lb-dl-btn${isDone ? ' lb-dl-saved' : ''}`}
+              onClick={isDone ? undefined : handleDownload}
+              disabled={isDone}
+            >
+              {isDone ? (
+                <>
+                  <svg className="lb-dl-ic lb-dl-check" width="16" height="16" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <path
+                      d="M2.5 6L5 8.5L9.5 3.5"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span>In your library</span>
+                </>
+              ) : (
+                <>
+                  <svg className="lb-dl-ic" width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden>
+                    <path
+                      d="M6.5 1v8M3 6.5l3.5 3.5L10 6.5M2 12h9"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span>Download</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Job ref log */}
-          {jobLogOpen && !jobSaved && (
+          {!isOwnPhoto && jobLogOpen && !jobSaved && (
             <div className="lb-log open">
               <div className="lb-log-lbl">Which job is this for?</div>
               <div className="lb-log-row">
@@ -308,7 +322,7 @@ export default function Lightbox({ photos, userId, onDownload }: Props) {
               <span className="lb-log-skip" onClick={() => setJobLogOpen(false)}>Skip</span>
             </div>
           )}
-          {jobSaved && (
+          {!isOwnPhoto && jobSaved && (
             <div className="lb-log-done show">✓ Job ref saved: {jobRef}</div>
           )}
 

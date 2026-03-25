@@ -62,6 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 userAvatarUrl={profile?.avatar_url ?? null}
                 userRole={profile?.role ?? 'photographer'}
                 userId={user.id}
+                hideOwnPhotosInBrowse={profile?.hide_own_photos_in_browse === true}
                 recentItems={recentItems}
               />
               <main

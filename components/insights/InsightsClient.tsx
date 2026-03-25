@@ -56,10 +56,8 @@ export default function InsightsClient({ allTime, thisMonth, topContributors, us
   const heroPhoto = hasTopPerforming ? heroCandidate : null
   const maxDownloads = Math.max(1, downloadsByUser[0]?.count ?? 1)
 
-  const thirdStatValue = range === 'all' ? stats.thisMonthDownloads : downloadsByUser.length
-  const thirdStatLabel = range === 'all' ? 'This month' : 'Downloaders'
-  const usesSubtitle =
-    range === 'all' ? `${stats.totalDownloads.toLocaleString()} total uses` : `${stats.totalDownloads.toLocaleString()} uses this month`
+  const downloaderCount = downloadsByUser.length
+  const usesSubtitle = range === 'all' ? 'All time · per teammate' : 'UTC month · per teammate'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -68,7 +66,8 @@ export default function InsightsClient({ allTime, thisMonth, topContributors, us
         <div>
           <div className="ph-title">Insights</div>
           <div className="ph-sub">
-            Your library contribution · {range === 'all' ? 'All time' : 'This month (UTC)'}
+            Your library contribution ·{' '}
+            {range === 'all' ? 'Lifetime totals below' : 'Current UTC month only'}
           </div>
           <div className="browse-mode-row" style={{ marginTop: 10 }}>
             <button
@@ -111,13 +110,13 @@ export default function InsightsClient({ allTime, thisMonth, topContributors, us
       >
         <StatCard
           value={stats.totalPhotos}
-          label={range === 'all' ? 'Photos added' : 'Photos uploaded'}
+          label={range === 'all' ? 'Photos in library' : 'Photos uploaded'}
         />
         <StatCard
           value={stats.totalDownloads}
-          label={range === 'all' ? 'Total downloads' : 'Download uses'}
+          label={range === 'all' ? 'Total uses' : 'Uses this month'}
         />
-        <StatCard value={thirdStatValue} label={thirdStatLabel} />
+        <StatCard value={downloaderCount} label="Downloaders" />
         <StatCard
           value={stats.favoritedCount}
           label={range === 'all' ? 'Your favorites' : 'Favorites added'}

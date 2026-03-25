@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { deleteAllMyPhotos } from '@/lib/actions/photos.actions'
@@ -12,6 +12,7 @@ interface SettingsPanelProps {
   userInitials: string
   userAvatarUrl: string | null
   userRole: string
+  hideOwnPhotosInBrowse: boolean
 }
 
 export default function SettingsPanel({
@@ -20,11 +21,18 @@ export default function SettingsPanel({
   userInitials,
   userAvatarUrl,
   userRole,
+  hideOwnPhotosInBrowse: hideOwnInitial,
 }: SettingsPanelProps) {
   const { settingsPanelOpen, closeSettings } = useUIStore()
   const [displayName, setDisplayName] = useState(userName)
+  const [hideOwnInBrowse, setHideOwnInBrowse] = useState(hideOwnInitial)
+  const [hideOwnSaving, setHideOwnSaving] = useState(false)
   const [removingPhotos, setRemovingPhotos] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    setHideOwnInBrowse(hideOwnInitial)
+  }, [hideOwnInitial])
 
   const handleLogout = async () => {
     const supabase = getSupabaseBrowserClient()
@@ -114,6 +122,46 @@ export default function SettingsPanel({
             >
               Save changes
             </button>
+          </div>
+
+          {/* Library */}
+          <div className="sp-sec">
+            <div className="sp-sec-title" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: '12px' }}>Library</div>
+            <label className="notif-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="notif-lbl" style={{ fontSize: '13px', fontWeight: 500 }}>Hide my photos in Browse</div>
+                <div className="notif-sub" style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: 4, lineHeight: 1.35 }}>
+                  Your uploads won’t show on the main Library grid. You can still open <strong style={{ fontWeight: 600 }}>My Photos</strong> to manage them.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={hideOwnInBrowse}
+                disabled={hideOwnSaving}
+                className="sp-checkbox"
+                style={{ width: 18, height: 18, flexShrink: 0, marginTop: 2, accentColor: 'var(--accent)', cursor: hideOwnSaving ? 'wait' : 'pointer' }}
+                onChange={async (e) => {
+                  const next = e.target.checked
+                  setHideOwnInBrowse(next)
+                  setHideOwnSaving(true)
+                  try {
+                    const supabase = getSupabaseBrowserClient()
+                    const { error } = await supabase
+                      .from('users')
+                      .update({ hide_own_photos_in_browse: next })
+                      .eq('id', userId)
+                    if (error) throw error
+                    router.refresh()
+                  } catch (err) {
+                    console.error(err)
+                    setHideOwnInBrowse(!next)
+                    alert(err instanceof Error ? err.message : 'Could not update setting')
+                  } finally {
+                    setHideOwnSaving(false)
+                  }
+                }}
+              />
+            </label>
           </div>
 
           {/* Notifications */}

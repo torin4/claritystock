@@ -9,14 +9,14 @@ export const getServerUser = cache(async (): Promise<SupabaseUser | null> => {
   return user ?? null
 })
 
-export const getServerProfile = cache(async (): Promise<Pick<User, 'name' | 'initials' | 'role' | 'avatar_url'> | null> => {
+export const getServerProfile = cache(async (): Promise<Pick<User, 'name' | 'initials' | 'role' | 'avatar_url' | 'hide_own_photos_in_browse'> | null> => {
   const user = await getServerUser()
   if (!user) return null
 
   const supabase = createClient()
   const { data, error } = await supabase
     .from('users')
-    .select('name, initials, role, avatar_url')
+    .select('name, initials, role, avatar_url, hide_own_photos_in_browse')
     .eq('id', user.id)
     .maybeSingle()
 

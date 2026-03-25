@@ -14,14 +14,20 @@ export default async function BrowsePage() {
   const user = await getServerUser()
   const uid = user?.id
 
-  const [photosRes, collections] = await Promise.all([
-    supabase
-      .from('photos')
-      .select(PHOTO_CARD_SELECT)
-      .order('created_at', { ascending: false })
-      .limit(BROWSE_PAGE_SIZE),
+  const [prefsRes, collections] = await Promise.all([
+    uid
+      ? supabase.from('users').select('hide_own_photos_in_browse').eq('id', uid).maybeSingle()
+      : Promise.resolve({ data: null as { hide_own_photos_in_browse: boolean } | null }),
     getCollections(supabase, { excludeCreatedBy: uid ?? null }),
   ])
+
+  const hideOwnPhotosInBrowse = prefsRes.data?.hide_own_photos_in_browse === true
+
+  let photosQuery = supabase.from('photos').select(PHOTO_CARD_SELECT)
+  if (hideOwnPhotosInBrowse && uid) {
+    photosQuery = photosQuery.or(`photographer_id.is.null,photographer_id.neq.${uid}`)
+  }
+  const photosRes = await photosQuery.order('created_at', { ascending: false }).limit(BROWSE_PAGE_SIZE)
 
   const initialIds = (photosRes.data ?? []).map((p: { id: string }) => p.id)
   const [downloadsRes, favoritesRes] = uid && initialIds.length
@@ -52,6 +58,7 @@ export default async function BrowsePage() {
       initialPhotos={initialPhotos as never}
       collections={initialCollections as never}
       userId={user?.id ?? ''}
+      hideOwnPhotosInBrowse={hideOwnPhotosInBrowse}
     />
   )
 }

@@ -22,15 +22,26 @@ interface BrowseClientProps {
   initialPhotos: Photo[]
   collections: Collection[]
   userId: string
+  /** Server preference: exclude your uploads from Library browse grid. */
+  hideOwnPhotosInBrowse?: boolean
 }
 
 const DEFAULT_FILTER_KEY = ['', '', '', 'new', 'all', ''].join('\0')
 
-export default function BrowseClient({ initialPhotos, collections, userId }: BrowseClientProps) {
+export default function BrowseClient({
+  initialPhotos,
+  collections,
+  userId,
+  hideOwnPhotosInBrowse = false,
+}: BrowseClientProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
+
+  useEffect(() => {
+    setPhotos(initialPhotos)
+  }, [initialPhotos])
   const [browseMode, setBrowseMode] = useState<'photos' | 'collections'>('photos')
   const [loading, setLoading] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -141,6 +152,10 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
       if (neighborhood) query = query.eq('neighborhood', neighborhood)
       if (collectionId) query = query.eq('collection_id', collectionId)
 
+      if (hideOwnPhotosInBrowse && userId) {
+        query = query.or(`photographer_id.is.null,photographer_id.neq.${userId}`)
+      }
+
       if (sort === 'used') {
         query = query.order('downloads_count', { ascending: false })
       } else {
@@ -196,7 +211,7 @@ export default function BrowseClient({ initialPhotos, collections, userId }: Bro
         setLoading(false)
       }
     }
-  }, [search, category, neighborhood, collectionId, sort, quickFilter, userId])
+  }, [search, category, neighborhood, collectionId, sort, quickFilter, userId, hideOwnPhotosInBrowse])
 
   useEffect(() => {
     if (!didRunInitialFetch.current) {

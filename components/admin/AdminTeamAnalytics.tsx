@@ -44,12 +44,8 @@ export default function AdminTeamAnalytics({
   const maxDownloader = Math.max(1, downloadsByDownloader[0]?.count ?? 1)
   const maxImpact = Math.max(1, photographerImpact[0]?.downloadUses ?? 1)
 
-  const thirdStatValue = range === 'all' ? stats.thisMonthDownloads : downloadsByDownloader.length
-  const thirdStatLabel = range === 'all' ? 'Downloads this month' : 'Downloaders'
-  const downloadEventsSubtitle =
-    range === 'all'
-      ? `${stats.totalDownloads.toLocaleString()} download events`
-      : `${stats.totalDownloads.toLocaleString()} events this month`
+  const downloaderCount = downloadsByDownloader.length
+  const downloadEventsSubtitle = range === 'all' ? 'All time · per person' : 'UTC month · per person'
 
   return (
     <div className="admin-analytics-page">
@@ -60,7 +56,7 @@ export default function AdminTeamAnalytics({
             Team-wide library analytics · {teamSummary.memberCount} member{teamSummary.memberCount !== 1 ? 's' : ''}
             {teamSummary.adminCount > 0 ? ` · ${teamSummary.adminCount} admin${teamSummary.adminCount !== 1 ? 's' : ''}` : ''}
             {' · '}
-            {range === 'all' ? 'All time' : 'This month (UTC)'}
+            {range === 'all' ? 'Lifetime totals below' : 'Current UTC month only'}
           </div>
           <div className="browse-mode-row" style={{ marginTop: 10 }}>
             <button
@@ -88,9 +84,9 @@ export default function AdminTeamAnalytics({
         />
         <StatCard
           value={stats.totalDownloads}
-          label={range === 'all' ? 'Total downloads' : 'Download uses'}
+          label={range === 'all' ? 'Total uses' : 'Uses this month'}
         />
-        <StatCard value={thirdStatValue} label={thirdStatLabel} />
+        <StatCard value={downloaderCount} label="Downloaders" />
         <StatCard
           value={stats.favoritedCount}
           label={range === 'all' ? 'Team favorites' : 'Favorites added'}
