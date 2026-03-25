@@ -179,12 +179,20 @@ export default function BrowseClient({
         query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
       }
       if (quickFilter === 'mine') {
-        const { data: downloads } = await supabase.from('downloads').select('photo_id').eq('downloaded_by', userId)
+        const { data: downloads } = await supabase
+          .from('downloads')
+          .select('photo_id')
+          .eq('downloaded_by', userId)
+          .is('archived_at', null)
         const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
         query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
       }
       if (quickFilter === 'new') {
-        const { data: downloads } = await supabase.from('downloads').select('photo_id').eq('downloaded_by', userId)
+        const { data: downloads } = await supabase
+          .from('downloads')
+          .select('photo_id')
+          .eq('downloaded_by', userId)
+          .is('archived_at', null)
         const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
         if (ids.length) query = query.not('id', 'in', `(${ids.join(',')})`)
       }
@@ -200,7 +208,12 @@ export default function BrowseClient({
       const [dlRes, favRes] = await Promise.all([
         quickFilter === 'mine'
           ? Promise.resolve({ data: photoIds.map((photo_id) => ({ photo_id })) })
-          : supabase.from('downloads').select('photo_id').eq('downloaded_by', userId).in('photo_id', photoIds),
+          : supabase
+            .from('downloads')
+            .select('photo_id')
+            .eq('downloaded_by', userId)
+            .is('archived_at', null)
+            .in('photo_id', photoIds),
         quickFilter === 'fav'
           ? Promise.resolve({ data: photoIds.map((photo_id) => ({ photo_id })) })
           : supabase.from('favorites').select('photo_id').eq('user_id', userId).in('photo_id', photoIds),

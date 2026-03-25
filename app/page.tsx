@@ -37,7 +37,12 @@ export default async function BrowsePage() {
   const initialIds = (photosRes.data ?? []).map((p: { id: string }) => p.id)
   const [downloadsRes, favoritesRes] = uid && initialIds.length
     ? await Promise.all([
-        supabase.from('downloads').select('photo_id').eq('downloaded_by', uid).in('photo_id', initialIds),
+        supabase
+          .from('downloads')
+          .select('photo_id')
+          .eq('downloaded_by', uid)
+          .is('archived_at', null)
+          .in('photo_id', initialIds),
         supabase.from('favorites').select('photo_id').eq('user_id', uid).in('photo_id', initialIds),
       ])
     : [{ data: [] as { photo_id: string }[] }, { data: [] as { photo_id: string }[] }]

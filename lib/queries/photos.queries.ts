@@ -39,6 +39,7 @@ export async function getPhotos(
       .from('downloads')
       .select('photo_id')
       .eq('downloaded_by', userId)
+      .is('archived_at', null)
     const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
     query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
   }
@@ -47,6 +48,7 @@ export async function getPhotos(
       .from('downloads')
       .select('photo_id')
       .eq('downloaded_by', userId)
+      .is('archived_at', null)
     const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
     if (ids.length) query = query.not('id', 'in', `(${ids.join(',')})`)
   }
@@ -148,6 +150,7 @@ export async function getMyDownloadedPhotos(supabase: SupabaseClient, userId: st
     .from('downloads')
     .select('photo_id, created_at')
     .eq('downloaded_by', userId)
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
 
   if (dErr) throw dErr
