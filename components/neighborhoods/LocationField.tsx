@@ -1,6 +1,10 @@
 'use client'
 
-import { useId } from 'react'
+import { useId, useMemo } from 'react'
+import { filterNeighborhoodSuggestions } from '@/lib/neighborhoods/canonical'
+
+const MAX_DATALIST_OPTIONS = 20
+const MIN_CHARS_FOR_SUGGESTIONS = 2
 
 interface LocationFieldProps {
   value: string
@@ -12,7 +16,7 @@ interface LocationFieldProps {
   'aria-label'?: string
 }
 
-/** Text input with HTML datalist of canonical location labels (browser autocomplete). */
+/** Text input with datalist: suggestions only after a few characters, capped (not the full catalog). */
 export default function LocationField({
   value,
   onChange,
@@ -23,6 +27,16 @@ export default function LocationField({
   'aria-label': ariaLabel,
 }: LocationFieldProps) {
   const listId = useId()
+  const datalistOptions = useMemo(
+    () =>
+      filterNeighborhoodSuggestions(
+        value,
+        labels,
+        MAX_DATALIST_OPTIONS,
+        MIN_CHARS_FOR_SUGGESTIONS,
+      ),
+    [value, labels],
+  )
   return (
     <>
       <input
@@ -34,9 +48,10 @@ export default function LocationField({
         disabled={disabled}
         autoComplete="off"
         aria-label={ariaLabel ?? placeholder}
+        aria-autocomplete="list"
       />
       <datalist id={listId}>
-        {labels.map((l) => (
+        {datalistOptions.map((l) => (
           <option key={l} value={l} />
         ))}
       </datalist>

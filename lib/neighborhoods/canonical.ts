@@ -41,3 +41,18 @@ export function resolveNeighborhoodToCanonical(
   const maxAllowed = t.length <= 4 ? 1 : t.length <= 10 ? 2 : 3
   return bestDist <= maxAllowed ? best : null
 }
+
+/** Substring matches for datalist/autocomplete; empty until `minChars` typed. */
+export function filterNeighborhoodSuggestions(
+  query: string,
+  labels: readonly string[],
+  max = 20,
+  minChars = 2,
+): string[] {
+  const q = query.trim().toLowerCase()
+  if (q.length < minChars) return []
+  return labels
+    .filter((l) => l.toLowerCase().includes(q))
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, max)
+}
