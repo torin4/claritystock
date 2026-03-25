@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import AdminTeamAnalytics from '@/components/admin/AdminTeamAnalytics'
-import AdminUploadClient from '@/components/admin/AdminUploadClient'
 import { getUsageAlertConfig } from '@/lib/admin/usageAlert'
 import {
   buildUsageLedger,
@@ -26,13 +25,6 @@ export default async function AdminPage() {
   const usageLedger = buildUsageLedger(userRows, downloadsByDownloader)
   const usageAlert = getUsageAlertConfig()
 
-  const photographers = userRows.map(u => ({
-    id: u.id,
-    name: u.name,
-    initials: u.initials,
-    role: u.role,
-  }))
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AdminTeamAnalytics
@@ -45,7 +37,6 @@ export default async function AdminPage() {
         usageLedger={usageLedger}
         usageAlert={usageAlert}
       />
-      <AdminUploadClient photographers={photographers} embedded />
     </div>
   )
 }

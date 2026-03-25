@@ -29,7 +29,7 @@ export default function AdminSubnav() {
       }}
     >
       <Link href="/admin" style={linkStyle(analytics)}>
-        Analytics & upload
+        Analytics
       </Link>
       <Link href="/admin/libraries" style={linkStyle(libraries)}>
         Photo libraries

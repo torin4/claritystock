@@ -20,7 +20,7 @@ async function assertOwnedCollectionId(
   if (error || !data) throw new Error('Invalid collection')
 }
 
-/** Collection must belong to this photographer (for admin proxy upload / edits). */
+/** Collection must belong to this photographer (for admin acting on behalf / edits). */
 async function assertCollectionOwnedByPhotographer(
   collectionId: string | null | undefined,
   photographerId: string,
