@@ -64,7 +64,9 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
 
   markAllRead: () =>
     set((s) => ({
-      notifications: s.notifications.map((n) => ({ ...n, read: true })),
+      // Treat "read" as "dismiss": clear the list so the popover can show
+      // the "All caught up" state immediately.
+      notifications: [],
       unreadCount: 0,
     })),
 

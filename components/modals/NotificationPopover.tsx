@@ -41,15 +41,17 @@ export default function NotificationPopover() {
 
   if (!notifPopoverOpen) return null
 
+  const hasUnread = notifications.some(n => !n.read)
+
   return (
     <div ref={popoverRef} className="s-notif-popover open">
       <div className="s-notif-pop-hdr">
         <span className="s-notif-pop-title">Notifications</span>
-        {notifications.some(n => !n.read) && (
+        {hasUnread && (
           <span className="s-notif-mark" onClick={markAllRead}>Mark all read</span>
         )}
       </div>
-      {notifications.length === 0 ? (
+      {!hasUnread ? (
         <div className="s-notif-empty">All caught up ✓</div>
       ) : (
         notifications.map(n => (
