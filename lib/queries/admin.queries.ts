@@ -187,24 +187,21 @@ export async function getAdminPhotographerImpactSince(
   return aggregatePhotographerImpactFromDownloadRows(rows)
 }
 
-/** Top photos by download events in the current UTC month (DB aggregate + photo hydrate). */
-export async function getAdminTopPhotosThisMonth(
+function isMissingTopPhotosRpcError(error: { code?: string; message?: string }): boolean {
+  const msg = (error.message ?? '').toLowerCase()
+  return (
+    error.code === 'PGRST202' ||
+    error.code === '42883' ||
+    (msg.includes('function') && (msg.includes('does not exist') || msg.includes('could not find')))
+  )
+}
+
+async function hydrateAdminTopPhotosFromTally(
   supabase: SupabaseClient,
-  limit: number,
+  topIds: string[],
+  tally: Map<string, number>,
 ): Promise<AdminTopPhoto[]> {
-  const monthStart = utcThisMonthStartIso()
-  const { data: aggRows, error } = await supabase.rpc('get_top_photo_download_counts_since', {
-    p_since: monthStart,
-    p_limit: limit,
-  })
-  if (error) throw error
-
-  type AggRow = { photo_id: string; download_events: number }
-  const rows = (aggRows ?? []) as AggRow[]
-  const tally = new Map(rows.map((r) => [r.photo_id, Number(r.download_events)]))
-  const topIds = rows.map((r) => r.photo_id)
   if (!topIds.length) return []
-
   const { data: photos, error: pErr } = await supabase
     .from('photos')
     .select(
@@ -230,6 +227,49 @@ export async function getAdminTopPhotosThisMonth(
     }
     return [row]
   })
+}
+
+/** Fallback when `get_top_photo_download_counts_since` is not migrated yet (avoids blank admin page). */
+async function getAdminTopPhotosThisMonthLegacy(
+  supabase: SupabaseClient,
+  limit: number,
+): Promise<AdminTopPhoto[]> {
+  const monthStart = utcThisMonthStartIso()
+  const { data: idRows, error } = await supabase.from('downloads').select('photo_id').gte('created_at', monthStart)
+  if (error) throw error
+  const tally = new Map<string, number>()
+  for (const r of idRows ?? []) {
+    const pid = r.photo_id as string
+    if (!pid) continue
+    tally.set(pid, (tally.get(pid) ?? 0) + 1)
+  }
+  const topIds = Array.from(tally.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id]) => id)
+  return hydrateAdminTopPhotosFromTally(supabase, topIds, tally)
+}
+
+/** Top photos by download events in the current UTC month (DB aggregate + photo hydrate). */
+export async function getAdminTopPhotosThisMonth(
+  supabase: SupabaseClient,
+  limit: number,
+): Promise<AdminTopPhoto[]> {
+  const monthStart = utcThisMonthStartIso()
+  const { data: aggRows, error } = await supabase.rpc('get_top_photo_download_counts_since', {
+    p_since: monthStart,
+    p_limit: limit,
+  })
+  if (error) {
+    if (!isMissingTopPhotosRpcError(error)) throw error
+    return getAdminTopPhotosThisMonthLegacy(supabase, limit)
+  }
+
+  type AggRow = { photo_id: string; download_events: number }
+  const rows = (aggRows ?? []) as AggRow[]
+  const tally = new Map(rows.map((r) => [r.photo_id, Number(r.download_events)]))
+  const topIds = rows.map((r) => r.photo_id)
+  return hydrateAdminTopPhotosFromTally(supabase, topIds, tally)
 }
 
 /** All download events grouped by who downloaded (team usage). */

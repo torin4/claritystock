@@ -8,6 +8,7 @@ import NotificationPopover from '@/components/modals/NotificationPopover'
 import SettingsPanel from '@/components/modals/SettingsPanel'
 import BrandTitle from '@/components/layout/BrandTitle'
 import UserAvatar from '@/components/layout/UserAvatar'
+import { isAdminRole } from '@/lib/auth/roles'
 import type { RecentNavItem } from '@/lib/navigation/recentNav'
 
 // SVG icons as components
@@ -130,13 +131,14 @@ export default function Sidebar({
   const openUpload = useUIStore(s => s.openUpload)
   const unreadCount = useNotificationsStore(s => s.unreadCount)
 
+  /** Keep Admin under Library so it stays visible when Recents fills the scroll area. */
   const navItems: NavItem[] = [
     { href: '/', label: 'Browse', icon: <BrowseIcon /> },
+    ...(isAdminRole(userRole) ? [{ href: '/admin', label: 'Admin', icon: <AdminIcon /> }] as NavItem[] : []),
   ]
   const mySpaceItems: NavItem[] = [
     { href: '/my-photos', label: 'My Photos', icon: <MyPhotosIcon /> },
     { href: '/insights', label: 'Insights', icon: <InsightsIcon /> },
-    ...(userRole === 'admin' ? [{ href: '/admin', label: 'Admin', icon: <AdminIcon /> }] as NavItem[] : []),
   ]
 
   const isActive = (href: string) =>

@@ -269,20 +269,21 @@ body {
   text-align: left;
 }
 .s-user-inner:hover { background: var(--surface-2); }
-.s-avatar {
-  width: 30px;
-  height: 30px;
+/* Size comes from UserAvatar inline styles (40px sidebar, 46px settings, etc.) */
+.user-avatar {
+  box-sizing: border-box;
   border-radius: 50%;
-  background: var(--accent-dim);
-  border: 1px solid var(--accent);
+  background: var(--surface-2);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 11px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--text-2);
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
 }
 .s-name {
   font-size: 12px;

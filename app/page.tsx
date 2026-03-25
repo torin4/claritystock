@@ -17,11 +17,12 @@ export default async function BrowsePage() {
   const [prefsRes, collections] = await Promise.all([
     uid
       ? supabase.from('users').select('hide_own_photos_in_browse').eq('id', uid).maybeSingle()
-      : Promise.resolve({ data: null as { hide_own_photos_in_browse: boolean } | null }),
+      : Promise.resolve({ data: null, error: null }),
     getCollections(supabase, { excludeCreatedBy: uid ?? null }),
   ])
 
-  const hideOwnPhotosInBrowse = prefsRes.data?.hide_own_photos_in_browse === true
+  const hideOwnPhotosInBrowse =
+    !prefsRes.error && prefsRes.data?.hide_own_photos_in_browse === true
 
   let photosQuery = supabase.from('photos').select(PHOTO_CARD_SELECT)
   if (hideOwnPhotosInBrowse && uid) {

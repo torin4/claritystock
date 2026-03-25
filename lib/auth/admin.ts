@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { isAdminRole } from '@/lib/auth/roles'
+
+export { isAdminRole } from '@/lib/auth/roles'
 
 export async function isUserAdmin(client: SupabaseClient, userId: string): Promise<boolean> {
   const { data } = await client.from('users').select('role').eq('id', userId).maybeSingle()
-  return data?.role === 'admin'
+  return isAdminRole(data?.role ?? null)
 }
 
 /** Throws if not signed in or not admin. Use in server actions that require admin. */

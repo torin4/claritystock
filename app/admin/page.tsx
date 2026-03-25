@@ -1,3 +1,4 @@
+import { isAdminRole } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import AdminTeamAnalytics from '@/components/admin/AdminTeamAnalytics'
 import { getUsageAlertConfig } from '@/lib/admin/usageAlert'
@@ -16,7 +17,7 @@ export default async function AdminPage() {
     getAdminUsersWithPhotoCounts(supabase),
   ])
 
-  const adminCount = userRows.filter(u => u.role === 'admin').length
+  const adminCount = userRows.filter(u => isAdminRole(u.role)).length
   const teamSummary = { memberCount: userRows.length, adminCount }
   const usageLedger = buildUsageLedger(userRows, allTime.downloadsByDownloader)
   const usageAlert = getUsageAlertConfig()

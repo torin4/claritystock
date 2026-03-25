@@ -2,13 +2,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import ConnectGoogleChatBanner from '@/components/admin/ConnectGoogleChatBanner'
 import AdminSubnav from '@/components/admin/AdminSubnav'
+import { isAdminRole } from '@/lib/auth/roles'
 import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerUser()
   const profile = await getServerProfile()
   if (!user) redirect('/login')
-  if (profile?.role !== 'admin') {
+  if (!isAdminRole(profile?.role)) {
     return (
       <div style={{ padding: '24px 20px', maxWidth: 480 }}>
         <div className="ph-title" style={{ marginBottom: 8 }}>Admin</div>

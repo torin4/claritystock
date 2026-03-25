@@ -17,24 +17,15 @@ export default function UserAvatar({ avatarUrl, initials, size = 44, className }
   const [imgFailed, setImgFailed] = useState(false)
   const url = typeof avatarUrl === 'string' && avatarUrl.trim() ? avatarUrl.trim() : null
   const showImg = Boolean(url && !imgFailed)
+  const mono = Math.max(10, Math.round(size * 0.28))
 
   return (
     <div
-      className={className ?? 's-avatar'}
+      className={className ?? 'user-avatar'}
       style={{
         width: size,
         height: size,
-        fontSize: Math.max(10, Math.round(size * 0.28)),
-        borderRadius: '50%',
-        background: 'var(--accent-dim)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'var(--font-mono)',
-        fontWeight: 700,
-        color: 'var(--accent)',
-        overflow: 'hidden',
-        flexShrink: 0,
+        fontSize: mono,
       }}
     >
       {showImg ? (
@@ -46,10 +37,18 @@ export default function UserAvatar({ avatarUrl, initials, size = 44, className }
           height={size}
           referrerPolicy="no-referrer"
           onError={() => setImgFailed(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          /* Absolute fill avoids Tailwind preflight img { height: auto } fighting % heights in flex layouts */
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: size,
+            height: size,
+            objectFit: 'cover',
+            display: 'block',
+          }}
         />
       ) : (
-        initials
+        <span style={{ position: 'relative', zIndex: 1, lineHeight: 1 }}>{initials}</span>
       )}
     </div>
   )

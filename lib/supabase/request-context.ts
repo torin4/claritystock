@@ -14,14 +14,28 @@ export const getServerProfile = cache(async (): Promise<Pick<User, 'name' | 'ini
   if (!user) return null
 
   const supabase = createClient()
+  /** Core columns only — if `hide_own_photos_in_browse` is missing in DB, mixing it here makes the whole row fail (PGRST204) and wipes name/role/admin everywhere. */
   const { data, error } = await supabase
     .from('users')
-    .select('name, initials, role, avatar_url, hide_own_photos_in_browse')
+    .select('name, initials, role, avatar_url')
     .eq('id', user.id)
     .maybeSingle()
 
   if (error) {
     console.error('[getServerProfile]', user.id, error.message)
+    return null
   }
-  return data ?? null
+  if (!data) return null
+
+  let hide_own_photos_in_browse = false
+  const hideRes = await supabase
+    .from('users')
+    .select('hide_own_photos_in_browse')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (!hideRes.error && hideRes.data?.hide_own_photos_in_browse === true) {
+    hide_own_photos_in_browse = true
+  }
+
+  return { ...data, hide_own_photos_in_browse }
 })
