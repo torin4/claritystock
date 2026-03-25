@@ -13,6 +13,8 @@ import { contentHashInFilter, isContentHashColumnMissingError } from '@/lib/util
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
 import type { Collection, Category } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
+import LocationField from '@/components/neighborhoods/LocationField'
+import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 
 const MAX_UPLOAD_MB = 50
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
@@ -39,6 +41,14 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const [uploadNotice, setUploadNotice] = useState<UploadNotice>(null)
   /** Set when DB has no `content_hash` column — library dup check skipped; same-batch still works */
   const [libraryDupNeedsMigration, setLibraryDupNeedsMigration] = useState(false)
+  const [locationLabels, setLocationLabels] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!uploadModalOpen) return
+    getNeighborhoodCanonicalLabels()
+      .then(setLocationLabels)
+      .catch(() => setLocationLabels([]))
+  }, [uploadModalOpen])
 
   useEffect(() => {
     if (!uploadModalOpen) return
@@ -550,11 +560,11 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       )}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      <input
-                        className="ui"
-                        placeholder="Neighborhood"
+                      <LocationField
                         value={currentForm.neighborhood ?? ''}
-                        onChange={e => store.updateForm(store.currentIndex, { neighborhood: e.target.value || null })}
+                        onChange={(v) => store.updateForm(store.currentIndex, { neighborhood: v || null })}
+                        labels={locationLabels}
+                        placeholder="Neighborhood"
                       />
                       <input
                         className="ui"

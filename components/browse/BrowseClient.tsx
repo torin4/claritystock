@@ -19,7 +19,6 @@ import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import type { Photo, Collection } from '@/lib/types/database.types'
 import { devError } from '@/lib/utils/devLog'
-import { neighborhoodForQuery } from '@/lib/utils/normalizeNeighborhood'
 
 interface BrowseClientProps {
   initialPhotos: Photo[]
@@ -62,12 +61,11 @@ export default function BrowseClient({
   const [zipBusy, setZipBusy] = useState(false)
   /** Avoid flashing "Loading…" on fast refetches (e.g. collection in/out). */
   const [showLoadingUi, setShowLoadingUi] = useState(false)
-  const [rpcNeighborhoods, setRpcNeighborhoods] = useState<string[]>([])
+  const [canonicalNeighborhoodLabels, setCanonicalNeighborhoodLabels] = useState<string[]>([])
   const search = useFilterStore((s) => s.search)
   const category = useFilterStore((s) => s.category)
   const neighborhood = useFilterStore((s) => s.neighborhood)
-  /** Matches DB / trigger casing so `.eq` and filter keys stay consistent. */
-  const neighborhoodQuery = useMemo(() => neighborhoodForQuery(neighborhood), [neighborhood])
+  const neighborhoodForFetch = neighborhood?.trim() || ''
   const sort = useFilterStore((s) => s.sort)
   const quickFilter = useFilterStore((s) => s.quickFilter)
   const collectionId = useFilterStore((s) => s.collectionId)
@@ -88,7 +86,7 @@ export default function BrowseClient({
       [
         search,
         category ?? '',
-        neighborhoodQuery ?? '',
+        neighborhoodForFetch,
         sort,
         quickFilter,
         collectionId ?? '',
@@ -96,45 +94,48 @@ export default function BrowseClient({
     [
       search,
       category,
-      neighborhoodQuery,
+      neighborhoodForFetch,
       sort,
       quickFilter,
       collectionId,
     ],
   )
 
-  /** Distinct neighborhoods in the library (RPC) merged with anything already in the grid. */
+  /** Canonical list + any neighborhood already on loaded rows (legacy / edge). */
   const neighborhoodOptions = useMemo(() => {
-    const s = new Set<string>(rpcNeighborhoods)
-    for (const p of initialPhotos) {
-      if (p.neighborhood?.trim()) s.add(p.neighborhood.trim())
+    const byKey = new Map<string, string>()
+    const add = (raw: string | null | undefined) => {
+      const t = raw?.trim()
+      if (!t) return
+      byKey.set(t.toLowerCase(), t)
     }
-    for (const p of photos) {
-      if (p.neighborhood?.trim()) s.add(p.neighborhood.trim())
-    }
-    return Array.from(s).sort((a, b) => a.localeCompare(b))
-  }, [rpcNeighborhoods, initialPhotos, photos])
+    for (const n of canonicalNeighborhoodLabels) add(n)
+    for (const p of initialPhotos) add(p.neighborhood)
+    for (const p of photos) add(p.neighborhood)
+    return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b))
+  }, [canonicalNeighborhoodLabels, initialPhotos, photos])
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       const supabase = getSupabaseBrowserClient()
-      const { data, error } = await supabase.rpc('get_browse_neighborhoods', {
-        p_exclude_photographer_id: hideEffective && userId ? userId : null,
-      })
+      const { data, error } = await supabase
+        .from('neighborhood_canonicals')
+        .select('label')
+        .order('label', { ascending: true })
       if (cancelled) return
       if (error) {
         devError(error)
-        setRpcNeighborhoods([])
+        setCanonicalNeighborhoodLabels([])
         return
       }
-      const rows = (data ?? []) as { neighborhood: string }[]
-      setRpcNeighborhoods(rows.map((r) => r.neighborhood).filter(Boolean))
+      const rows = (data ?? []) as { label: string }[]
+      setCanonicalNeighborhoodLabels(rows.map((r) => r.label).filter(Boolean))
     })()
     return () => {
       cancelled = true
     }
-  }, [hideEffective, userId])
+  }, [])
 
   const beginSelection = useCallback((id: string) => {
     setSelectionMode(true)
@@ -198,7 +199,8 @@ export default function BrowseClient({
         query = query.textSearch('fts', search, { type: 'websearch' })
       }
       if (category) query = query.eq('category', category)
-      if (neighborhoodQuery) query = query.eq('neighborhood', neighborhoodQuery)
+      // Case-insensitive so legacy rows (e.g. bellevue) still match filter "Bellevue".
+      if (neighborhoodForFetch) query = query.eq('neighborhood', neighborhoodForFetch)
       if (collectionId) query = query.eq('collection_id', collectionId)
 
       if (hideEffective && userId) {
@@ -273,7 +275,7 @@ export default function BrowseClient({
         setLoading(false)
       }
     }
-  }, [search, category, neighborhoodQuery, collectionId, sort, quickFilter, userId, hideEffective])
+  }, [search, category, neighborhoodForFetch, collectionId, sort, quickFilter, userId, hideEffective])
 
   useEffect(() => {
     if (!didRunInitialFetch.current) {
@@ -358,7 +360,7 @@ export default function BrowseClient({
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, is_downloaded_by_me: true } : p))
   }, [])
 
-  const hasActiveFilters = !!(category || neighborhoodQuery || (search && search.length > 0))
+  const hasActiveFilters = !!(category || neighborhoodForFetch || (search && search.length > 0))
   const filteredCollections = useMemo(() => {
     const q = search.trim().toLowerCase()
     return collections.filter((c) => {

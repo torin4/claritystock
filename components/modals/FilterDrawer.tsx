@@ -3,7 +3,6 @@ import { useMemo } from 'react'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
 import type { Category, SortOption } from '@/lib/types/database.types'
-import { neighborhoodForQuery } from '@/lib/utils/normalizeNeighborhood'
 
 const CATEGORIES: { label: string; value: Category | null }[] = [
   { label: 'All', value: null },
@@ -18,7 +17,7 @@ const SORT_OPTIONS: { label: string; value: SortOption }[] = [
 ]
 
 interface FilterDrawerProps {
-  /** Distinct `photos.neighborhood` values (browse library), sorted. */
+  /** Canonical + in-grid neighborhood labels for the location filter. */
   neighborhoodOptions: string[]
 }
 
@@ -26,14 +25,24 @@ export default function FilterDrawer({ neighborhoodOptions }: FilterDrawerProps)
   const { filterDrawerOpen, closeFilter } = useUIStore()
   const { category, neighborhood, sort, setCategory, setNeighborhood, setSort, clearAll } = useFilterStore()
 
-  const locationChoices = useMemo(() => {
-    const canonical = neighborhood ? neighborhoodForQuery(neighborhood) ?? neighborhood : null
-    const set = new Set(neighborhoodOptions)
-    if (canonical && !set.has(canonical)) {
-      return [...neighborhoodOptions, canonical].sort((a, b) => a.localeCompare(b))
+  const dedupedOptions = useMemo(() => {
+    const byKey = new Map<string, string>()
+    for (const n of neighborhoodOptions) {
+      const t = n.trim()
+      if (!t) continue
+      byKey.set(t.toLowerCase(), t)
     }
-    return neighborhoodOptions
-  }, [neighborhoodOptions, neighborhood])
+    return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b))
+  }, [neighborhoodOptions])
+
+  const locationChoices = useMemo(() => {
+    const current = neighborhood?.trim() || ''
+    const set = new Set(dedupedOptions)
+    if (current && !set.has(current)) {
+      return [...dedupedOptions, current].sort((a, b) => a.localeCompare(b))
+    }
+    return dedupedOptions
+  }, [dedupedOptions, neighborhood])
 
   return (
     <>
@@ -67,12 +76,12 @@ export default function FilterDrawer({ neighborhoodOptions }: FilterDrawerProps)
             <div className="fd-lbl">Location</div>
             <select
               className="fd-select"
-              value={neighborhood ? neighborhoodForQuery(neighborhood) ?? neighborhood : ''}
+              value={neighborhood ?? ''}
               onChange={e => setNeighborhood(e.target.value || null)}
             >
               <option value="">Anywhere</option>
               {locationChoices.map(n => (
-                <option key={n} value={n}>{n}</option>
+                <option key={n.toLowerCase()} value={n}>{n}</option>
               ))}
             </select>
           </div>

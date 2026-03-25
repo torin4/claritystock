@@ -4,6 +4,8 @@ import { useUIStore } from '@/stores/ui.store'
 import { updatePhoto, deletePhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Photo, Collection, Category } from '@/lib/types/database.types'
+import LocationField from '@/components/neighborhoods/LocationField'
+import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 
 interface Props {
   userId: string
@@ -24,6 +26,13 @@ export default function EditModal({ userId, onSuccess }: Props) {
   const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [locationLabels, setLocationLabels] = useState<string[]>([])
+
+  useEffect(() => {
+    getNeighborhoodCanonicalLabels()
+      .then(setLocationLabels)
+      .catch(() => setLocationLabels([]))
+  }, [])
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
@@ -179,10 +188,10 @@ export default function EditModal({ userId, onSuccess }: Props) {
           <div className="modal-row">
             <div className="modal-field">
               <div className="modal-lbl">Neighborhood</div>
-              <input
-                className="ui"
+              <LocationField
                 value={neighborhood}
-                onChange={e => setNeighborhood(e.target.value)}
+                onChange={setNeighborhood}
+                labels={locationLabels}
                 placeholder="e.g. Kirkland"
               />
             </div>

@@ -482,111 +482,461 @@ $$;
 GRANT EXECUTE ON FUNCTION public.remove_my_downloads(uuid[]) TO authenticated;
 
 -- ---------------------------------------------------------------------------
--- RPC — Browse: distinct neighborhoods for filter (matches grid visibility)
+-- Canonical location labels (app autocomplete + save-time resolution)
 -- ---------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION public.get_browse_neighborhoods(
-  p_exclude_photographer_id uuid DEFAULT NULL
-)
-RETURNS TABLE (neighborhood text)
-LANGUAGE sql
-STABLE
-SECURITY INVOKER
-SET search_path = public
-AS $$
-  SELECT DISTINCT trim(p.neighborhood) AS neighborhood
-  FROM public.photos p
-  WHERE p.neighborhood IS NOT NULL
-    AND trim(p.neighborhood) <> ''
-    AND (
-      p_exclude_photographer_id IS NULL
-      OR p.photographer_id IS NULL
-      OR p.photographer_id <> p_exclude_photographer_id
-    )
-  ORDER BY 1;
-$$;
+CREATE TABLE IF NOT EXISTS public.neighborhood_canonicals (
+  label text PRIMARY KEY
+);
 
-REVOKE ALL ON FUNCTION public.get_browse_neighborhoods(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_browse_neighborhoods(uuid) TO authenticated;
+COMMENT ON TABLE public.neighborhood_canonicals IS
+  'Location labels for autocomplete and save-time normalization: all WA cities/towns; Seattle neighborhoods; Puget Sound colloquial names.';
 
--- ---------------------------------------------------------------------------
--- photos.neighborhood — case + typo normalization (pg_trgm similarity)
--- ---------------------------------------------------------------------------
+INSERT INTO public.neighborhood_canonicals (label) VALUES
+  ('Aberdeen'),
+  ('Adams'),
+  ('Airway Heights'),
+  ('Albion'),
+  ('Algona'),
+  ('Alki Point'),
+  ('Almira'),
+  ('Anacortes'),
+  ('Arbor Heights'),
+  ('Arlington'),
+  ('Asotin'),
+  ('Atlantic'),
+  ('Auburn'),
+  ('Bainbridge Island'),
+  ('Ballard'),
+  ('Battle Ground'),
+  ('Beacon Hill'),
+  ('Beaux Arts Village'),
+  ('Bellevue'),
+  ('Bellingham'),
+  ('Belltown'),
+  ('Benton City'),
+  ('Bingen'),
+  ('Bitter Lake'),
+  ('Black Diamond'),
+  ('Blaine'),
+  ('Blue Ridge'),
+  ('Bonney Lake'),
+  ('Bothell'),
+  ('Bremerton'),
+  ('Brewster'),
+  ('Briarcliff'),
+  ('Bridgeport'),
+  ('Brier'),
+  ('Brighton'),
+  ('Broadmoor'),
+  ('Broadview'),
+  ('Broadway'),
+  ('Bryant'),
+  ('Buckley'),
+  ('Bucoda'),
+  ('Burien'),
+  ('Burlington'),
+  ('Camas'),
+  ('Capitol Hill'),
+  ('Carbonado'),
+  ('Carnation'),
+  ('Cascade'),
+  ('Cashmere'),
+  ('Castle Rock'),
+  ('Cathlamet'),
+  ('Cedar Park'),
+  ('Central Business District'),
+  ('Central District'),
+  ('Central Waterfront'),
+  ('Centralia'),
+  ('Chehalis'),
+  ('Chelan'),
+  ('Cheney'),
+  ('Cherry Hill'),
+  ('Chewelah'),
+  ('Chinatown-International District'),
+  ('Clarkston'),
+  ('Cle Elum'),
+  ('Clyde Hill'),
+  ('Colfax'),
+  ('College Place'),
+  ('Colton'),
+  ('Columbia City'),
+  ('Colville'),
+  ('Conconully'),
+  ('Concrete'),
+  ('Connell'),
+  ('Cosmopolis'),
+  ('Coulee City'),
+  ('Coulee Dam'),
+  ('Coupeville'),
+  ('Covington'),
+  ('Creston'),
+  ('Crown Hill'),
+  ('Cusick'),
+  ('Darrington'),
+  ('Davenport'),
+  ('Dayton'),
+  ('Deer Park'),
+  ('Delridge'),
+  ('Denny Regrade'),
+  ('Denny Triangle'),
+  ('Denny-Blaine'),
+  ('Des Moines'),
+  ('Downtown'),
+  ('Dunlap'),
+  ('DuPont'),
+  ('Duvall'),
+  ('East Queen Anne'),
+  ('East Wenatchee'),
+  ('Eastlake'),
+  ('Eatonville'),
+  ('Edgewood'),
+  ('Edmonds'),
+  ('Electric City'),
+  ('Ellensburg'),
+  ('Elma'),
+  ('Elmer City'),
+  ('Endicott'),
+  ('Entiat'),
+  ('Enumclaw'),
+  ('Ephrata'),
+  ('Everett'),
+  ('Everson'),
+  ('Fairfield'),
+  ('Fairmount Park'),
+  ('Fall City'),
+  ('Farmington'),
+  ('Fauntleroy'),
+  ('Federal Way'),
+  ('Ferndale'),
+  ('Fife'),
+  ('Fircrest'),
+  ('First Hill'),
+  ('Forks'),
+  ('Frelard'),
+  ('Fremont'),
+  ('Friday Harbor'),
+  ('Garfield'),
+  ('Garfield High School'),
+  ('Gatewood'),
+  ('Genesee'),
+  ('George'),
+  ('Georgetown'),
+  ('Gig Harbor'),
+  ('Gold Bar'),
+  ('Goldendale'),
+  ('Grand Coulee'),
+  ('Grandview'),
+  ('Granger'),
+  ('Granite Falls'),
+  ('Green Lake'),
+  ('Greenwood'),
+  ('Haller Lake'),
+  ('Hamilton'),
+  ('Harbor Island'),
+  ('Harrah'),
+  ('Harrington'),
+  ('Hartline'),
+  ('Hatton'),
+  ('Hawthorne Hills'),
+  ('High Point'),
+  ('Highland Park'),
+  ('Hillman City'),
+  ('Hoquiam'),
+  ('Hunts Point'),
+  ('Ilwaco'),
+  ('Index'),
+  ('Industrial District'),
+  ('Interbay'),
+  ('International District'),
+  ('Ione'),
+  ('Issaquah'),
+  ('Judkins Park'),
+  ('Junction'),
+  ('Kahlotus'),
+  ('Kalama'),
+  ('Kelso'),
+  ('Kenmore'),
+  ('Kennewick'),
+  ('Kent'),
+  ('Kettle Falls'),
+  ('Kirkland'),
+  ('Kittitas'),
+  ('Krupp'),
+  ('La Center'),
+  ('La Conner'),
+  ('Lacey'),
+  ('LaCrosse'),
+  ('Lake City'),
+  ('Lake Forest Park'),
+  ('Lake Stevens'),
+  ('Lakewood'),
+  ('Lamont'),
+  ('Langley'),
+  ('Latah'),
+  ('Laurelhurst'),
+  ('Lawton Park'),
+  ('Leavenworth'),
+  ('Leschi'),
+  ('Liberty Lake'),
+  ('Licton Springs'),
+  ('Lind'),
+  ('Long Beach'),
+  ('Longview'),
+  ('Lower Queen Anne'),
+  ('Loyal Heights'),
+  ('Lyman'),
+  ('Lynden'),
+  ('Lynnwood'),
+  ('Mabton'),
+  ('Madison Park'),
+  ('Madison Valley'),
+  ('Madrona'),
+  ('Madrona Valley'),
+  ('Magnolia'),
+  ('Malden'),
+  ('Mann'),
+  ('Mansfield'),
+  ('Maple Leaf'),
+  ('Maple Valley'),
+  ('Marcus'),
+  ('Marysville'),
+  ('Mattawa'),
+  ('Matthews Beach'),
+  ('Maury Island'),
+  ('McCleary'),
+  ('Meadowbrook'),
+  ('Medical Lake'),
+  ('Medina'),
+  ('Mercer Island'),
+  ('Meridian'),
+  ('Mesa'),
+  ('Metaline'),
+  ('Metaline Falls'),
+  ('Mill Creek'),
+  ('Millwood'),
+  ('Milton'),
+  ('Minor'),
+  ('Monroe'),
+  ('Montesano'),
+  ('Montlake'),
+  ('Morton'),
+  ('Moses Lake'),
+  ('Mossyrock'),
+  ('Mount Baker'),
+  ('Mount Vernon'),
+  ('Mountlake Terrace'),
+  ('Moxee'),
+  ('Mukilteo'),
+  ('Naches'),
+  ('Napavine'),
+  ('Nespelem'),
+  ('Newcastle'),
+  ('NewHolly'),
+  ('Newport'),
+  ('Nooksack'),
+  ('Normandy Park'),
+  ('North Admiral'),
+  ('North Beach'),
+  ('North Beacon Hill'),
+  ('North Bend'),
+  ('North Bonneville'),
+  ('North Delridge'),
+  ('North Queen Anne'),
+  ('Northgate'),
+  ('Northlake'),
+  ('Northport'),
+  ('Oak Harbor'),
+  ('Oakesdale'),
+  ('Oakville'),
+  ('Ocean Shores'),
+  ('Odessa'),
+  ('Okanogan'),
+  ('Olympia'),
+  ('Olympic Hills'),
+  ('Omak'),
+  ('Oroville'),
+  ('Orting'),
+  ('Othello'),
+  ('Pacific'),
+  ('Palouse'),
+  ('Pasco'),
+  ('Pateros'),
+  ('Pe Ell'),
+  ('Phinney Ridge'),
+  ('Pigeon Point'),
+  ('Pike Place Market'),
+  ('Pike-Pine Corridor'),
+  ('Pinehurst'),
+  ('Pioneer Square'),
+  ('Pomeroy'),
+  ('Port Angeles'),
+  ('Port Orchard'),
+  ('Port Townsend'),
+  ('Poulsbo'),
+  ('Prescott'),
+  ('Preston'),
+  ('Prosser'),
+  ('Pullman'),
+  ('Puyallup'),
+  ('Queen Anne'),
+  ('Quincy'),
+  ('Rainier'),
+  ('Rainier Beach'),
+  ('Rainier Valley'),
+  ('Rainier View'),
+  ('Ravenna'),
+  ('Raymond'),
+  ('Reardan'),
+  ('Redmond'),
+  ('Renton'),
+  ('Renton Hill'),
+  ('Republic'),
+  ('Richland'),
+  ('Ridgefield'),
+  ('Ritzville'),
+  ('Riverside'),
+  ('Riverview'),
+  ('Roanoke'),
+  ('Roanoke Park Historic District'),
+  ('Rock Island'),
+  ('Rockford'),
+  ('Roosevelt'),
+  ('Rosalia'),
+  ('Roslyn'),
+  ('Roxhill'),
+  ('Roy'),
+  ('Royal City'),
+  ('Ruston'),
+  ('Sammamish'),
+  ('Sand Point'),
+  ('SeaTac'),
+  ('Seattle'),
+  ('Seattle Hebrew Academy'),
+  ('Seattle Landmarks'),
+  ('Seattle Post-Intelligencer'),
+  ('Seattle Public Library'),
+  ('Seaview'),
+  ('Sedro-Woolley'),
+  ('Selah'),
+  ('Sequim'),
+  ('Seward Park'),
+  ('Shelton'),
+  ('Shoreline'),
+  ('Skykomish'),
+  ('SLU'),
+  ('Snohomish'),
+  ('Snoqualmie'),
+  ('Soap Lake'),
+  ('SoDo'),
+  ('South Beacon Hill'),
+  ('South Bend'),
+  ('South Cle Elum'),
+  ('South Delridge'),
+  ('South End'),
+  ('South Lake Union'),
+  ('South Park'),
+  ('South Prairie'),
+  ('South Seattle'),
+  ('Southeast Magnolia'),
+  ('Southeast Seattle'),
+  ('Spangle'),
+  ('Spokane'),
+  ('Spokane Valley'),
+  ('Sprague'),
+  ('Springdale'),
+  ('Squire Park'),
+  ('St. John'),
+  ('Stanwood'),
+  ('Starbuck'),
+  ('Steilacoom'),
+  ('Stevens'),
+  ('Stevenson'),
+  ('Street layout of Seattle'),
+  ('Sultan'),
+  ('Sumas'),
+  ('Sumner'),
+  ('Sunnyside'),
+  ('Sunset Hill'),
+  ('Tacoma'),
+  ('Tekoa'),
+  ('Tenino'),
+  ('Tieton'),
+  ('Toledo'),
+  ('Tonasket'),
+  ('Toppenish'),
+  ('Tukwila'),
+  ('Tumwater'),
+  ('Twisp'),
+  ('U District'),
+  ('Union Gap'),
+  ('Uniontown'),
+  ('University District'),
+  ('University Place'),
+  ('University Village'),
+  ('Vader'),
+  ('Vancouver'),
+  ('Vashon'),
+  ('Victory Heights'),
+  ('View Ridge'),
+  ('Waitsburg'),
+  ('Walla Walla'),
+  ('Wallingford'),
+  ('Wapato'),
+  ('Warden'),
+  ('Washington Park'),
+  ('Washougal'),
+  ('Washtucna'),
+  ('Waterville'),
+  ('Waverly'),
+  ('Wedgwood'),
+  ('Wenatchee'),
+  ('West Edge'),
+  ('West Queen Anne'),
+  ('West Richland'),
+  ('West Seattle'),
+  ('West Seattle Junction'),
+  ('West Woodland'),
+  ('Westlake'),
+  ('Westlake Seattle'),
+  ('Westport'),
+  ('White Center'),
+  ('White Salmon'),
+  ('Whittier Heights'),
+  ('Wilbur'),
+  ('Wilkeson'),
+  ('Wilson Creek'),
+  ('Windermere'),
+  ('Winlock'),
+  ('Winthrop'),
+  ('Woodinville'),
+  ('Woodland'),
+  ('Woodway'),
+  ('Yacolt'),
+  ('Yakima'),
+  ('Yarrow Point'),
+  ('Yelm'),
+  ('Yesler Terrace'),
+  ('Zillah')
+ON CONFLICT (label) DO NOTHING;
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+ALTER TABLE public.neighborhood_canonicals ENABLE ROW LEVEL SECURITY;
 
-CREATE OR REPLACE FUNCTION public.normalize_neighborhood_case(p_input text)
-RETURNS text
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT CASE
-    WHEN p_input IS NULL THEN NULL
-    WHEN trim(p_input) = '' THEN NULL
-    ELSE initcap(lower(trim(p_input)))
-  END;
-$$;
+DROP POLICY IF EXISTS "neighborhood_canonicals_select_authenticated" ON public.neighborhood_canonicals;
+CREATE POLICY "neighborhood_canonicals_select_authenticated"
+  ON public.neighborhood_canonicals FOR SELECT
+  TO authenticated
+  USING (true);
 
-CREATE OR REPLACE FUNCTION public.photos_normalize_neighborhood()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = public, extensions
-AS $$
-DECLARE
-  raw text;
-  trimmed text;
-  best text;
-  best_sim real;
-BEGIN
-  IF NEW.neighborhood IS NULL THEN
-    RETURN NEW;
-  END IF;
+GRANT SELECT ON public.neighborhood_canonicals TO authenticated;
+GRANT SELECT ON public.neighborhood_canonicals TO anon;
 
-  raw := trim(NEW.neighborhood);
-  IF raw = '' THEN
-    NEW.neighborhood := NULL;
-    RETURN NEW;
-  END IF;
-
-  trimmed := initcap(lower(raw));
-
-  SELECT p.neighborhood INTO best
-  FROM public.photos p
-  WHERE p.neighborhood IS NOT NULL
-    AND trim(p.neighborhood) <> ''
-    AND lower(trim(p.neighborhood)) = lower(raw)
-  LIMIT 1;
-
-  IF best IS NOT NULL THEN
-    NEW.neighborhood := best;
-    RETURN NEW;
-  END IF;
-
-  SELECT p.neighborhood, similarity(lower(trim(p.neighborhood)), lower(raw))
-  INTO best, best_sim
-  FROM public.photos p
-  WHERE p.neighborhood IS NOT NULL
-    AND trim(p.neighborhood) <> ''
-    AND (TG_OP = 'INSERT' OR p.id IS DISTINCT FROM NEW.id)
-  ORDER BY similarity(lower(trim(p.neighborhood)), lower(raw)) DESC
-  LIMIT 1;
-
-  IF best IS NOT NULL AND best_sim IS NOT NULL AND best_sim >= 0.45 THEN
-    NEW.neighborhood := best;
-    RETURN NEW;
-  END IF;
-
-  NEW.neighborhood := trimmed;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS photos_normalize_neighborhood_trigger ON public.photos;
-CREATE TRIGGER photos_normalize_neighborhood_trigger
-  BEFORE INSERT OR UPDATE OF neighborhood ON public.photos
-  FOR EACH ROW
-  EXECUTE FUNCTION public.photos_normalize_neighborhood();
+DROP POLICY IF EXISTS "neighborhood_canonicals_select_anon" ON public.neighborhood_canonicals;
+CREATE POLICY "neighborhood_canonicals_select_anon"
+  ON public.neighborhood_canonicals FOR SELECT
+  TO anon
+  USING (true);
 
 -- ---------------------------------------------------------------------------
 -- RPC — top contributors for Insights (by cumulative uses on their photos)

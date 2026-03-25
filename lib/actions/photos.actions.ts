@@ -6,6 +6,8 @@ import { assertOwnerOrAdmin, isUserAdmin } from '@/lib/auth/admin'
 import type { PhotoFormValues } from '@/lib/types/database.types'
 import type { PostgrestError } from '@supabase/supabase-js'
 import { devWarn } from '@/lib/utils/devLog'
+import { resolveNeighborhoodToCanonical } from '@/lib/neighborhoods/canonical'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /** PostgREST when a column is not in the live schema (migration not applied yet). */
 function isMissingColumnError(error: PostgrestError | null, column: string): boolean {
@@ -33,6 +35,18 @@ async function assertOwnedCollectionId(
 }
 
 /** Collection must belong to this photographer (for admin acting on behalf / edits). */
+async function resolveNeighborhoodForDb(
+  supabase: SupabaseClient,
+  input: string | null | undefined,
+): Promise<string | null> {
+  const t = input?.trim()
+  if (!t) return null
+  const { data, error } = await supabase.from('neighborhood_canonicals').select('label')
+  if (error) throw error
+  const labels = (data ?? []).map((r: { label: string }) => r.label)
+  return resolveNeighborhoodToCanonical(t, labels)
+}
+
 async function assertCollectionOwnedByPhotographer(
   collectionId: string | null | undefined,
   photographerId: string,
@@ -63,13 +77,18 @@ export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) 
     await assertOwnedCollectionId(values.collection_id, user.id)
   }
 
+  const neighborhoodResolved =
+    values.neighborhood !== undefined
+      ? await resolveNeighborhoodForDb(supabase, values.neighborhood)
+      : undefined
+
   let q = supabase
     .from('photos')
     .update({
       title: values.title,
       category: values.category,
       collection_id: values.collection_id,
-      neighborhood: values.neighborhood,
+      ...(values.neighborhood !== undefined ? { neighborhood: neighborhoodResolved } : {}),
       subarea: values.subarea,
       captured_date: values.captured_date,
       tags: values.tags,
@@ -267,12 +286,14 @@ export async function publishPhoto(
     collectionId = newColl.id
   }
 
+  const neighborhoodResolved = await resolveNeighborhoodForDb(supabase, formValues.neighborhood)
+
   const baseRow = {
     title: formValues.title,
     photographer_id: photographerId,
     collection_id: collectionId,
     category: formValues.category,
-    neighborhood: formValues.neighborhood,
+    neighborhood: neighborhoodResolved,
     subarea: formValues.subarea,
     captured_date: formValues.captured_date,
     tags: formValues.tags,
