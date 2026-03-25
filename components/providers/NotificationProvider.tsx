@@ -12,7 +12,31 @@ export default function NotificationProvider({ userId }: { userId: string }) {
 
     let stopped = false
     const seen = new Set<string>()
+    const latestSeenAtKey = `claritystock:lastSeenAt:${userId}`
     let latestSeenAt: string | null = null
+
+    try {
+      latestSeenAt = window.localStorage.getItem(latestSeenAtKey)
+    } catch {
+      // localStorage might be blocked (private mode). Notifications will still work, just less "sticky".
+    }
+
+    const persistLatestSeenAt = (ts: string) => {
+      latestSeenAt = ts
+      try {
+        window.localStorage.setItem(latestSeenAtKey, ts)
+      } catch {
+        // ignore
+      }
+    }
+
+    const updateLatestSeenAtMax = (ts: string) => {
+      if (!latestSeenAt) return persistLatestSeenAt(ts)
+      const a = new Date(latestSeenAt).getTime()
+      const b = new Date(ts).getTime()
+      if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return
+      persistLatestSeenAt(ts)
+    }
 
     async function fetchRecentDownloads() {
       if (stopped) return
@@ -57,7 +81,7 @@ export default function NotificationProvider({ userId }: { userId: string }) {
         }
 
         if (rows.length) {
-          latestSeenAt = rows[0].created_at
+          persistLatestSeenAt(rows[0].created_at)
         }
       } catch (e) {
       }
@@ -93,6 +117,9 @@ export default function NotificationProvider({ userId }: { userId: string }) {
             createdAt: payload.new.created_at,
             read: false,
           }
+
+          // Prevent already-notified items from reappearing after a hard refresh.
+          updateLatestSeenAtMax(payload.new.created_at)
           addNotification(n)
         }
       )
