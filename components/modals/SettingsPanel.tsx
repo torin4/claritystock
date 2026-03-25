@@ -231,7 +231,6 @@ export default function SettingsPanel({
             <div className="sp-sec-title" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: '12px' }}>Notifications</div>
             {[
               { label: 'Download alerts', sub: 'When someone downloads your photo' },
-              { label: 'Weekly digest', sub: 'Summary of your photo performance' },
             ].map(item => (
               <div key={item.label} className="notif-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                 <div>
