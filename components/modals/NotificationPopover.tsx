@@ -54,7 +54,7 @@ function notificationText(n: AppNotification): React.ReactNode {
 }
 
 export default function NotificationPopover() {
-  const { notifPopoverOpen, closeNotif, openBulkReview, openBulkUpdate } = useUIStore()
+  const { notifPopoverOpen, closeNotif, openBulkReview } = useUIStore()
   const { notifications, markAllRead, markBulkRead } = useNotificationsStore()
 
   const popoverRef = useRef<HTMLDivElement | null>(null)
@@ -91,8 +91,7 @@ export default function NotificationPopover() {
   const handleRowClick = (n: AppNotification) => {
     if (n.kind === 'bulk_upload') {
       markBulkRead(n.jobId)
-      if (n.failedCount > 0) openBulkReview(n.jobId)
-      if (n.needsLocationCount > 0) openBulkUpdate(n.jobId)
+      if (n.failedCount > 0 || n.needsLocationCount > 0) openBulkReview(n.jobId)
       closeNotif()
     }
   }
