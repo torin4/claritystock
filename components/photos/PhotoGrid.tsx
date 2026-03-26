@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import PhotoTile from './PhotoTile'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { getOrCreateSignedUrls, peekCachedSignedUrl } from '@/lib/utils/signedUrlCache'
+
+const GRID_TRANSFORM = { width: 1200, quality: 80 }
 import type { Photo } from '@/lib/types/database.types'
 
 interface Props {
@@ -67,7 +69,7 @@ export default function PhotoGrid({
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       displayPaths
-        .map((path) => [path, peekCachedSignedUrl(path) ?? providedUrls[path]] as const)
+        .map((path) => [path, peekCachedSignedUrl(path, GRID_TRANSFORM) ?? providedUrls[path]] as const)
         .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
     ),
   )
@@ -86,7 +88,7 @@ export default function PhotoGrid({
     const next: Record<string, string> = {}
     const missing: string[] = []
     for (const path of displayPaths) {
-      const known = peekCachedSignedUrl(path) ?? providedUrls[path] ?? signedUrlsRef.current[path]
+      const known = peekCachedSignedUrl(path, GRID_TRANSFORM) ?? providedUrls[path] ?? signedUrlsRef.current[path]
       if (known) {
         next[path] = known
       } else {
@@ -100,7 +102,7 @@ export default function PhotoGrid({
     let cancelled = false
     ;(async () => {
       const supabase = getSupabaseBrowserClient()
-      const urls = await getOrCreateSignedUrls(supabase, missing, 3600)
+      const urls = await getOrCreateSignedUrls(supabase, missing, 3600, GRID_TRANSFORM)
       if (cancelled) return
       setSignedUrls((prev) => ({ ...prev, ...urls }))
     })()
