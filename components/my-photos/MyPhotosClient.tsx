@@ -1066,8 +1066,8 @@ export default function MyPhotosClient({
               )}
             </div>
           )}
-          <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
-            Cancel
+          <button type="button" className="btn btn-secondary btn-sm" onClick={exitSelection}>
+            Done
           </button>
           <button
             type="button"

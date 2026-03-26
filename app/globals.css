@@ -681,55 +681,38 @@ body {
   z-index: 160;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 12px 20px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 10px 16px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
   background: var(--surface);
   border-top: 1px solid var(--border-hi);
   box-shadow: 0 -8px 32px rgba(0,0,0,0.35);
+  overflow-x: auto;
 }
-.mp-select-bar-count { font-size: 13px; font-weight: 500; color: var(--text-2); margin-right: auto; font-family: var(--font-body); }
-.mp-select-bar-hint { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); width: 100%; order: 3; }
-@media (min-width: 769px) {
-  .mp-select-bar-hint { width: auto; order: 0; margin-right: 12px; }
-}
+.mp-select-bar-count { font-size: 13px; font-weight: 500; color: var(--text-2); white-space: nowrap; font-family: var(--font-body); }
 .mp-select-bar-coll {
-  min-width: 140px;
-  max-width: min(220px, 40vw);
+  min-width: 120px;
+  max-width: 180px;
   font-size: 12px;
-  padding: 6px 10px;
+  padding: 5px 8px;
+  flex-shrink: 0;
 }
 .mp-select-bar-edit {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
-  width: 100%;
-  order: 4;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  padding-left: 8px;
+  margin-left: 2px;
 }
 .mp-select-bar-edit .ui {
   font-size: 12px;
   padding: 5px 8px;
-  min-width: 110px;
 }
-.mp-select-bar-edit input.ui {
-  flex: 1;
-  min-width: 140px;
-}
-@media (min-width: 769px) {
-  .mp-select-bar-edit {
-    width: auto;
-    order: 0;
-    padding-top: 0;
-    border-top: none;
-    border-left: 1px solid var(--border);
-    padding-left: 10px;
-    margin-left: 4px;
-  }
-}
+.mp-select-bar-edit select.ui { width: 120px; }
+.mp-select-bar-edit input.ui { width: 150px; }
 
 /* ── Filter drawer ── (above .mobile-bar z-index 300 so sheet covers header) */
 .drawer-overlay { display: none; position: fixed; inset: 0; z-index: 350; background: rgba(0,0,0,0.5); }
