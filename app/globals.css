@@ -681,6 +681,7 @@ body {
   z-index: 160;
   display: flex;
   align-items: center;
+  justify-content: center;
   flex-wrap: nowrap;
   gap: 8px;
   padding: 10px 16px;
