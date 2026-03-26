@@ -449,6 +449,28 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         setBulkMessage('Reading ZIP…')
 
         const supabase = getSupabaseBrowserClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user?.id) {
+          setBulkUploadProgress(null)
+          setBulkPhase('error')
+          setBulkMessage('You must be signed in to run a bulk ZIP import.')
+          return
+        }
+        const authedUserId = user.id
+        const targetPhotographerId = userId || authedUserId
+
+        // Admin panel: allow acting on behalf of another photographer.
+        if (targetPhotographerId !== authedUserId) {
+          const { data: isAdmin, error: adminErr } = await supabase.rpc('is_admin')
+          if (adminErr || !isAdmin) {
+            setBulkUploadProgress(null)
+            setBulkPhase('error')
+            setBulkMessage('Only admins can import photos on behalf of another photographer.')
+            return
+          }
+        }
 
         // Dynamically import ZIP parsing + bulk constants so JSZip doesn't bloat standard uploads.
         const bulk = await import('@/lib/uploads/bulkZipImport')
@@ -487,7 +509,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         const { data: jobRow, error: jobErr } = await supabase
           .from('bulk_upload_jobs')
           .insert({
-            photographer_id: userId,
+            photographer_id: targetPhotographerId,
             status: 'running',
           })
           .select('id')
@@ -637,7 +659,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               try {
                 assets = await uploadPhotoAssetsForPublish({
                   file: entry.file,
-                  userId,
+                  userId: targetPhotographerId,
                   contentHash,
                 })
               } catch (e) {
@@ -674,7 +696,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 const { id } = await publishPhoto(
                   { ...form, description: ai?.description },
                   assets.storagePath,
-                  userId,
+                  targetPhotographerId,
                   {
                     thumbnailPath: assets.thumbnailPath,
                     displayPath: assets.displayPath,
