@@ -304,7 +304,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   return (
     <>
       <div className="upload-modal-ov open" onClick={handleOverlayClick} aria-hidden />
-      <div className="upload-modal open" style={{ maxWidth: 620 }}>
+      <div className="upload-modal open" style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
         {/* Header */}
         <div className="upload-modal-hdr">
           <div>
@@ -322,7 +322,8 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           </button>
         </div>
 
-        <div className="upload-modal-body" style={{ paddingBottom: 20, maxHeight: '72vh', overflowY: 'auto' }}>
+        {/* Scrollable photo list */}
+        <div className="upload-modal-body" style={{ paddingBottom: 8, overflowY: 'auto', flex: 1 }}>
           {error && (
             <p style={{ color: 'var(--cm-bad, #c44)', fontSize: 13, marginBottom: 12 }}>{error}</p>
           )}
@@ -417,14 +418,18 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           {!loading && successItems.length === 0 && failed.length === 0 && (
             <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 12 }}>No items found.</p>
           )}
+        </div>
 
-          {/* Bulk location/category update */}
-          {!loading && selectedPhotoIds.length > 0 && (
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text-1)' }}>
-                Update {selectedPhotoIds.length} selected photo{selectedPhotoIds.length !== 1 ? 's' : ''}
+        {/* Sticky footer — location/category editor + close */}
+        <div style={{ borderTop: '1px solid var(--border)', padding: '12px 20px 16px', background: 'var(--surface)', flexShrink: 0 }}>
+          {!loading && !allSet && (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+                {selectedPhotoIds.length > 0
+                  ? `Update ${selectedPhotoIds.length} selected photo${selectedPhotoIds.length !== 1 ? 's' : ''}`
+                  : 'Select photos above to update'}
               </div>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
                 <div style={{ flex: '0 0 auto' }}>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Category</div>
                   <select
@@ -447,23 +452,18 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                     placeholder="Type neighborhood…"
                   />
                 </div>
-              </div>
-              <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={bulkBusy || (bulkCategory === '' && bulkNeighborhood.trim() === '')}
+                  disabled={bulkBusy || selectedPhotoIds.length === 0 || (bulkCategory === '' && bulkNeighborhood.trim() === '')}
                   onClick={() => void handleBulkApply()}
                 >
-                  {bulkBusy ? 'Applying…' : `Apply to ${selectedPhotoIds.length} photo${selectedPhotoIds.length !== 1 ? 's' : ''}`}
+                  {bulkBusy ? 'Applying…' : 'Apply'}
                 </button>
               </div>
-            </div>
+            </>
           )}
-        </div>
-
-        <div style={{ padding: '0 20px 16px' }}>
-          <button type="button" className="btn btn-primary" onClick={closeBulkReview}>
+          <button type="button" className="btn btn-ghost" onClick={closeBulkReview}>
             Close
           </button>
         </div>
