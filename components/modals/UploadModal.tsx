@@ -565,7 +565,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         const uniqueFolders = Array.from(new Set(entries.map((e) => e.folderName))).filter((name) => name.length > 0)
         for (const folder of uniqueFolders) {
           try {
-            const { id } = await getOrCreateCollectionByName({ name: folder, category: 'neighborhood' })
+            const { id } = await getOrCreateCollectionByName({ name: folder, category: 'neighborhood', ownerId: targetPhotographerId })
             folderToCollection.set(folder, id)
           } catch (e) {
             await supabase

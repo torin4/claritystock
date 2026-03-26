@@ -50,14 +50,20 @@ export async function createCollection(input: {
   return { id: data.id }
 }
 
-/** Reuse an existing collection (case-insensitive name match) or create for bulk ZIP imports. */
+/** Reuse an existing collection (case-insensitive name match) or create for bulk ZIP imports.
+ *  Pass `ownerId` when an admin is importing on behalf of another photographer so collections
+ *  are created under the target photographer rather than the admin's account. */
 export async function getOrCreateCollectionByName(input: {
   name: string
   category?: Category | null
+  /** The photographer who should own the collection. Defaults to the authenticated user. */
+  ownerId?: string
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+
+  const ownerId = input.ownerId ?? user.id
 
   const name = input.name.trim()
   if (!name) throw new Error('Name is required')
@@ -65,7 +71,7 @@ export async function getOrCreateCollectionByName(input: {
   const { data: rows } = await supabase
     .from('collections')
     .select('id, name')
-    .eq('created_by', user.id)
+    .eq('created_by', ownerId)
 
   const lower = name.toLowerCase()
   const existing = (rows ?? []).find((r) => r.name.trim().toLowerCase() === lower)
@@ -76,7 +82,7 @@ export async function getOrCreateCollectionByName(input: {
     .insert({
       name,
       category: input.category ?? 'neighborhood',
-      created_by: user.id,
+      created_by: ownerId,
     })
     .select('id')
     .single()
