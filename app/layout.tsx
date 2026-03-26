@@ -6,12 +6,13 @@ import SidebarOverlay from '@/components/layout/SidebarOverlay'
 import NavigationUiReset from '@/components/layout/NavigationUiReset'
 import NotificationProvider from '@/components/providers/NotificationProvider'
 import BulkUploadShell from '@/components/modals/BulkUploadShell'
-import { mergeRecentNavItems } from '@/lib/navigation/recentNav'
+import { mergeRecentNavItems, type RecentNavItem } from '@/lib/navigation/recentNav'
 import { attachSignedCollectionPreviewUrls, attachSignedThumbnailUrls } from '@/lib/photos/serverSignedUrls'
 import { getCollections } from '@/lib/queries/collections.queries'
 import { getRecentSidebarPhotos } from '@/lib/queries/sidebarRecents.queries'
 import { createClient } from '@/lib/supabase/server'
 import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
+import { devError } from '@/lib/utils/devLog'
 
 const SIDEBAR_RECENTS_POOL = 12
 const SIDEBAR_RECENTS_LIMIT = 8
@@ -38,7 +39,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const user = await getServerUser()
 
   // Start sidebar recents fetch immediately but don't block on it — it streams in via Suspense.
-  const recentItemsPromise = user ? loadSidebarRecents(user.id) : Promise.resolve<import('@/lib/navigation/recentNav').RecentNavItem[]>([])
+  /** Rejecting this promise used to crash the whole RSC tree (`use()` in Sidebar). Never fail the layout. */
+  const recentItemsPromise: Promise<RecentNavItem[]> = user
+    ? loadSidebarRecents(user.id).catch((err: unknown) => {
+        devError('[Sidebar recents]', err)
+        return []
+      })
+    : Promise.resolve([])
 
   const profile = await getServerProfile()
 

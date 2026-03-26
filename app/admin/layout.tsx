@@ -4,6 +4,9 @@ import AdminSubnav from '@/components/admin/AdminSubnav'
 import { isAdminRole } from '@/lib/auth/roles'
 import { getServerProfile, getServerUser } from '@/lib/supabase/request-context'
 
+/** Admin pages use `searchParams`, server actions, and revalidation — avoid stale RSC / surprising POST failures. */
+export const dynamic = 'force-dynamic'
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerUser()
   const profile = await getServerProfile()
