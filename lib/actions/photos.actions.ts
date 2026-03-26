@@ -165,14 +165,22 @@ export async function updatePhotosCollectionIds(
 /**
  * Apply the same category and/or neighborhood to many photos you own (bulk import follow-up).
  * Setting neighborhood clears the internal `needs-location` tag when a canonical neighborhood is saved.
+ * Admins may pass `photographerId` to update another user’s photos (admin bulk import follow-up).
  */
 export async function updatePhotosCategoryNeighborhood(
   photoIds: string[],
-  opts: { category?: Category | null; neighborhood?: string | null },
+  opts: { category?: Category | null; neighborhood?: string | null; photographerId?: string },
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+
+  const admin = await isUserAdmin(supabase, user.id)
+  const photographerScope =
+    admin && opts.photographerId ? opts.photographerId : user.id
+  if (opts.photographerId && opts.photographerId !== user.id && !admin) {
+    throw new Error('Forbidden')
+  }
 
   const unique = Array.from(new Set(photoIds)).filter(Boolean)
   if (!unique.length) return { updated: 0 }
@@ -194,7 +202,7 @@ export async function updatePhotosCategoryNeighborhood(
     .from('photos')
     .select('id, tags')
     .in('id', unique)
-    .eq('photographer_id', user.id)
+    .eq('photographer_id', photographerScope)
 
   if (fetchErr) throw fetchErr
   if (!rows?.length) throw new Error('No matching photos')
@@ -216,7 +224,7 @@ export async function updatePhotosCategoryNeighborhood(
       .from('photos')
       .update(patch)
       .eq('id', row.id)
-      .eq('photographer_id', user.id)
+      .eq('photographer_id', photographerScope)
     if (error) throw error
   }
 

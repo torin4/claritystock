@@ -216,6 +216,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       await updatePhotosCategoryNeighborhood(ids, {
         ...(applyCat ? { category: bulkBulkCategory } : {}),
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
+        ...(userId ? { photographerId: userId } : {}),
       })
       setBulkNeighborhood('')
       await loadBulkUpdate()
@@ -224,7 +225,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     } finally {
       setBulkBusy(false)
     }
-  }, [bulkNeighborhood, bulkBulkCategory, bulkSelectedPhotoIds, loadBulkUpdate])
+  }, [bulkNeighborhood, bulkBulkCategory, bulkSelectedPhotoIds, loadBulkUpdate, userId])
 
   const targetCollectionName = useMemo(
     () =>
