@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import PhotoTile from './PhotoTile'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { getOrCreateSignedUrls, peekCachedSignedUrl } from '@/lib/utils/signedUrlCache'
+import type { Photo } from '@/lib/types/database.types'
 
 const GRID_TRANSFORM = { width: 1200, quality: 80 }
-import type { Photo } from '@/lib/types/database.types'
 
 interface Props {
   photos: Photo[]
@@ -13,7 +13,7 @@ interface Props {
   onFavoriteToggle: (id: string, val: boolean) => void
   onDownload: (id: string) => void
   showEdit?: boolean
-  /** When set, overrides `showEdit` per tile (e.g. only your uploads in “My downloads”). */
+  /** When set, overrides `showEdit` per tile (e.g. only your uploads in "My downloads"). */
   canEditPhoto?: (photo: Photo) => boolean
   onEdit?: (id: string) => void
   /** My Photos: long-press / right-click to select & bulk-delete */
@@ -54,22 +54,13 @@ export default function PhotoGrid({
     [displayPathsKey],
   )
   const selectedSet = useMemo(() => new Set(selectedIds ?? []), [selectedIds])
-  const providedUrls = useMemo(
-    () =>
-      Object.fromEntries(
-        photos
-          .map((photo) => {
-            const path = photo.thumbnail_path ?? photo.storage_path
-            return path && photo.thumbnail_url ? ([path, photo.thumbnail_url] as const) : null
-          })
-          .filter((entry): entry is readonly [string, string] => Boolean(entry)),
-      ),
-    [photos],
-  )
+
+  // Only use transformed URLs — never fall back to server-provided thumbnail_url
+  // which lacks the transform and would show low-res images.
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       displayPaths
-        .map((path) => [path, peekCachedSignedUrl(path, GRID_TRANSFORM) ?? providedUrls[path]] as const)
+        .map((path) => [path, peekCachedSignedUrl(path, GRID_TRANSFORM)] as const)
         .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
     ),
   )
@@ -88,7 +79,7 @@ export default function PhotoGrid({
     const next: Record<string, string> = {}
     const missing: string[] = []
     for (const path of displayPaths) {
-      const known = peekCachedSignedUrl(path, GRID_TRANSFORM) ?? providedUrls[path] ?? signedUrlsRef.current[path]
+      const known = peekCachedSignedUrl(path, GRID_TRANSFORM) ?? signedUrlsRef.current[path]
       if (known) {
         next[path] = known
       } else {
@@ -110,7 +101,7 @@ export default function PhotoGrid({
     return () => {
       cancelled = true
     }
-  }, [displayPaths, providedUrls])
+  }, [displayPaths])
 
   return (
     <div className={`photo-grid${selectionMode ? ' photo-grid-selecting' : ''}`}>
@@ -119,7 +110,7 @@ export default function PhotoGrid({
           key={photo.id}
           photo={photo}
           userId={userId}
-          imageUrl={signedUrls[photo.thumbnail_path ?? photo.storage_path ?? ''] ?? photo.thumbnail_url ?? null}
+          imageUrl={signedUrls[photo.thumbnail_path ?? photo.storage_path ?? ''] ?? null}
           onFavoriteToggle={onFavoriteToggle}
           onDownload={onDownload}
           showEdit={showEdit}
