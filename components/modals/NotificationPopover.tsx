@@ -26,15 +26,28 @@ function notificationText(n: AppNotification): React.ReactNode {
       </>
     )
   }
+  const loc = n.needsLocationCount > 0
+  const fail = n.failedCount > 0
   return (
     <>
       Bulk import: <strong>{n.successCount}</strong> published
-      {n.failedCount > 0 ? (
+      {fail ? (
         <>
-          , <strong>{n.failedCount}</strong> failed — tap to review
+          , <strong>{n.failedCount}</strong> failed
+          {loc ? (
+            <>
+              , <strong>{n.needsLocationCount}</strong> need updating (neighborhood)
+            </>
+          ) : null}
+          {' — Tap to see results.'}
+        </>
+      ) : loc ? (
+        <>
+          {' — '}
+          <strong>{n.needsLocationCount}</strong> need updating (add neighborhood) — Tap to see results.
         </>
       ) : (
-        ' ✓'
+        ' — All set ✓'
       )}
     </>
   )

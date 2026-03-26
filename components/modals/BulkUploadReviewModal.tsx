@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import { publishPhotoFromStagingSnapshot } from '@/lib/uploads/processImageForPublish'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import type { PhotoFormValues } from '@/lib/types/database.types'
@@ -22,7 +23,11 @@ type BulkItemRow = {
   form_snapshot: Record<string, unknown> | null
 }
 
-type JobSummary = { success_count?: number; failed_count?: number }
+type JobSummary = {
+  success_count?: number
+  failed_count?: number
+  needs_location_count?: number
+}
 
 function parseSnapshot(raw: Record<string, unknown> | null): {
   form: PhotoFormValues
@@ -74,6 +79,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [loading, setLoading] = useState(true)
   const [jobSummary, setJobSummary] = useState<JobSummary | null>(null)
   const [items, setItems] = useState<BulkItemRow[]>([])
+  const [needsLocationPhotoIds, setNeedsLocationPhotoIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
 
@@ -89,18 +95,22 @@ export default function BulkUploadReviewModal({ userId }: Props) {
         error?: string
         job?: { summary: unknown; status: string }
         items?: BulkItemRow[]
+        needsLocationPhotoIds?: string[]
       }
       if (!res.ok) {
         setError(body.error ?? res.statusText)
         setItems([])
+        setNeedsLocationPhotoIds([])
         setLoading(false)
         return
       }
       setJobSummary((body.job?.summary as JobSummary) ?? {})
       setItems(body.items ?? [])
+      setNeedsLocationPhotoIds(body.needsLocationPhotoIds ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load job')
       setItems([])
+      setNeedsLocationPhotoIds([])
     }
     setLoading(false)
   }, [bulkReviewJobId])
@@ -148,7 +158,13 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       setJobSummary((prev) => ({
         success_count: (prev?.success_count ?? 0) + 1,
         failed_count: Math.max(0, (prev?.failed_count ?? 1) - 1),
+        needs_location_count:
+          (prev?.needs_location_count ?? 0) +
+          (parsed.form.tags?.includes(PHOTO_TAG_NEEDS_LOCATION) ? 1 : 0),
       }))
+      if (parsed.form.tags?.includes(PHOTO_TAG_NEEDS_LOCATION)) {
+        setNeedsLocationPhotoIds((prev) => (prev.includes(photoId) ? prev : [...prev, photoId]))
+      }
       router.refresh()
       useUIStore.getState().bumpSidebarCollections()
     } catch (e) {
@@ -163,11 +179,20 @@ export default function BulkUploadReviewModal({ userId }: Props) {
     closeBulkReview()
   }
 
-  if (!bulkReviewJobId) return null
+  const needsLocSet = useMemo(() => new Set(needsLocationPhotoIds), [needsLocationPhotoIds])
+  const needsLocationItems = useMemo(
+    () =>
+      items.filter(
+        (i) => i.status === 'success' && i.photo_id && needsLocSet.has(i.photo_id),
+      ),
+    [items, needsLocSet],
+  )
 
   const failed = items.filter((i) => i.status === 'failed')
   const ok = jobSummary?.success_count ?? items.filter((i) => i.status === 'success').length
   const fail = jobSummary?.failed_count ?? failed.length
+
+  if (!bulkReviewJobId) return null
 
   return (
     <>
@@ -177,7 +202,13 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           <div>
             <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>Bulk import review</div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-              {loading ? 'Loading…' : `${ok} published · ${fail} failed`}
+              {loading
+                ? 'Loading…'
+                : `${ok} published · ${fail} failed${
+                    needsLocationItems.length > 0
+                      ? ` · ${needsLocationItems.length} need neighborhood`
+                      : ''
+                  }`}
             </div>
           </div>
           <button
@@ -193,62 +224,135 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           {error && (
             <p style={{ color: 'var(--cm-bad, #c44)', fontSize: 13, marginBottom: 12 }}>{error}</p>
           )}
-          {!loading && failed.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>No failed files. You&apos;re all set.</p>
+          {!loading && (
+            <>
+              {needsLocationItems.length > 0 && (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>
+                    These files published without GPS in the EXIF. Add a neighborhood when you edit each
+                    photo so they appear correctly in Browse.
+                  </p>
+                  {needsLocationItems.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        alignItems: 'flex-start',
+                        padding: '10px 0',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                    >
+                      <FailedThumb path={item.thumbnail_path ?? item.storage_path} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}
+                        >
+                          {item.relative_path}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                          {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+                          Needs neighborhood
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                          {item.photo_id && (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => {
+                                closeBulkReview()
+                                openEdit(item.photo_id!)
+                              }}
+                            >
+                              Add location
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+              {failed.length > 0 && (
+                <>
+                  {needsLocationItems.length > 0 && (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        marginTop: 20,
+                        marginBottom: 8,
+                        color: 'var(--text-1)',
+                      }}
+                    >
+                      Failed imports
+                    </div>
+                  )}
+                  {failed.map((item) => {
+                    const canRetry = Boolean(item.storage_path && parseSnapshot(item.form_snapshot))
+                    return (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: 'flex',
+                          gap: 12,
+                          alignItems: 'flex-start',
+                          padding: '10px 0',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <FailedThumb path={item.thumbnail_path ?? item.storage_path} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}
+                          >
+                            {item.relative_path}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                            {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
+                          </div>
+                          {item.error_message && (
+                            <div style={{ fontSize: 12, color: 'var(--cm-bad, #c44)', marginTop: 6 }}>
+                              {item.error_message}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                            {canRetry && (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={retryingId === item.id}
+                                onClick={() => void handleRetry(item)}
+                              >
+                                {retryingId === item.id ? 'Retrying…' : 'Retry publish'}
+                              </button>
+                            )}
+                            {item.photo_id && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => {
+                                  closeBulkReview()
+                                  openEdit(item.photo_id!)
+                                }}
+                              >
+                                Edit photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+              {failed.length === 0 && needsLocationItems.length === 0 && (
+                <p style={{ fontSize: 13, color: 'var(--text-2)' }}>No failed files. You&apos;re all set.</p>
+              )}
+            </>
           )}
-          {!loading &&
-            failed.map((item) => {
-              const canRetry = Boolean(item.storage_path && parseSnapshot(item.form_snapshot))
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    alignItems: 'flex-start',
-                    padding: '10px 0',
-                    borderBottom: '1px solid var(--border)',
-                  }}
-                >
-                  <FailedThumb path={item.thumbnail_path ?? item.storage_path} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
-                      {item.relative_path}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-                      {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
-                    </div>
-                    {item.error_message && (
-                      <div style={{ fontSize: 12, color: 'var(--cm-bad, #c44)', marginTop: 6 }}>{item.error_message}</div>
-                    )}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                      {canRetry && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={retryingId === item.id}
-                          onClick={() => void handleRetry(item)}
-                        >
-                          {retryingId === item.id ? 'Retrying…' : 'Retry publish'}
-                        </button>
-                      )}
-                      {item.photo_id && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            closeBulkReview()
-                            openEdit(item.photo_id!)
-                          }}
-                        >
-                          Edit photo
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
         </div>
         <div style={{ padding: '0 20px 16px' }}>
           <button type="button" className="btn btn-primary" onClick={closeBulkReview}>

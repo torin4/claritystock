@@ -115,13 +115,18 @@ export default function NotificationProvider({ userId }: { userId: string }) {
           const jid = row.id as string
           if (seenBulkJobs.has(jid)) continue
           seenBulkJobs.add(jid)
-          const summary = (row.summary ?? {}) as { success_count?: number; failed_count?: number }
+          const summary = (row.summary ?? {}) as {
+            success_count?: number
+            failed_count?: number
+            needs_location_count?: number
+          }
           const completedAt = row.completed_at as string
           addBulkUploadNotification({
             jobId: jid,
             createdAt: completedAt,
             successCount: summary.success_count ?? 0,
             failedCount: summary.failed_count ?? 0,
+            needsLocationCount: summary.needs_location_count ?? 0,
           })
           rememberBulkCompletedAt(userId, completedAt)
         }
@@ -138,12 +143,17 @@ export default function NotificationProvider({ userId }: { userId: string }) {
       if (!row.completed_at) return
       if (seenBulkJobs.has(row.id)) return
       seenBulkJobs.add(row.id)
-      const summary = (row.summary ?? {}) as { success_count?: number; failed_count?: number }
+      const summary = (row.summary ?? {}) as {
+        success_count?: number
+        failed_count?: number
+        needs_location_count?: number
+      }
       addBulkUploadNotification({
         jobId: row.id,
         createdAt: row.completed_at,
         successCount: summary.success_count ?? 0,
         failedCount: summary.failed_count ?? 0,
+        needsLocationCount: summary.needs_location_count ?? 0,
       })
       rememberBulkCompletedAt(userId, row.completed_at)
     }

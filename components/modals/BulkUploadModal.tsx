@@ -14,6 +14,7 @@ import {
   runWithConcurrency,
 } from '@/lib/uploads/bulkZipImport'
 import { runAiTaggingOnFile, uploadPhotoAssetsForPublish } from '@/lib/uploads/processImageForPublish'
+import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
 import type { AiTagResult, PhotoFormValues } from '@/lib/types/database.types'
 
@@ -39,7 +40,11 @@ export default function BulkUploadModal({ userId }: Props) {
   const bulkRunActiveRef = useRef(false)
   const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState('')
-  const [lastSummary, setLastSummary] = useState<{ ok: number; fail: number } | null>(null)
+  const [lastSummary, setLastSummary] = useState<{
+    ok: number
+    fail: number
+    needsLocation: number
+  } | null>(null)
 
   const handleClose = () => {
     /** While a bulk run is active, only dismiss the modal — do not cancel (phase can lag behind runBulk). */
@@ -154,6 +159,7 @@ export default function BulkUploadModal({ userId }: Props) {
 
       let ok = 0
       let fail = 0
+      let needsLocationOk = 0
       let processed = 0
       const total = entries.length
 
@@ -286,6 +292,9 @@ export default function BulkUploadModal({ userId }: Props) {
               })
               .eq('id', itemId)
             ok += 1
+            if (form.tags?.includes(PHOTO_TAG_NEEDS_LOCATION)) {
+              needsLocationOk += 1
+            }
           } catch (e) {
             const errMsg = e instanceof Error ? e.message : String(e)
             await supabase
@@ -325,7 +334,11 @@ export default function BulkUploadModal({ userId }: Props) {
       })
 
           const completedAt = new Date().toISOString()
-        const summary = { success_count: ok, failed_count: fail }
+        const summary = {
+          success_count: ok,
+          failed_count: fail,
+          needs_location_count: needsLocationOk,
+        }
         await supabase
           .from('bulk_upload_jobs')
           .update({
@@ -336,7 +349,7 @@ export default function BulkUploadModal({ userId }: Props) {
           .eq('id', jobId)
 
         setBulkUploadProgress(null)
-        setLastSummary({ ok, fail })
+        setLastSummary({ ok, fail, needsLocation: needsLocationOk })
         setPhase('done')
         setMessage('')
         router.refresh()
@@ -406,7 +419,18 @@ export default function BulkUploadModal({ userId }: Props) {
                 Import finished: <strong>{lastSummary.ok}</strong> published
                 {lastSummary.fail > 0 ? (
                   <>
-                    , <strong>{lastSummary.fail}</strong> failed — check notifications to review.
+                    , <strong>{lastSummary.fail}</strong> failed
+                    {lastSummary.needsLocation > 0 ? (
+                      <>
+                        ; <strong>{lastSummary.needsLocation}</strong> without GPS need a neighborhood
+                      </>
+                    ) : null}
+                    {' — check notifications to review.'}
+                  </>
+                ) : lastSummary.needsLocation > 0 ? (
+                  <>
+                    . <strong>{lastSummary.needsLocation}</strong> need a neighborhood (no GPS in file) — open
+                    notifications to review and edit.
                   </>
                 ) : (
                   ' ✓'

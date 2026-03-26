@@ -11,7 +11,7 @@ export interface DownloadNotification {
   read: boolean
 }
 
-/** Bulk ZIP job finished — tap to review failures. */
+/** Bulk ZIP job finished — tap to review failures / needs-location follow-ups. */
 export interface BulkUploadNotification {
   kind: 'bulk_upload'
   id: string
@@ -19,6 +19,7 @@ export interface BulkUploadNotification {
   createdAt: string
   successCount: number
   failedCount: number
+  needsLocationCount: number
   read: boolean
 }
 
@@ -41,6 +42,7 @@ interface NotificationsActions {
     createdAt: string
     successCount: number
     failedCount: number
+    needsLocationCount?: number
   }) => void
   markBulkRead: (jobId: string) => void
   setUserId: (userId: string) => void
@@ -100,6 +102,7 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
 
   addBulkUploadNotification: (event) =>
     set((s) => {
+      const needsLocationCount = event.needsLocationCount ?? 0
       const n: BulkUploadNotification = {
         kind: 'bulk_upload',
         id: `bulk:${event.jobId}`,
@@ -107,6 +110,7 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
         createdAt: event.createdAt,
         successCount: event.successCount,
         failedCount: event.failedCount,
+        needsLocationCount,
         read: false,
       }
       const existingIdx = s.notifications.findIndex(
@@ -115,13 +119,16 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
       if (existingIdx >= 0) {
         const prev = s.notifications[existingIdx] as BulkUploadNotification
         const sameCounts =
-          prev.successCount === n.successCount && prev.failedCount === n.failedCount
+          prev.successCount === n.successCount &&
+          prev.failedCount === n.failedCount &&
+          prev.needsLocationCount === n.needsLocationCount
         if (sameCounts) return s
         const next = [...s.notifications]
         next[existingIdx] = {
           ...prev,
           successCount: n.successCount,
           failedCount: n.failedCount,
+          needsLocationCount: n.needsLocationCount,
           createdAt: n.createdAt,
         }
         next.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

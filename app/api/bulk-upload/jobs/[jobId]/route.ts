@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import { NextResponse, type NextRequest } from 'next/server'
 import { devError } from '@/lib/utils/devLog'
 
@@ -52,8 +53,37 @@ export async function GET(
     return NextResponse.json({ error: itemsErr.message }, { status: 500 })
   }
 
+  const list = items ?? []
+  const successPhotoIds = list
+    .filter(
+      (row: { status: string; photo_id: string | null }) =>
+        row.status === 'success' && row.photo_id,
+    )
+    .map((row: { photo_id: string }) => row.photo_id)
+
+  let needsLocationPhotoIds: string[] = []
+  if (successPhotoIds.length) {
+    const { data: photoRows, error: photoErr } = await supabase
+      .from('photos')
+      .select('id, tags')
+      .in('id', successPhotoIds)
+      .eq('photographer_id', user.id)
+
+    if (photoErr) {
+      devError('[bulk-upload photos tags GET]', photoErr)
+    } else {
+      needsLocationPhotoIds = (photoRows ?? [])
+        .filter((p: { id: string; tags: unknown }) => {
+          const tags = p.tags as string[] | null
+          return Array.isArray(tags) && tags.includes(PHOTO_TAG_NEEDS_LOCATION)
+        })
+        .map((p: { id: string }) => p.id)
+    }
+  }
+
   return NextResponse.json({
     job: { summary: job.summary, status: job.status },
-    items: items ?? [],
+    items: list,
+    needsLocationPhotoIds,
   })
 }
