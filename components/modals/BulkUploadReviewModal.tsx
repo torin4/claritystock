@@ -45,30 +45,21 @@ function parseSnapshot(raw: Record<string, unknown> | null): {
   return { form, description }
 }
 
-function FailedThumb({ path }: { path: string | null }) {
+function ItemThumb({ path }: { path: string | null }) {
   const url = useSignedPhotoUrl(path, { enabled: !!path })
-  if (!url) {
-    return (
-      <div
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: 4,
-          background: 'var(--surface-2)',
-          flexShrink: 0,
-        }}
-      />
-    )
-  }
-  return (
+  return url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={url}
-      alt=""
-      style={{ width: 48, height: 48, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
-    />
+    <img src={url} alt="" style={{ width: 48, height: 48, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />
+  ) : (
+    <div style={{ width: 48, height: 48, borderRadius: 4, background: 'var(--surface-2)', flexShrink: 0 }} />
   )
 }
+
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: 'neighborhood', label: 'Neighborhood' },
+  { value: 'city', label: 'City' },
+  { value: 'condo', label: 'Condo' },
+]
 
 interface Props {
   userId: string
@@ -84,13 +75,14 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [items, setItems] = useState<BulkItemRow[]>([])
   const [needsLocationPhotoIds, setNeedsLocationPhotoIds] = useState<string[]>([])
   const [missingLocationOrCategoryPhotoIds, setMissingLocationOrCategoryPhotoIds] = useState<string[]>([])
-  const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([])
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
   const [locationLabels, setLocationLabels] = useState<string[]>([])
   const [bulkCategory, setBulkCategory] = useState<'' | Category>('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'all' | 'collection'>('all')
 
   useEffect(() => {
     getNeighborhoodCanonicalLabels()
@@ -103,9 +95,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/bulk-upload/jobs/${bulkReviewJobId}`, {
-        credentials: 'same-origin',
-      })
+      const res = await fetch(`/api/bulk-upload/jobs/${bulkReviewJobId}`, { credentials: 'same-origin' })
       const body = (await res.json()) as {
         error?: string
         job?: { summary: unknown; status: string }
@@ -118,7 +108,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
         setItems([])
         setNeedsLocationPhotoIds([])
         setMissingLocationOrCategoryPhotoIds([])
-        setSelectedBulkIds([])
+        setSelectedPhotoIds([])
         setLoading(false)
         return
       }
@@ -128,42 +118,62 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       const needs = body.needsLocationPhotoIds ?? []
       setNeedsLocationPhotoIds(needs)
       setMissingLocationOrCategoryPhotoIds(body.missingLocationOrCategoryPhotoIds ?? [])
+      // Pre-select photos needing location, or all successful photos
       const successIds = nextItems
         .filter((i) => i.status === 'success' && i.photo_id)
         .map((i) => i.photo_id as string)
-      setSelectedBulkIds(needs.length > 0 ? needs : successIds)
+      setSelectedPhotoIds(needs.length > 0 ? needs : successIds)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load job')
       setItems([])
       setNeedsLocationPhotoIds([])
       setMissingLocationOrCategoryPhotoIds([])
-      setSelectedBulkIds([])
+      setSelectedPhotoIds([])
     }
     setLoading(false)
   }, [bulkReviewJobId])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useEffect(() => { void load() }, [load])
 
-  const selectedSet = useMemo(() => new Set(selectedBulkIds), [selectedBulkIds])
+  const selectedSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds])
 
-  const toggleBulkId = (id: string) => {
-    setSelectedBulkIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  const togglePhotoId = (id: string) => {
+    setSelectedPhotoIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
   }
 
-  const handleBulkApply = async () => {
-    const ids = selectedBulkIds.filter(Boolean)
-    if (!ids.length) {
-      setError('Select at least one photo.')
-      return
+  const successItems = useMemo(
+    () => items.filter((i) => i.status === 'success' && i.photo_id),
+    [items],
+  )
+
+  const allPhotoIds = useMemo(() => successItems.map((i) => i.photo_id!), [successItems])
+
+  const checkAll = () => setSelectedPhotoIds(allPhotoIds)
+  const uncheckAll = () => setSelectedPhotoIds([])
+
+  // Group by folder_name for collection view
+  const byCollection = useMemo(() => {
+    const map = new Map<string, BulkItemRow[]>()
+    for (const item of successItems) {
+      const key = item.folder_name || ''
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(item)
     }
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (!a && b) return 1
+      if (a && !b) return -1
+      return a.localeCompare(b)
+    })
+  }, [successItems])
+
+  const needsLocSet = useMemo(() => new Set(needsLocationPhotoIds), [needsLocationPhotoIds])
+
+  const handleBulkApply = async () => {
+    const ids = selectedPhotoIds.filter(Boolean)
+    if (!ids.length) { setError('Select at least one photo.'); return }
     const applyCat = bulkCategory !== ''
     const applyNeigh = bulkNeighborhood.trim().length > 0
-    if (!applyCat && !applyNeigh) {
-      setError('Choose a category and/or enter a neighborhood to apply.')
-      return
-    }
+    if (!applyCat && !applyNeigh) { setError('Choose a category and/or enter a neighborhood.'); return }
     setBulkBusy(true)
     setError(null)
     try {
@@ -202,14 +212,8 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       const supabase = getSupabaseBrowserClient()
       await supabase
         .from('bulk_upload_items')
-        .update({
-          status: 'success',
-          photo_id: photoId,
-          error_message: null,
-          form_snapshot: null,
-        })
+        .update({ status: 'success', photo_id: photoId, error_message: null, form_snapshot: null })
         .eq('id', item.id)
-
       setItems((prev) =>
         prev.map((r) =>
           r.id === item.id
@@ -226,7 +230,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       }))
       if (parsed.form.tags?.includes(PHOTO_TAG_NEEDS_LOCATION)) {
         setNeedsLocationPhotoIds((prev) => (prev.includes(photoId) ? prev : [...prev, photoId]))
-        setSelectedBulkIds((prev) => (prev.includes(photoId) ? prev : [...prev, photoId]))
+        setSelectedPhotoIds((prev) => (prev.includes(photoId) ? prev : [...prev, photoId]))
       }
       router.refresh()
       useUIStore.getState().bumpSidebarCollections()
@@ -242,107 +246,111 @@ export default function BulkUploadReviewModal({ userId }: Props) {
     closeBulkReview()
   }
 
-  const needsLocSet = useMemo(() => new Set(needsLocationPhotoIds), [needsLocationPhotoIds])
-
-  const successItems = useMemo(
-    () => items.filter((i) => i.status === 'success' && i.photo_id),
-    [items],
-  )
-
   const failed = items.filter((i) => i.status === 'failed')
-  const ok = jobSummary?.success_count ?? items.filter((i) => i.status === 'success').length
+  const ok = jobSummary?.success_count ?? successItems.length
   const fail = jobSummary?.failed_count ?? failed.length
   const needsCount = needsLocationPhotoIds.length
-  const allSet = successItems.length > 0 && failed.length === 0 && missingLocationOrCategoryPhotoIds.length === 0
 
   if (!bulkReviewJobId) return null
+
+  const rowStyle: React.CSSProperties = {
+    display: 'flex',
+    gap: 10,
+    alignItems: 'center',
+    padding: '8px 0',
+    borderBottom: '1px solid var(--border)',
+    cursor: 'pointer',
+  }
+
+  const renderSuccessRow = (item: BulkItemRow) => {
+    const photoId = item.photo_id!
+    const checked = selectedSet.has(photoId)
+    const needsLoc = needsLocSet.has(photoId)
+    return (
+      <div key={item.id} style={rowStyle} onClick={() => togglePhotoId(photoId)}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() => togglePhotoId(photoId)}
+          onClick={(e) => e.stopPropagation()}
+          style={{ flexShrink: 0, accentColor: 'var(--accent)' }}
+        />
+        <ItemThumb path={item.thumbnail_path ?? item.storage_path} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {item.relative_path.split('/').pop() ?? item.relative_path}
+          </div>
+          {needsLoc && (
+            <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, marginTop: 2, display: 'block' }}>
+              Needs location
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ flexShrink: 0, fontSize: 11 }}
+          onClick={(e) => { e.stopPropagation(); openEdit(photoId) }}
+        >
+          Edit
+        </button>
+      </div>
+    )
+  }
 
   return (
     <>
       <div className="upload-modal-ov open" onClick={handleOverlayClick} aria-hidden />
-      <div className="upload-modal open" style={{ maxWidth: 600 }}>
+      <div className="upload-modal open" style={{ maxWidth: 620 }}>
+        {/* Header */}
         <div className="upload-modal-hdr">
           <div>
             <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>Bulk import review</div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
               {loading
                 ? 'Loading…'
-                : `${ok} published · ${fail} failed${
-                    needsCount > 0 ? ` · ${needsCount} need location` : ''
-                  }`}
+                : `${ok} published · ${fail} failed${needsCount > 0 ? ` · ${needsCount} need location` : ''}`}
             </div>
           </div>
-          <button
-            type="button"
-            className="modal-close"
-            style={{ width: 30, height: 30, fontSize: 14 }}
-            onClick={closeBulkReview}
-          >
+          <button type="button" className="modal-close" style={{ width: 30, height: 30, fontSize: 14 }} onClick={closeBulkReview}>
             ✕
           </button>
         </div>
-        <div className="upload-modal-body" style={{ paddingBottom: 20, maxHeight: '70vh', overflowY: 'auto' }}>
+
+        <div className="upload-modal-body" style={{ paddingBottom: 20, maxHeight: '72vh', overflowY: 'auto' }}>
           {error && (
             <p style={{ color: 'var(--cm-bad, #c44)', fontSize: 13, marginBottom: 12 }}>{error}</p>
           )}
+
+          {/* Failed imports */}
           {!loading && failed.length > 0 && (
             <>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  marginTop: 20,
-                  marginBottom: 8,
-                  color: 'var(--text-1)',
-                }}
-              >
+              <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, marginBottom: 8, color: 'var(--text-1)' }}>
                 Failed imports
               </div>
               {failed.map((item) => {
                 const canRetry = Boolean(item.storage_path && parseSnapshot(item.form_snapshot))
                 return (
-                  <div
-                    key={item.id}
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      alignItems: 'flex-start',
-                      padding: '10px 0',
-                      borderBottom: '1px solid var(--border)',
-                    }}
-                  >
-                    <FailedThumb path={item.thumbnail_path ?? item.storage_path} />
+                  <div key={item.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                    <ItemThumb path={item.thumbnail_path ?? item.storage_path} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}
-                      >
+                      <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
                         {item.relative_path}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
                         {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
                       </div>
                       {item.error_message && (
-                        <div style={{ fontSize: 12, color: 'var(--cm-bad, #c44)', marginTop: 6 }}>
-                          {item.error_message}
-                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--cm-bad, #c44)', marginTop: 6 }}>{item.error_message}</div>
                       )}
                       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                         {canRetry && (
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            disabled={retryingId === item.id}
-                            onClick={() => void handleRetry(item)}
-                          >
+                          <button type="button" className="btn btn-primary btn-sm" disabled={retryingId === item.id} onClick={() => void handleRetry(item)}>
                             {retryingId === item.id ? 'Retrying…' : 'Retry publish'}
                           </button>
                         )}
                         {item.photo_id && (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => openEdit(item.photo_id!)}
-                          >
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEdit(item.photo_id!)}>
                             Edit photo
                           </button>
                         )}
@@ -354,10 +362,137 @@ export default function BulkUploadReviewModal({ userId }: Props) {
             </>
           )}
 
-          {!loading && failed.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>No failed files.</p>
+          {/* Successful photos */}
+          {!loading && successItems.length > 0 && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 600, marginTop: failed.length > 0 ? 20 : 4, marginBottom: 10, color: 'var(--text-1)' }}>
+                Published photos
+              </div>
+
+              {/* Controls row */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+                {/* View mode toggle */}
+                <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('all')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 12,
+                      background: viewMode === 'all' ? 'var(--accent)' : 'transparent',
+                      color: viewMode === 'all' ? '#fff' : 'var(--text-2)',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('collection')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 12,
+                      background: viewMode === 'collection' ? 'var(--accent)' : 'transparent',
+                      color: viewMode === 'collection' ? '#fff' : 'var(--text-2)',
+                      border: 'none',
+                      borderLeft: '1px solid var(--border)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    By Collection
+                  </button>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={checkAll}>
+                  Check all
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={uncheckAll}>
+                  Uncheck all
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                  {selectedPhotoIds.length}/{successItems.length} selected
+                </span>
+              </div>
+
+              {/* All photos view */}
+              {viewMode === 'all' && successItems.map(renderSuccessRow)}
+
+              {/* By collection view */}
+              {viewMode === 'collection' && byCollection.map(([folder, groupItems]) => {
+                const groupPhotoIds = groupItems.map((i) => i.photo_id as string)
+                const allGroupChecked = groupPhotoIds.every((id: string) => selectedSet.has(id))
+                const toggleGroup = () => {
+                  if (allGroupChecked) {
+                    setSelectedPhotoIds((prev) => prev.filter((id: string) => !groupPhotoIds.includes(id)))
+                  } else {
+                    setSelectedPhotoIds((prev) => Array.from(new Set([...prev, ...groupPhotoIds])))
+                  }
+                }
+                return (
+                  <div key={folder || '__root__'} style={{ marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0 6px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.05em', flex: 1 }}>
+                        {folder || 'No collection'}
+                      </span>
+                      <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={toggleGroup}>
+                        {allGroupChecked ? 'Deselect group' : 'Select group'}
+                      </button>
+                    </div>
+                    {groupItems.map(renderSuccessRow)}
+                  </div>
+                )
+              })}
+            </>
+          )}
+
+          {!loading && successItems.length === 0 && failed.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 12 }}>No items found.</p>
+          )}
+
+          {/* Bulk location/category update */}
+          {!loading && selectedPhotoIds.length > 0 && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text-1)' }}>
+                Update {selectedPhotoIds.length} selected photo{selectedPhotoIds.length !== 1 ? 's' : ''}
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ flex: '0 0 auto' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Category</div>
+                  <select
+                    value={bulkCategory}
+                    onChange={(e) => setBulkCategory(e.target.value as '' | Category)}
+                    style={{ fontSize: 13, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)' }}
+                  >
+                    <option value="">— unchanged —</option>
+                    {CATEGORIES.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Neighborhood</div>
+                  <LocationField
+                    value={bulkNeighborhood}
+                    onChange={setBulkNeighborhood}
+                    labels={locationLabels}
+                    placeholder="Type neighborhood…"
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={bulkBusy || (bulkCategory === '' && bulkNeighborhood.trim() === '')}
+                  onClick={() => void handleBulkApply()}
+                >
+                  {bulkBusy ? 'Applying…' : `Apply to ${selectedPhotoIds.length} photo${selectedPhotoIds.length !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </div>
           )}
         </div>
+
         <div style={{ padding: '0 20px 16px' }}>
           <button type="button" className="btn btn-primary" onClick={closeBulkReview}>
             Close

@@ -47,10 +47,12 @@ export async function parseBulkZipToEntries(zipFile: File): Promise<BulkZipEntry
     if (parts.length < 1) continue
     const fileName = parts[parts.length - 1]
     let folderName: string
-    if (parts.length === 1) {
+    if (parts.length <= 2) {
+      // Root file or single-folder file — no collection assigned
       folderName = BULK_NO_FOLDER
     } else {
-      folderName = parts[0].trim() || BULK_NO_FOLDER
+      // Second-level folder (parts[1]) becomes the collection
+      folderName = parts[1].trim() || BULK_NO_FOLDER
     }
 
     const blob = await entry.async('blob')
