@@ -1019,7 +1019,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           {uploadKind === 'bulk' && (
             <div style={{ paddingBottom: 16 }}>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-                Each second-level folder becomes a collection (e.g. <code>City/Neighborhood/photo.jpg</code> → collection "Neighborhood"). Images without a second-level folder import without a collection.
+                Each second-level folder becomes a collection (e.g. <code>City/Neighborhood/photo.jpg</code> → collection &ldquo;Neighborhood&rdquo;). Images without a second-level folder import without a collection.
               </div>
               <input
                 ref={zipInputRef}
