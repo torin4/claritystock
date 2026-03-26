@@ -82,7 +82,6 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'all' | 'collection'>('all')
 
   useEffect(() => {
     getNeighborhoodCanonicalLabels()
@@ -165,13 +164,6 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       return a.localeCompare(b)
     })
   }, [successItems])
-
-  const hasCollections = useMemo(() => byCollection.some(([key]) => key !== ''), [byCollection])
-
-  // If collections disappear (e.g. after reload), reset to all view
-  useEffect(() => {
-    if (!hasCollections) setViewMode('all')
-  }, [hasCollections])
 
   const needsLocSet = useMemo(() => new Set(needsLocationPhotoIds), [needsLocationPhotoIds])
 
@@ -378,41 +370,6 @@ export default function BulkUploadReviewModal({ userId }: Props) {
 
               {/* Controls row */}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-                {/* View mode toggle */}
-                <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('all')}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: 12,
-                      background: viewMode === 'all' ? 'var(--accent)' : 'transparent',
-                      color: viewMode === 'all' ? '#fff' : 'var(--text-2)',
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => hasCollections && setViewMode('collection')}
-                    disabled={!hasCollections}
-                    title={!hasCollections ? 'No collections in this import' : undefined}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: 12,
-                      background: viewMode === 'collection' ? 'var(--accent)' : 'transparent',
-                      color: viewMode === 'collection' ? '#fff' : 'var(--text-2)',
-                      border: 'none',
-                      borderLeft: '1px solid var(--border)',
-                      cursor: hasCollections ? 'pointer' : 'not-allowed',
-                      opacity: hasCollections ? 1 : 0.4,
-                    }}
-                  >
-                    By Collection
-                  </button>
-                </div>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={checkAll}>
                   Check all
                 </button>
@@ -424,11 +381,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                 </span>
               </div>
 
-              {/* All photos view */}
-              {viewMode === 'all' && successItems.map(renderSuccessRow)}
-
-              {/* By collection view */}
-              {viewMode === 'collection' && byCollection.map(([folder, groupItems]) => {
+              {byCollection.map(([folder, groupItems]) => {
                 const groupPhotoIds = groupItems.map((i) => i.photo_id as string)
                 const allGroupChecked = groupPhotoIds.every((id: string) => selectedSet.has(id))
                 const toggleGroup = () => {
