@@ -41,7 +41,7 @@ export default function PhotoGrid({
       Array.from(
         new Set(
           photos
-            .map((photo) => photo.thumbnail_path ?? photo.storage_path)
+            .map((photo) => photo.display_path ?? photo.thumbnail_path ?? photo.storage_path)
             .filter((path): path is string => Boolean(path)),
         ),
       ).join('\n'),
@@ -57,7 +57,7 @@ export default function PhotoGrid({
       Object.fromEntries(
         photos
           .map((photo) => {
-            const path = photo.thumbnail_path ?? photo.storage_path
+            const path = photo.display_path ?? photo.thumbnail_path ?? photo.storage_path
             return path && photo.thumbnail_url ? ([path, photo.thumbnail_url] as const) : null
           })
           .filter((entry): entry is readonly [string, string] => Boolean(entry)),
@@ -117,7 +117,7 @@ export default function PhotoGrid({
           key={photo.id}
           photo={photo}
           userId={userId}
-          imageUrl={signedUrls[photo.thumbnail_path ?? photo.storage_path ?? ''] ?? photo.thumbnail_url ?? null}
+          imageUrl={signedUrls[photo.display_path ?? photo.thumbnail_path ?? photo.storage_path ?? ''] ?? photo.thumbnail_url ?? null}
           onFavoriteToggle={onFavoriteToggle}
           onDownload={onDownload}
           showEdit={showEdit}
