@@ -1,4 +1,5 @@
 'use client'
+import { use, Suspense } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useUIStore } from '@/stores/ui.store'
@@ -74,7 +75,7 @@ interface SidebarProps {
   userRole: string
   userId: string
   hideOwnPhotosInBrowse: boolean
-  recentItems: RecentNavItem[]
+  recentItemsPromise: Promise<RecentNavItem[]>
 }
 
 function RecentNavThumb({
@@ -115,6 +116,56 @@ function recentItemHref(item: RecentNavItem): string {
   return `/?photo=${item.id}`
 }
 
+function RecentItemsSection({ recentItemsPromise }: { recentItemsPromise: Promise<RecentNavItem[]> }) {
+  const recentItems = use(recentItemsPromise)
+  if (!recentItems.length) return null
+
+  const handleNavClick = () => {
+    useUIStore.getState().setSidebarOpen(false)
+  }
+
+  return (
+    <>
+      <span className="s-section-lbl" style={{ marginTop: '8px' }}>Recents</span>
+      {recentItems.map((item) => (
+        <Link
+          key={item.kind === 'collection' ? `c-${item.id}` : `p-${item.id}`}
+          href={recentItemHref(item)}
+          className="ni"
+          onClick={handleNavClick}
+          style={{ gap: '8px' }}
+        >
+          <div style={{
+            width: '36px',
+            height: '28px',
+            borderRadius: '3px',
+            background: 'var(--surface-2)',
+            flexShrink: 0,
+            overflow: 'hidden',
+          }}>
+            {item.kind === 'collection' ? (
+              <RecentNavThumb
+                thumbnailPath={item.photos?.[0]?.thumbnail_path ?? null}
+                storagePath={item.photos?.[0]?.storage_path ?? null}
+                initialUrl={item.photos?.[0]?.thumbnail_url ?? null}
+              />
+            ) : (
+              <RecentNavThumb
+                thumbnailPath={item.thumbnail_path}
+                storagePath={item.storage_path}
+                initialUrl={item.thumbnail_url ?? null}
+              />
+            )}
+          </div>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>
+            {item.kind === 'collection' ? item.name : item.title}
+          </span>
+        </Link>
+      ))}
+    </>
+  )
+}
+
 export default function Sidebar({
   userName,
   userInitials,
@@ -122,7 +173,7 @@ export default function Sidebar({
   userRole,
   userId,
   hideOwnPhotosInBrowse,
-  recentItems,
+  recentItemsPromise,
 }: SidebarProps) {
   const pathname = usePathname()
   const sidebarOpen = useUIStore(s => s.sidebarOpen)
@@ -253,47 +304,10 @@ export default function Sidebar({
             </Link>
           ))}
 
-          {/* Recents: others’ collections + their uploads (mixed by activity) */}
-          {recentItems.length > 0 && (
-            <>
-              <span className="s-section-lbl" style={{ marginTop: '8px' }}>Recents</span>
-              {recentItems.map((item) => (
-                <Link
-                  key={item.kind === 'collection' ? `c-${item.id}` : `p-${item.id}`}
-                  href={recentItemHref(item)}
-                  className="ni"
-                  onClick={handleNavClick}
-                  style={{ gap: '8px' }}
-                >
-                  <div style={{
-                    width: '36px',
-                    height: '28px',
-                    borderRadius: '3px',
-                    background: 'var(--surface-2)',
-                    flexShrink: 0,
-                    overflow: 'hidden',
-                  }}>
-                    {item.kind === 'collection' ? (
-                      <RecentNavThumb
-                        thumbnailPath={item.photos?.[0]?.thumbnail_path ?? null}
-                        storagePath={item.photos?.[0]?.storage_path ?? null}
-                        initialUrl={item.photos?.[0]?.thumbnail_url ?? null}
-                      />
-                    ) : (
-                      <RecentNavThumb
-                        thumbnailPath={item.thumbnail_path}
-                        storagePath={item.storage_path}
-                        initialUrl={item.thumbnail_url ?? null}
-                      />
-                    )}
-                  </div>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>
-                    {item.kind === 'collection' ? item.name : item.title}
-                  </span>
-                </Link>
-              ))}
-            </>
-          )}
+          {/* Recents: others’ collections + their uploads (mixed by activity) — streams in via Suspense */}
+          <Suspense fallback={null}>
+            <RecentItemsSection recentItemsPromise={recentItemsPromise} />
+          </Suspense>
         </div>
 
         {/* Notification bell */}

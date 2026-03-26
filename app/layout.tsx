@@ -21,31 +21,26 @@ export const metadata: Metadata = {
   description: 'Internal photo library for Clarity Northwest Photography',
 }
 
+async function loadSidebarRecents(userId: string) {
+  const supabase = createClient()
+  const [collections, photoRows] = await Promise.all([
+    getCollections(supabase, { excludeCreatedBy: userId, limit: SIDEBAR_RECENTS_POOL }),
+    getRecentSidebarPhotos(supabase, { excludePhotographerId: userId, limit: SIDEBAR_RECENTS_POOL }),
+  ])
+  const [signedCols, signedPhotos] = await Promise.all([
+    attachSignedCollectionPreviewUrls(collections, { limitCollections: SIDEBAR_RECENTS_POOL, photosPerCollection: 1 }),
+    attachSignedThumbnailUrls(photoRows, { limit: SIDEBAR_RECENTS_POOL }),
+  ])
+  return mergeRecentNavItems(signedCols, signedPhotos, SIDEBAR_RECENTS_LIMIT)
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerUser()
-  const [profile, recentItems] = await Promise.all([
-    getServerProfile(),
-    user
-      ? (async () => {
-          const supabase = createClient()
-          const [collections, photoRows] = await Promise.all([
-            getCollections(supabase, { excludeCreatedBy: user.id, limit: SIDEBAR_RECENTS_POOL }),
-            getRecentSidebarPhotos(supabase, {
-              excludePhotographerId: user.id,
-              limit: SIDEBAR_RECENTS_POOL,
-            }),
-          ])
-          const [signedCols, signedPhotos] = await Promise.all([
-            attachSignedCollectionPreviewUrls(collections, {
-              limitCollections: SIDEBAR_RECENTS_POOL,
-              photosPerCollection: 1,
-            }),
-            attachSignedThumbnailUrls(photoRows, { limit: SIDEBAR_RECENTS_POOL }),
-          ])
-          return mergeRecentNavItems(signedCols, signedPhotos, SIDEBAR_RECENTS_LIMIT)
-        })()
-      : Promise.resolve([]),
-  ])
+
+  // Start sidebar recents fetch immediately but don't block on it — it streams in via Suspense.
+  const recentItemsPromise = user ? loadSidebarRecents(user.id) : Promise.resolve<import('@/lib/navigation/recentNav').RecentNavItem[]>([])
+
+  const profile = await getServerProfile()
 
   return (
     <html lang="en">
@@ -65,7 +60,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 userRole={profile?.role ?? 'photographer'}
                 userId={user.id}
                 hideOwnPhotosInBrowse={profile?.hide_own_photos_in_browse === true}
-                recentItems={recentItems}
+                recentItemsPromise={recentItemsPromise}
               />
               <main
                 style={{

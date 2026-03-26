@@ -16,24 +16,25 @@ export const getServerProfile = cache(async (): Promise<Pick<User, 'name' | 'ini
   if (!user) return null
 
   const supabase = createClient()
-  /** Core columns only — if `hide_own_photos_in_browse` is missing in DB, mixing it here makes the whole row fail (PGRST204) and wipes name/role/admin everywhere. */
-  const { data, error } = await supabase
-    .from('users')
-    .select('name, initials, role, avatar_url')
-    .eq('id', user.id)
-    .maybeSingle()
+  /** Core columns only — if `hide_own_photos_in_browse` is missing in DB, mixing it here makes the whole row fail (PGRST204) and wipes name/role/admin everywhere. Run both in parallel. */
+  const [{ data, error }, hideRes] = await Promise.all([
+    supabase
+      .from('users')
+      .select('name, initials, role, avatar_url')
+      .eq('id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('users')
+      .select('hide_own_photos_in_browse')
+      .eq('id', user.id)
+      .maybeSingle(),
+  ])
 
   if (error) {
     devError('[getServerProfile]', user.id, error.message)
     return null
   }
   if (!data) return null
-
-  const hideRes = await supabase
-    .from('users')
-    .select('hide_own_photos_in_browse')
-    .eq('id', user.id)
-    .maybeSingle()
   const hide_own_photos_in_browse = resolveHideOwnPhotosInBrowse({
     authUser: user,
     dbError: hideRes.error,
