@@ -103,7 +103,7 @@ export async function GET(
   }
 
   return NextResponse.json({
-    job: { summary: job.summary, status: job.status },
+    job: { summary: job.summary, status: job.status, photographerId: job.photographer_id },
     items: list,
     needsLocationPhotoIds,
     missingLocationOrCategoryPhotoIds,

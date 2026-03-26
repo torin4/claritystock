@@ -76,6 +76,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [needsLocationPhotoIds, setNeedsLocationPhotoIds] = useState<string[]>([])
   const [missingLocationOrCategoryPhotoIds, setMissingLocationOrCategoryPhotoIds] = useState<string[]>([])
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
+  const [jobPhotographerId, setJobPhotographerId] = useState<string | null>(null)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
   const [bulkCategory, setBulkCategory] = useState<'' | Category>('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
@@ -97,7 +98,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       const res = await fetch(`/api/bulk-upload/jobs/${bulkReviewJobId}`, { credentials: 'same-origin' })
       const body = (await res.json()) as {
         error?: string
-        job?: { summary: unknown; status: string }
+        job?: { summary: unknown; status: string; photographerId?: string }
         items?: BulkItemRow[]
         needsLocationPhotoIds?: string[]
         missingLocationOrCategoryPhotoIds?: string[]
@@ -112,6 +113,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
         return
       }
       setJobSummary((body.job?.summary as JobSummary) ?? {})
+      setJobPhotographerId(body.job?.photographerId ?? null)
       const nextItems = body.items ?? []
       setItems(nextItems)
       const needs = body.needsLocationPhotoIds ?? []
@@ -179,6 +181,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       await updatePhotosCategoryNeighborhood(ids, {
         ...(applyCat ? { category: bulkCategory } : {}),
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
+        ...(jobPhotographerId ? { photographerId: jobPhotographerId } : {}),
       })
       setBulkNeighborhood('')
       await load()
