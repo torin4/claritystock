@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { assertOwnerOrAdmin, isUserAdmin } from '@/lib/auth/admin'
+import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import type { PhotoFormValues } from '@/lib/types/database.types'
 import type { PostgrestError } from '@supabase/supabase-js'
 import { devWarn } from '@/lib/utils/devLog'
@@ -82,6 +83,24 @@ export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) 
       ? await resolveNeighborhoodForDb(supabase, values.neighborhood)
       : undefined
 
+  const hasUsableLocation =
+    values.neighborhood !== undefined &&
+    neighborhoodResolved != null &&
+    String(neighborhoodResolved).trim() !== ''
+
+  let tagsPayload: string[] | undefined = values.tags
+  if (hasUsableLocation) {
+    if (values.tags !== undefined) {
+      tagsPayload = values.tags.filter((t) => t !== PHOTO_TAG_NEEDS_LOCATION)
+    } else {
+      const { data: row } = await supabase.from('photos').select('tags').eq('id', id).single()
+      const cur = (row?.tags as string[] | null) ?? []
+      if (cur.includes(PHOTO_TAG_NEEDS_LOCATION)) {
+        tagsPayload = cur.filter((t) => t !== PHOTO_TAG_NEEDS_LOCATION)
+      }
+    }
+  }
+
   let q = supabase
     .from('photos')
     .update({
@@ -91,7 +110,7 @@ export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) 
       ...(values.neighborhood !== undefined ? { neighborhood: neighborhoodResolved } : {}),
       subarea: values.subarea,
       captured_date: values.captured_date,
-      tags: values.tags,
+      ...(tagsPayload !== undefined ? { tags: tagsPayload } : {}),
       notes: values.notes,
     })
     .eq('id', id)

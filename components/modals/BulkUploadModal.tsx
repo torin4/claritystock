@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -9,6 +9,7 @@ import { publishPhoto } from '@/lib/actions/photos.actions'
 import {
   BULK_CONCURRENCY,
   buildFormForBulkFile,
+  MAX_BULK_IMAGES,
   parseBulkZipToEntries,
   runWithConcurrency,
 } from '@/lib/uploads/bulkZipImport'
@@ -23,17 +24,32 @@ interface Props {
 export default function BulkUploadModal({ userId }: Props) {
   const router = useRouter()
   const { bulkUploadModalOpen, closeBulkUpload } = useUIStore()
+  const setBulkUploadProgress = useUIStore((s) => s.setBulkUploadProgress)
+  const bulkUploadProgress = useUIStore((s) => s.bulkUploadProgress)
+
+  const bulkBarPct = useMemo(() => {
+    const p = bulkUploadProgress
+    if (!p?.total) return 0
+    const half = p.inFlight && p.completed < p.total ? 0.5 : 0
+    return Math.min(100, Math.round(((p.completed + half) / p.total) * 100))
+  }, [bulkUploadProgress])
   const fileRef = useRef<HTMLInputElement>(null)
   const cancelledRef = useRef(false)
+  /** True for the whole runBulk() call — set synchronously so close can’t cancel before React applies phase. */
+  const bulkRunActiveRef = useRef(false)
   const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState('')
   const [lastSummary, setLastSummary] = useState<{ ok: number; fail: number } | null>(null)
 
   const handleClose = () => {
-    cancelledRef.current = true
+    /** While a bulk run is active, only dismiss the modal — do not cancel (phase can lag behind runBulk). */
+    if (!bulkRunActiveRef.current) {
+      cancelledRef.current = true
+      setPhase('idle')
+      setMessage('')
+      setLastSummary(null)
+    }
     closeBulkUpload()
-    setPhase('idle')
-    setMessage('')
   }
 
   /** Backdrop closes on small screens only (same pattern as UploadModal). */
@@ -44,27 +60,31 @@ export default function BulkUploadModal({ userId }: Props) {
 
   const runBulk = useCallback(
     async (zipFile: File) => {
+      bulkRunActiveRef.current = true
       cancelledRef.current = false
-      setPhase('running')
-      setMessage('Reading ZIP…')
-      const supabase = getSupabaseBrowserClient()
-
-      let entries
       try {
-        entries = await parseBulkZipToEntries(zipFile)
-      } catch (e) {
-        setPhase('error')
-        setMessage(e instanceof Error ? e.message : 'Could not read ZIP')
-        return
-      }
+        setPhase('running')
+        setMessage('Reading ZIP…')
+        const supabase = getSupabaseBrowserClient()
 
-      if (!entries.length) {
-        setPhase('error')
-        setMessage('No images found in ZIP (JPEG/PNG/WebP/HEIC; max size limits apply).')
-        return
-      }
+        let entries
+        try {
+          entries = await parseBulkZipToEntries(zipFile)
+        } catch (e) {
+          setBulkUploadProgress(null)
+          setPhase('error')
+          setMessage(e instanceof Error ? e.message : 'Could not read ZIP')
+          return
+        }
 
-      const { data: jobRow, error: jobErr } = await supabase
+        if (!entries.length) {
+          setBulkUploadProgress(null)
+          setPhase('error')
+          setMessage('No images found in ZIP (JPEG/PNG/WebP/HEIC; max size limits apply).')
+          return
+        }
+
+        const { data: jobRow, error: jobErr } = await supabase
         .from('bulk_upload_jobs')
         .insert({
           photographer_id: userId,
@@ -74,6 +94,7 @@ export default function BulkUploadModal({ userId }: Props) {
         .single()
 
       if (jobErr || !jobRow?.id) {
+        setBulkUploadProgress(null)
         setPhase('error')
         setMessage(jobErr?.message ?? 'Could not start import job')
         return
@@ -95,12 +116,26 @@ export default function BulkUploadModal({ userId }: Props) {
 
       if (itemsErr || !insertedItems?.length) {
         await supabase.from('bulk_upload_jobs').update({ status: 'failed', completed_at: new Date().toISOString() }).eq('id', jobId)
+        setBulkUploadProgress(null)
         setPhase('error')
         setMessage(itemsErr?.message ?? 'Could not create import items')
         return
       }
 
       const pathToItemId = new Map(insertedItems.map((r) => [r.relative_path, r.id as string]))
+
+      if (insertedItems.length !== entries.length) {
+        await supabase
+          .from('bulk_upload_jobs')
+          .update({ status: 'failed', completed_at: new Date().toISOString() })
+          .eq('id', jobId)
+        setBulkUploadProgress(null)
+        setPhase('error')
+        setMessage(
+          `Could not create all import rows (${insertedItems.length}/${entries.length}). Check for duplicate paths in the ZIP.`,
+        )
+        return
+      }
 
       const folderToCollection = new Map<string, string>()
       const uniqueFolders = Array.from(new Set(entries.map((e) => e.folderName))).filter((name) => name.length > 0)
@@ -110,6 +145,7 @@ export default function BulkUploadModal({ userId }: Props) {
           folderToCollection.set(folder, id)
         } catch (e) {
           await supabase.from('bulk_upload_jobs').update({ status: 'failed', completed_at: new Date().toISOString() }).eq('id', jobId)
+          setBulkUploadProgress(null)
           setPhase('error')
           setMessage(e instanceof Error ? e.message : 'Collection error')
           return
@@ -118,146 +154,198 @@ export default function BulkUploadModal({ userId }: Props) {
 
       let ok = 0
       let fail = 0
+      let processed = 0
+      const total = entries.length
 
-      await runWithConcurrency(entries, BULK_CONCURRENCY, async (entry) => {
+        setBulkUploadProgress({
+          total,
+          completed: 0,
+          label: `Starting… 0/${total}`,
+          inFlight: false,
+        })
+
+        await runWithConcurrency(entries, BULK_CONCURRENCY, async (entry) => {
         if (cancelledRef.current) return
         const itemId = pathToItemId.get(entry.relativePath)
-        if (!itemId) return
+        const shortName = entry.relativePath.split('/').pop() ?? entry.relativePath
 
-        setMessage(`Processing ${entry.relativePath}…`)
-
-        await supabase.from('bulk_upload_items').update({ status: 'processing' }).eq('id', itemId)
-
-        const collectionId = folderToCollection.get(entry.folderName)
-        if (!collectionId) {
-          await supabase
-            .from('bulk_upload_items')
-            .update({ status: 'failed', error_message: 'Missing collection' })
-            .eq('id', itemId)
-          fail += 1
-          return
-        }
-
-        let ai: AiTagResult | null = null
         try {
-          ai = await runAiTaggingOnFile(entry.file)
-        } catch {
-          ai = null
-        }
+          if (!itemId) {
+            fail += 1
+            return
+          }
 
-        let form: PhotoFormValues
-        try {
-          form = await buildFormForBulkFile(entry.file, collectionId, ai)
-        } catch (e) {
-          await supabase
-            .from('bulk_upload_items')
-            .update({
-              status: 'failed',
-              error_message: e instanceof Error ? e.message : 'Form build failed',
-              collection_id: collectionId,
-            })
-            .eq('id', itemId)
-          fail += 1
-          return
-        }
+          setMessage(`Processing ${entry.relativePath}…`)
 
-        let contentHash: string | null = null
-        try {
-          contentHash = await sha256HexFromFile(entry.file)
-        } catch {
-          contentHash = null
-        }
-
-        let assets: Awaited<ReturnType<typeof uploadPhotoAssetsForPublish>>
-        try {
-          assets = await uploadPhotoAssetsForPublish({
-            file: entry.file,
-            userId,
-            contentHash,
+          setBulkUploadProgress({
+            total,
+            completed: processed,
+            label: `${processed + 1}/${total} · ${shortName}`,
+            inFlight: true,
           })
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : 'Upload failed'
+
+          try {
+          await supabase.from('bulk_upload_items').update({ status: 'processing' }).eq('id', itemId)
+
+          /** Root-level files (`folderName === ''`) are not in any collection — `null` is valid for `photos.collection_id`. */
+          const collectionId: string | null =
+            entry.folderName.length === 0 ? null : (folderToCollection.get(entry.folderName) ?? null)
+          if (entry.folderName.length > 0 && !collectionId) {
+            await supabase
+              .from('bulk_upload_items')
+              .update({ status: 'failed', error_message: 'Missing collection' })
+              .eq('id', itemId)
+            fail += 1
+            return
+          }
+
+          let ai: AiTagResult | null = null
+          try {
+            ai = await runAiTaggingOnFile(entry.file)
+          } catch {
+            ai = null
+          }
+
+          let form: PhotoFormValues
+          try {
+            form = await buildFormForBulkFile(entry.file, collectionId, ai)
+          } catch (e) {
+            await supabase
+              .from('bulk_upload_items')
+              .update({
+                status: 'failed',
+                error_message: e instanceof Error ? e.message : 'Form build failed',
+                collection_id: collectionId,
+              })
+              .eq('id', itemId)
+            fail += 1
+            return
+          }
+
+          let contentHash: string | null = null
+          try {
+            contentHash = await sha256HexFromFile(entry.file)
+          } catch {
+            contentHash = null
+          }
+
+          let assets: Awaited<ReturnType<typeof uploadPhotoAssetsForPublish>>
+          try {
+            assets = await uploadPhotoAssetsForPublish({
+              file: entry.file,
+              userId,
+              contentHash,
+            })
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : 'Upload failed'
+            await supabase
+              .from('bulk_upload_items')
+              .update({
+                status: 'failed',
+                error_message: errMsg,
+                collection_id: collectionId,
+              })
+              .eq('id', itemId)
+            fail += 1
+            return
+          }
+
           await supabase
             .from('bulk_upload_items')
             .update({
-              status: 'failed',
-              error_message: errMsg,
+              storage_path: assets.storagePath,
+              thumbnail_path: assets.thumbnailPath,
+              display_path: assets.displayPath,
+              content_hash: assets.contentHash,
               collection_id: collectionId,
             })
             .eq('id', itemId)
-          fail += 1
-          return
-        }
 
-        await supabase
-          .from('bulk_upload_items')
-          .update({
-            storage_path: assets.storagePath,
-            thumbnail_path: assets.thumbnailPath,
-            display_path: assets.displayPath,
-            content_hash: assets.contentHash,
-            collection_id: collectionId,
+          const snap = {
+            form,
+            description: ai?.description ?? null,
+          }
+          try {
+            const { id } = await publishPhoto(
+              { ...form, description: ai?.description },
+              assets.storagePath,
+              userId,
+              {
+                thumbnailPath: assets.thumbnailPath,
+                displayPath: assets.displayPath,
+                contentHash: assets.contentHash,
+              },
+            )
+            await supabase
+              .from('bulk_upload_items')
+              .update({
+                status: 'success',
+                photo_id: id,
+                collection_id: collectionId,
+                form_snapshot: null,
+              })
+              .eq('id', itemId)
+            ok += 1
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e)
+            await supabase
+              .from('bulk_upload_items')
+              .update({
+                status: 'failed',
+                error_message: errMsg,
+                collection_id: collectionId,
+                form_snapshot: snap as unknown as Record<string, unknown>,
+              })
+              .eq('id', itemId)
+            fail += 1
+          }
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e)
+            await supabase
+              .from('bulk_upload_items')
+              .update({
+                status: 'failed',
+                error_message: errMsg || 'Unexpected error',
+              })
+              .eq('id', itemId)
+            fail += 1
+          }
+        } finally {
+          processed += 1
+          const label =
+            processed >= total ? 'Finishing…' : `${processed}/${total} · ${shortName}`
+          setBulkUploadProgress({
+            total,
+            completed: processed,
+            label,
+            inFlight: false,
           })
-          .eq('id', itemId)
-
-        const snap = {
-          form,
-          description: ai?.description ?? null,
-        }
-        try {
-          const { id } = await publishPhoto(
-            { ...form, description: ai?.description },
-            assets.storagePath,
-            userId,
-            {
-              thumbnailPath: assets.thumbnailPath,
-              displayPath: assets.displayPath,
-              contentHash: assets.contentHash,
-            },
-          )
-          await supabase
-            .from('bulk_upload_items')
-            .update({
-              status: 'success',
-              photo_id: id,
-              collection_id: collectionId,
-              form_snapshot: null,
-            })
-            .eq('id', itemId)
-          ok += 1
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e)
-          await supabase
-            .from('bulk_upload_items')
-            .update({
-              status: 'failed',
-              error_message: errMsg,
-              collection_id: collectionId,
-              form_snapshot: snap as unknown as Record<string, unknown>,
-            })
-            .eq('id', itemId)
-          fail += 1
+          setMessage(`Processing ${entry.relativePath}…`)
         }
       })
 
-      const completedAt = new Date().toISOString()
-      const summary = { success_count: ok, failed_count: fail }
-      await supabase
-        .from('bulk_upload_jobs')
-        .update({
-          status: 'completed',
-          completed_at: completedAt,
-          summary,
-        })
-        .eq('id', jobId)
+          const completedAt = new Date().toISOString()
+        const summary = { success_count: ok, failed_count: fail }
+        await supabase
+          .from('bulk_upload_jobs')
+          .update({
+            status: 'completed',
+            completed_at: completedAt,
+            summary,
+          })
+          .eq('id', jobId)
 
-      setLastSummary({ ok, fail })
-      setPhase('done')
-      setMessage('')
-      router.refresh()
-      useUIStore.getState().bumpSidebarCollections()
+        setBulkUploadProgress(null)
+        setLastSummary({ ok, fail })
+        setPhase('done')
+        setMessage('')
+        router.refresh()
+        useUIStore.getState().bumpSidebarCollections()
+      } finally {
+        bulkRunActiveRef.current = false
+      }
     },
-    [userId, router],
+    [userId, router, setBulkUploadProgress],
   )
 
   const onPickZip = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -292,14 +380,21 @@ export default function BulkUploadModal({ userId }: Props) {
               </button>
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 12 }}>
                 Structure: <code>FolderName/photo.jpg</code> — each folder becomes a collection. Files at the ZIP root
-                (not in a folder) are imported without a collection. Max {500} images.
+                (not in a folder) are imported without a collection. Max {MAX_BULK_IMAGES} images per ZIP.
               </p>
             </div>
           )}
           {phase === 'running' && (
             <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
-              <p style={{ marginBottom: 8 }}>Working in the background — you can leave this dialog and browse the app.</p>
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{message || 'Processing…'}</p>
+              <p style={{ marginBottom: 8 }}>Working in the background — you can close this dialog and a progress bar will stay at the bottom of the screen.</p>
+              {bulkUploadProgress && bulkUploadProgress.total > 0 && (
+                <div className="bulk-upload-modal-bar" aria-hidden>
+                  <div style={{ width: `${bulkBarPct}%` }} />
+                </div>
+              )}
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                {bulkUploadProgress?.label ?? message ?? 'Processing…'}
+              </p>
               <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={handleClose}>
                 Close (import continues)
               </button>

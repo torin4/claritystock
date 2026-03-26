@@ -16,6 +16,8 @@ interface UIState {
   notifPopoverOpen: boolean
   /** Increment to tell Sidebar to refetch “Recent collections”. */
   sidebarCollectionsEpoch: number
+  /** Bulk ZIP import running in the background (persists when modal is closed). */
+  bulkUploadProgress: { total: number; completed: number; label: string; inFlight?: boolean } | null
 }
 
 interface UIActions {
@@ -40,6 +42,7 @@ interface UIActions {
   bumpSidebarCollections: () => void
   /** Single update: close overlays that should not survive a client route change. */
   resetNavigationUi: () => void
+  setBulkUploadProgress: (p: UIState['bulkUploadProgress']) => void
 }
 
 const defaultState: UIState = {
@@ -54,14 +57,16 @@ const defaultState: UIState = {
   sidebarOpen: false,
   notifPopoverOpen: false,
   sidebarCollectionsEpoch: 0,
+  bulkUploadProgress: null,
 }
 
 export const useUIStore = create<UIState & UIActions>((set) => ({
   ...defaultState,
 
   openLightbox: (photoId) =>
-    set(() => ({
+    set((s) => ({
       ...defaultState,
+      bulkUploadProgress: s.bulkUploadProgress,
       lightboxOpen: true,
       lightboxPhotoId: photoId,
     })),
@@ -95,8 +100,9 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
   closeBulkReview: () => set({ bulkReviewJobId: null }),
 
   openEdit: (photoId) =>
-    set(() => ({
+    set((s) => ({
       ...defaultState,
+      bulkUploadProgress: s.bulkUploadProgress,
       editModalPhotoId: photoId,
     })),
   closeEdit: () => set({ editModalPhotoId: null }),
@@ -105,8 +111,9 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
   closeFilter: () => set({ filterDrawerOpen: false }),
 
   openSettings: () =>
-    set(() => ({
+    set((s) => ({
       ...defaultState,
+      bulkUploadProgress: s.bulkUploadProgress,
       settingsPanelOpen: true,
     })),
   closeSettings: () => set({ settingsPanelOpen: false }),
@@ -133,4 +140,6 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
       bulkUploadModalOpen: false,
       bulkReviewJobId: null,
     }),
+
+  setBulkUploadProgress: (p) => set({ bulkUploadProgress: p }),
 }))

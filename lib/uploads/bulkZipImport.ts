@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import {
   formDefaultsFromAi,
   MAX_UPLOAD_BYTES,
@@ -7,7 +8,8 @@ import {
 import { extractGps } from '@/lib/utils/exif'
 import type { AiTagResult, Category, PhotoFormValues } from '@/lib/types/database.types'
 
-export const MAX_BULK_IMAGES = 500
+/** Cap per ZIP — keeps browser memory and long-running import manageable. */
+export const MAX_BULK_IMAGES = 100
 export const BULK_CONCURRENCY = 2
 
 /** Empty string = file at ZIP root — not assigned to any collection. */
@@ -91,6 +93,10 @@ export async function buildFormForBulkFile(
   const fromAi = formDefaultsFromAi(ai)
   const title = (fromAi.title ?? file.name.replace(/\.[^.]+$/, '')).trim() || 'Untitled'
   const category = (fromAi.category ?? 'neighborhood') as Category
+  const baseTags = [...(fromAi.tags ?? ai?.tags ?? [])]
+  const tagsWithout = baseTags.filter((t) => t !== PHOTO_TAG_NEEDS_LOCATION)
+  const hasLocation = Boolean(neighborhood?.trim())
+  const tags = hasLocation ? tagsWithout : [...tagsWithout, PHOTO_TAG_NEEDS_LOCATION]
   return {
     title,
     category,
@@ -99,7 +105,7 @@ export async function buildFormForBulkFile(
     neighborhood,
     subarea: null,
     captured_date: null,
-    tags: fromAi.tags ?? ai?.tags ?? [],
+    tags,
     notes: null,
   }
 }

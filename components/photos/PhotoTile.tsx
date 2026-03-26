@@ -6,6 +6,7 @@ import { recordDownload } from '@/lib/actions/downloads.actions'
 import { downloadFromUrl } from '@/lib/photos/downloadFromUrl'
 import { getSignedPhotoUrl } from '@/lib/utils/storage'
 import { devError } from '@/lib/utils/devLog'
+import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import type { Photo } from '@/lib/types/database.types'
 
 const CAT_COLORS: Record<string, string> = {
@@ -193,7 +194,11 @@ function PhotoTile({
         <div className="ptile-title">{photo.title}</div>
         <div className="ptile-meta">
           {photo.photographer?.name ?? 'Unknown'}
-          {photo.neighborhood ? ` · ${photo.neighborhood}` : ''}
+          {photo.neighborhood
+            ? ` · ${photo.neighborhood}`
+            : photo.tags?.includes(PHOTO_TAG_NEEDS_LOCATION)
+              ? ' · Needs location'
+              : ''}
         </div>
       </div>
 
