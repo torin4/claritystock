@@ -118,6 +118,8 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
     set({
       bulkReviewJobId: jobId,
       notifPopoverOpen: false,
+      uploadModalOpen: false,
+      bulkUploadModalOpen: false,
     }),
   closeBulkReview: () => set({ bulkReviewJobId: null }),
 
