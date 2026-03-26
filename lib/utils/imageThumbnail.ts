@@ -4,8 +4,8 @@ type DerivativeOptions = {
 }
 
 const THUMBNAIL_OPTIONS: DerivativeOptions = {
-  maxDimension: 640,
-  quality: 0.82,
+  maxDimension: 1200,
+  quality: 0.80,
 }
 
 const DISPLAY_OPTIONS: DerivativeOptions = {
