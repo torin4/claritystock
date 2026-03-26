@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { isUserAdmin } from '@/lib/auth/admin'
 import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import { NextResponse, type NextRequest } from 'next/server'
 import { devError } from '@/lib/utils/devLog'
@@ -37,14 +36,9 @@ export async function GET(
     return NextResponse.json({ error: jobErr?.message ?? 'Job not found' }, { status: 404 })
   }
 
-  const isOwner = job.photographer_id === user.id
-  const admin = !isOwner ? await isUserAdmin(supabase, user.id) : false
-  if (!isOwner && !admin) {
+  if (job.photographer_id !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-
-  /** Photos belong to the job’s photographer (not necessarily the session user when admin acts on behalf). */
-  const photoOwnerId = job.photographer_id as string
 
   const { data: items, error: itemsErr } = await supabase
     .from('bulk_upload_items')
@@ -74,7 +68,7 @@ export async function GET(
       .from('photos')
       .select('id, tags, category, neighborhood')
       .in('id', successPhotoIds)
-      .eq('photographer_id', photoOwnerId)
+      .eq('photographer_id', user.id)
 
     if (photoErr) {
       devError('[bulk-upload photos tags GET]', photoErr)
