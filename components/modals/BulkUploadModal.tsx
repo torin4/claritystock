@@ -371,7 +371,7 @@ export default function BulkUploadModal({ userId }: Props) {
       <div className="upload-modal open">
         <div className="upload-modal-hdr">
           <div>
-            <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>Bulk upload (ZIP)</div>
+            <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>Advanced upload (ZIP)</div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
               Each second-level folder becomes a collection (e.g. <code>City/Neighborhood/photo.jpg</code> → collection "Neighborhood"). Images without a second-level folder import without a collection. AI tags and location run automatically.
             </div>

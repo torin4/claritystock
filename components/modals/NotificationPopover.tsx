@@ -30,7 +30,7 @@ function notificationText(n: AppNotification): React.ReactNode {
   const fail = n.failedCount > 0
   return (
     <>
-      Bulk import: <strong>{n.successCount}</strong> published
+      Advanced upload: <strong>{n.successCount}</strong> published
       {fail ? (
         <>
           , <strong>{n.failedCount}</strong> failed

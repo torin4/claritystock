@@ -304,7 +304,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
         {/* Header */}
         <div className="upload-modal-hdr">
           <div>
-            <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>Bulk import review</div>
+            <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>Advanced upload review</div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
               {loading
                 ? 'Loading…'

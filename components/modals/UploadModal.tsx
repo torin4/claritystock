@@ -997,7 +997,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 onClick={() => setUploadKind('bulk')}
                 disabled={publishing || bulkPhase === 'running'}
               >
-                Bulk (ZIP)
+                Advanced (ZIP)
               </button>
             </div>
             <div className="steps" style={{ marginTop: 8, marginBottom: 0 }}>
