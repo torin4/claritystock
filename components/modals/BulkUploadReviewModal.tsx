@@ -81,34 +81,26 @@ export default function BulkUploadReviewModal({ userId }: Props) {
     if (!bulkReviewJobId) return
     setLoading(true)
     setError(null)
-    const supabase = getSupabaseBrowserClient()
-    const { data: job, error: jobErr } = await supabase
-      .from('bulk_upload_jobs')
-      .select('summary, status')
-      .eq('id', bulkReviewJobId)
-      .single()
-
-    if (jobErr || !job) {
-      setError(jobErr?.message ?? 'Job not found')
-      setLoading(false)
-      return
-    }
-
-    setJobSummary((job.summary as JobSummary) ?? {})
-
-    const { data: rows, error: itemsErr } = await supabase
-      .from('bulk_upload_items')
-      .select(
-        'id, relative_path, folder_name, status, photo_id, error_message, storage_path, thumbnail_path, display_path, content_hash, form_snapshot',
-      )
-      .eq('job_id', bulkReviewJobId)
-      .order('relative_path')
-
-    if (itemsErr) {
-      setError(itemsErr.message)
+    try {
+      const res = await fetch(`/api/bulk-upload/jobs/${bulkReviewJobId}`, {
+        credentials: 'same-origin',
+      })
+      const body = (await res.json()) as {
+        error?: string
+        job?: { summary: unknown; status: string }
+        items?: BulkItemRow[]
+      }
+      if (!res.ok) {
+        setError(body.error ?? res.statusText)
+        setItems([])
+        setLoading(false)
+        return
+      }
+      setJobSummary((body.job?.summary as JobSummary) ?? {})
+      setItems(body.items ?? [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load job')
       setItems([])
-    } else {
-      setItems((rows as BulkItemRow[]) ?? [])
     }
     setLoading(false)
   }, [bulkReviewJobId])
