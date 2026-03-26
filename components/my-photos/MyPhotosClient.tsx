@@ -419,6 +419,39 @@ export default function MyPhotosClient({
     return filteredPhotos
   }, [drillColl, tab, filteredDownloadedPhotos, filteredPhotos])
 
+  /** IDs currently shown in the grid (for “select all” — paginated library = loaded rows only). */
+  const visiblePhotoIdsForSelection = useMemo(() => {
+    if (!drillColl && tab === 'downloads') {
+      return filteredDownloadedPhotos.map(p => p.id)
+    }
+    if (tab === 'photos' || drillColl) {
+      return filteredPhotos.map(p => p.id)
+    }
+    return [] as string[]
+  }, [drillColl, tab, filteredDownloadedPhotos, filteredPhotos])
+
+  const selectAllVisible = useCallback(() => {
+    setSelectedIds((prev) => {
+      const vis = visiblePhotoIdsForSelection
+      if (!vis.length) return prev
+      const every = vis.every(id => prev.includes(id))
+      if (every) return prev.filter(id => !vis.includes(id))
+      return Array.from(new Set([...prev, ...vis]))
+    })
+  }, [visiblePhotoIdsForSelection])
+
+  const allVisibleSelected = useMemo(
+    () =>
+      visiblePhotoIdsForSelection.length > 0 &&
+      visiblePhotoIdsForSelection.every(id => selectedIds.includes(id)),
+    [visiblePhotoIdsForSelection, selectedIds],
+  )
+
+  const selectAllVisibleTitle =
+    hasMorePhotos && (tab === 'photos' || drillColl)
+      ? 'Selects every photo currently shown. Use “Load more” if you need additional pages in your library first.'
+      : undefined
+
   useEffect(() => {
     if (!defaultPhotosViewActive) return
     photosRequestSeqRef.current += 1
@@ -909,6 +942,15 @@ export default function MyPhotosClient({
           <span className="mp-select-bar-count">
             {selectedIds.length} selected
           </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={!visiblePhotoIdsForSelection.length}
+            title={selectAllVisibleTitle}
+            onClick={selectAllVisible}
+          >
+            {allVisibleSelected ? 'Deselect visible' : 'Select all'}
+          </button>
           <span className="mp-select-bar-hint">
             {tab === 'downloads'
               ? `Remove from downloads only clears your list (Library unchanged; Browse checkmark clears) · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS}`
