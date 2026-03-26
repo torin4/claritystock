@@ -83,6 +83,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
+  const [allSetDismissed, setAllSetDismissed] = useState(false)
 
   useEffect(() => {
     getNeighborhoodCanonicalLabels()
@@ -94,6 +95,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
     if (!bulkReviewJobId) return
     setLoading(true)
     setError(null)
+    setAllSetDismissed(false)
     try {
       const res = await fetch(`/api/bulk-upload/jobs/${bulkReviewJobId}`, { credentials: 'same-origin' })
       const body = (await res.json()) as {
@@ -322,8 +324,25 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           </button>
         </div>
 
+        {/* All set screen */}
+        {allSet && !allSetDismissed && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', gap: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 40 }}>✓</div>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-head)', color: 'var(--text-1)' }}>All set!</div>
+            <div style={{ fontSize: 13, color: 'var(--text-3)' }}>All uploaded photos have locations assigned.</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setAllSetDismissed(true)}>
+                Back to editor
+              </button>
+              <button type="button" className="btn btn-primary" onClick={closeBulkReview}>
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Scrollable photo list */}
-        <div className="upload-modal-body" style={{ paddingBottom: 8, overflowY: 'auto', flex: 1 }}>
+        {(!allSet || allSetDismissed) && <div className="upload-modal-body" style={{ paddingBottom: 8, overflowY: 'auto', flex: 1 }}>
           {error && (
             <p style={{ color: 'var(--cm-bad, #c44)', fontSize: 13, marginBottom: 12 }}>{error}</p>
           )}
@@ -418,10 +437,10 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           {!loading && successItems.length === 0 && failed.length === 0 && (
             <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 12 }}>No items found.</p>
           )}
-        </div>
+        </div>}
 
         {/* Sticky footer — location/category editor + close */}
-        <div style={{ borderTop: '1px solid var(--border)', padding: '12px 20px 16px', background: 'var(--surface)', flexShrink: 0 }}>
+        {(!allSet || allSetDismissed) && <div style={{ borderTop: '1px solid var(--border)', padding: '12px 20px 16px', background: 'var(--surface)', flexShrink: 0 }}>
           {!loading && !allSet && (
             <>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
@@ -466,7 +485,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           <button type="button" className="btn btn-ghost" onClick={closeBulkReview}>
             Close
           </button>
-        </div>
+        </div>}
       </div>
     </>
   )
