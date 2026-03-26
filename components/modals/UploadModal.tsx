@@ -11,6 +11,7 @@ import {
   neighborhoodFromCoordinates,
   publishPhotoFileFromUploadState,
   runAiTaggingOnFile,
+  uploadPhotoAssetsForPublish,
 } from '@/lib/uploads/processImageForPublish'
 import { contentHashInFilter, isContentHashColumnMissingError } from '@/lib/utils/contentHashQuery'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
@@ -18,9 +19,12 @@ import type { Collection, Category } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
-import { updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
+import { publishPhoto, updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
 import { runWithConcurrency } from '@/lib/utils/runWithConcurrency'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
+import { getOrCreateCollectionByName } from '@/lib/actions/collections.actions'
+import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
+import type { AiTagResult, PhotoFormValues } from '@/lib/types/database.types'
 
 type UploadNotice = {
   tone: 'warning' | 'info'
@@ -83,6 +87,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const { uploadModalOpen, closeUpload, bulkUpdateJobId } = useUIStore()
   const store = useUploadStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const zipInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [collections, setCollections] = useState<Collection[]>([])
@@ -102,7 +107,23 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkUpdateError, setBulkUpdateError] = useState<string | null>(null)
+
+  // Bulk ZIP import (inside UploadModal)
+  const setBulkUploadProgress = useUIStore((s) => s.setBulkUploadProgress)
+  const bulkUploadProgress = useUIStore((s) => s.bulkUploadProgress)
+  const bulkRunActiveRef = useRef(false)
+  const bulkCancelledRef = useRef(false)
+  const [uploadKind, setUploadKind] = useState<'standard' | 'bulk'>('standard')
+  const [bulkPhase, setBulkPhase] = useState<'idle' | 'running' | 'error'>('idle')
+  const [bulkMessage, setBulkMessage] = useState('')
   const cancelledRef = useRef(false)
+
+  const bulkBarPct = useMemo(() => {
+    const p = bulkUploadProgress
+    if (!p?.total) return 0
+    const half = p.inFlight && p.completed < p.total ? 0.5 : 0
+    return Math.min(100, Math.round(((p.completed + half) / p.total) * 100))
+  }, [bulkUploadProgress])
 
   useEffect(() => {
     if (!uploadModalOpen) return
@@ -215,9 +236,15 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
 
   const handleClose = () => {
     cancelledRef.current = true
+    if (!bulkRunActiveRef.current) {
+      bulkCancelledRef.current = true
+      setBulkPhase('idle')
+      setBulkMessage('')
+    }
     store.reset()
     setUploadNotice(null)
     setLibraryDupNeedsMigration(false)
+    setUploadKind('standard')
     closeUpload()
   }
 
@@ -413,6 +440,335 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     }
   }
 
+  const runBulkZip = useCallback(
+    async (zipFile: File) => {
+      bulkRunActiveRef.current = true
+      bulkCancelledRef.current = false
+      try {
+        setBulkPhase('running')
+        setBulkMessage('Reading ZIP…')
+
+        const supabase = getSupabaseBrowserClient()
+
+        // Dynamically import ZIP parsing + bulk constants so JSZip doesn't bloat standard uploads.
+        const bulk = await import('@/lib/uploads/bulkZipImport')
+        const {
+          BULK_CONCURRENCY,
+          MAX_BULK_IMAGES,
+          buildFormForBulkFile,
+          parseBulkZipToEntries,
+          runWithConcurrency: runBulkWithConcurrency,
+        } = bulk
+
+        let entries: Awaited<ReturnType<typeof parseBulkZipToEntries>>
+        try {
+          entries = await parseBulkZipToEntries(zipFile)
+        } catch (e) {
+          setBulkUploadProgress(null)
+          setBulkPhase('error')
+          setBulkMessage(e instanceof Error ? e.message : 'Could not read ZIP')
+          return
+        }
+
+        if (!entries.length) {
+          setBulkUploadProgress(null)
+          setBulkPhase('error')
+          setBulkMessage('No images found in ZIP (JPEG/PNG/WebP/HEIC; max size limits apply).')
+          return
+        }
+
+        if (entries.length > MAX_BULK_IMAGES) {
+          setBulkUploadProgress(null)
+          setBulkPhase('error')
+          setBulkMessage(`ZIP contains ${entries.length} images. Max is ${MAX_BULK_IMAGES}.`)
+          return
+        }
+
+        const { data: jobRow, error: jobErr } = await supabase
+          .from('bulk_upload_jobs')
+          .insert({
+            photographer_id: userId,
+            status: 'running',
+          })
+          .select('id')
+          .single()
+
+        if (jobErr || !jobRow?.id) {
+          setBulkUploadProgress(null)
+          setBulkPhase('error')
+          setBulkMessage(jobErr?.message ?? 'Could not start import job')
+          return
+        }
+
+        const jobId = jobRow.id as string
+
+        const itemRows = entries.map((e) => ({
+          job_id: jobId,
+          relative_path: e.relativePath,
+          folder_name: e.folderName,
+          status: 'pending' as const,
+        }))
+
+        const { data: insertedItems, error: itemsErr } = await supabase
+          .from('bulk_upload_items')
+          .insert(itemRows)
+          .select('id, relative_path')
+
+        if (itemsErr || !insertedItems?.length) {
+          await supabase
+            .from('bulk_upload_jobs')
+            .update({ status: 'failed', completed_at: new Date().toISOString() })
+            .eq('id', jobId)
+          setBulkUploadProgress(null)
+          setBulkPhase('error')
+          setBulkMessage(itemsErr?.message ?? 'Could not create import items')
+          return
+        }
+
+        const pathToItemId = new Map(insertedItems.map((r) => [r.relative_path, r.id as string]))
+
+        if (insertedItems.length !== entries.length) {
+          await supabase
+            .from('bulk_upload_jobs')
+            .update({ status: 'failed', completed_at: new Date().toISOString() })
+            .eq('id', jobId)
+          setBulkUploadProgress(null)
+          setBulkPhase('error')
+          setBulkMessage(`Could not create all import rows (${insertedItems.length}/${entries.length}). Check for duplicate paths in the ZIP.`)
+          return
+        }
+
+        const folderToCollection = new Map<string, string>()
+        const uniqueFolders = Array.from(new Set(entries.map((e) => e.folderName))).filter((name) => name.length > 0)
+        for (const folder of uniqueFolders) {
+          try {
+            const { id } = await getOrCreateCollectionByName({ name: folder, category: 'neighborhood' })
+            folderToCollection.set(folder, id)
+          } catch (e) {
+            await supabase
+              .from('bulk_upload_jobs')
+              .update({ status: 'failed', completed_at: new Date().toISOString() })
+              .eq('id', jobId)
+            setBulkUploadProgress(null)
+            setBulkPhase('error')
+            setBulkMessage(e instanceof Error ? e.message : 'Collection error')
+            return
+          }
+        }
+
+        let ok = 0
+        let fail = 0
+        let needsLocationOk = 0
+        let processed = 0
+        const total = entries.length
+
+        setBulkUploadProgress({
+          total,
+          completed: 0,
+          label: `Starting… 0/${total}`,
+          inFlight: false,
+        })
+
+        await runBulkWithConcurrency(entries, BULK_CONCURRENCY, async (entry) => {
+          if (bulkCancelledRef.current) return
+          const itemId = pathToItemId.get(entry.relativePath)
+          const shortName = entry.relativePath.split('/').pop() ?? entry.relativePath
+
+          try {
+            if (!itemId) {
+              fail += 1
+              return
+            }
+
+            setBulkMessage(`Processing ${entry.relativePath}…`)
+            setBulkUploadProgress({
+              total,
+              completed: processed,
+              label: `${processed + 1}/${total} · ${shortName}`,
+              inFlight: true,
+            })
+
+            try {
+              await supabase.from('bulk_upload_items').update({ status: 'processing' }).eq('id', itemId)
+
+              /** Root-level files (`folderName === ''`) are not in any collection — `null` is valid for `photos.collection_id`. */
+              const collectionId: string | null =
+                entry.folderName.length === 0 ? null : (folderToCollection.get(entry.folderName) ?? null)
+              if (entry.folderName.length > 0 && !collectionId) {
+                await supabase
+                  .from('bulk_upload_items')
+                  .update({ status: 'failed', error_message: 'Missing collection' })
+                  .eq('id', itemId)
+                fail += 1
+                return
+              }
+
+              let ai: AiTagResult | null = null
+              try {
+                ai = await runAiTaggingOnFile(entry.file)
+              } catch {
+                ai = null
+              }
+
+              let form: PhotoFormValues
+              try {
+                form = await buildFormForBulkFile(entry.file, collectionId, ai)
+              } catch (e) {
+                await supabase
+                  .from('bulk_upload_items')
+                  .update({
+                    status: 'failed',
+                    error_message: e instanceof Error ? e.message : 'Form build failed',
+                    collection_id: collectionId,
+                  })
+                  .eq('id', itemId)
+                fail += 1
+                return
+              }
+
+              let contentHash: string | null = null
+              try {
+                contentHash = await sha256HexFromFile(entry.file)
+              } catch {
+                contentHash = null
+              }
+
+              let assets: Awaited<ReturnType<typeof uploadPhotoAssetsForPublish>>
+              try {
+                assets = await uploadPhotoAssetsForPublish({
+                  file: entry.file,
+                  userId,
+                  contentHash,
+                })
+              } catch (e) {
+                const errMsg = e instanceof Error ? e.message : 'Upload failed'
+                await supabase
+                  .from('bulk_upload_items')
+                  .update({
+                    status: 'failed',
+                    error_message: errMsg,
+                    collection_id: collectionId,
+                  })
+                  .eq('id', itemId)
+                fail += 1
+                return
+              }
+
+              await supabase
+                .from('bulk_upload_items')
+                .update({
+                  storage_path: assets.storagePath,
+                  thumbnail_path: assets.thumbnailPath,
+                  display_path: assets.displayPath,
+                  content_hash: assets.contentHash,
+                  collection_id: collectionId,
+                })
+                .eq('id', itemId)
+
+              const snap = {
+                form,
+                description: ai?.description ?? null,
+              }
+
+              try {
+                const { id } = await publishPhoto(
+                  { ...form, description: ai?.description },
+                  assets.storagePath,
+                  userId,
+                  {
+                    thumbnailPath: assets.thumbnailPath,
+                    displayPath: assets.displayPath,
+                    contentHash: assets.contentHash,
+                  },
+                )
+
+                await supabase
+                  .from('bulk_upload_items')
+                  .update({
+                    status: 'success',
+                    photo_id: id,
+                    collection_id: collectionId,
+                    form_snapshot: null,
+                  })
+                  .eq('id', itemId)
+                ok += 1
+                if (form.tags?.includes(PHOTO_TAG_NEEDS_LOCATION)) {
+                  needsLocationOk += 1
+                }
+              } catch (e) {
+                const errMsg = e instanceof Error ? e.message : String(e)
+                await supabase
+                  .from('bulk_upload_items')
+                  .update({
+                    status: 'failed',
+                    error_message: errMsg,
+                    collection_id: collectionId,
+                    form_snapshot: snap as unknown as Record<string, unknown>,
+                  })
+                  .eq('id', itemId)
+                fail += 1
+              }
+            } catch (e) {
+              const errMsg = e instanceof Error ? e.message : String(e)
+              await supabase
+                .from('bulk_upload_items')
+                .update({
+                  status: 'failed',
+                  error_message: errMsg || 'Unexpected error',
+                })
+                .eq('id', itemId)
+              fail += 1
+            }
+          } finally {
+            processed += 1
+            const label = processed >= total ? 'Finishing…' : `${processed}/${total} · ${shortName}`
+            setBulkUploadProgress({
+              total,
+              completed: processed,
+              label,
+              inFlight: false,
+            })
+            setBulkMessage(`Processing ${entry.relativePath}…`)
+          }
+        })
+
+        const completedAt = new Date().toISOString()
+        const summary = {
+          success_count: ok,
+          failed_count: fail,
+          needs_location_count: needsLocationOk,
+        }
+        await supabase
+          .from('bulk_upload_jobs')
+          .update({
+            status: 'completed',
+            completed_at: completedAt,
+            summary,
+          })
+          .eq('id', jobId)
+
+        setBulkUploadProgress(null)
+        setBulkPhase('idle')
+        setBulkMessage('')
+
+        if (fail > 0) useUIStore.getState().openBulkReview(jobId)
+        if (needsLocationOk > 0) useUIStore.getState().openBulkUpdate(jobId)
+
+        onSuccess()
+        useUIStore.getState().bumpSidebarCollections()
+      } finally {
+        bulkRunActiveRef.current = false
+      }
+    },
+    [onSuccess, setBulkUploadProgress, userId],
+  )
+
+  const onPickZip = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (f && f.name.toLowerCase().endsWith('.zip')) void runBulkZip(f)
+  }
+
   const bulkSuccessItems = useMemo(
     () => bulkItems.filter((i) => i.status === 'success' && i.photo_id),
     [bulkItems],
@@ -604,6 +960,24 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
             <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>
               Add Photos
             </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${uploadKind === 'standard' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setUploadKind('standard')}
+                disabled={publishing || bulkPhase === 'running'}
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${uploadKind === 'bulk' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setUploadKind('bulk')}
+                disabled={publishing || bulkPhase === 'running'}
+              >
+                Bulk (ZIP)
+              </button>
+            </div>
             <div className="steps" style={{ marginTop: 8, marginBottom: 0 }}>
               <div className={`step-n ${store.step >= 1 ? 'active' : ''} ${store.step > 1 ? 'done' : ''}`}>1</div>
               <div className="step-line" />
@@ -620,33 +994,95 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         </div>
 
         <div className="upload-modal-body">
-          {defaultCollectionId && store.step !== 3 && (
-            <div
-              className="upload-target-banner"
-              role="status"
-              style={{
-                marginBottom: store.step === 1 ? 12 : 14,
-                marginTop: 0,
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px solid rgba(61, 122, 106, 0.35)',
-                background: 'var(--accent-dim)',
-                color: 'var(--text-2)',
-                fontSize: 12,
-                lineHeight: 1.45,
-              }}
-            >
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Target collection
-              </span>
-              <div style={{ fontWeight: 600, color: 'var(--text)', marginTop: 2 }}>
-                {targetCollectionName ?? 'Selected collection'}
+          {uploadKind === 'bulk' && (
+            <div style={{ paddingBottom: 16 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+                Each top-level folder becomes a collection. Files at the ZIP root import without a collection.
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-                You can change this per photo in the next step.
+              <input
+                ref={zipInputRef}
+                type="file"
+                accept=".zip,application/zip"
+                hidden
+                onChange={onPickZip}
+              />
+
+              {bulkPhase === 'idle' && (
+                <button type="button" className="btn btn-primary" onClick={() => zipInputRef.current?.click()}>
+                  Choose ZIP file
+                </button>
+              )}
+
+              {bulkPhase === 'running' && (
+                <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                  <p style={{ marginBottom: 8 }}>
+                    Working in the background — you can close this dialog and a progress bar will stay at the bottom of the screen.
+                  </p>
+                  {bulkUploadProgress && bulkUploadProgress.total > 0 && (
+                    <div className="bulk-upload-modal-bar" aria-hidden>
+                      <div style={{ width: `${bulkBarPct}%` }} />
+                    </div>
+                  )}
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                    {bulkUploadProgress?.label ?? bulkMessage ?? 'Processing…'}
+                  </p>
+                </div>
+              )}
+
+              {bulkPhase === 'error' && (
+                <div>
+                  <p style={{ color: 'var(--cm-bad, #c44)', fontSize: 13, marginBottom: 8 }}>{bulkMessage}</p>
+                  <button type="button" className="btn btn-primary" onClick={() => { setBulkPhase('idle'); setBulkMessage('') }}>
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              <div style={{ marginTop: 14 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUploadKind('standard')} disabled={bulkPhase === 'running'}>
+                  Back to standard upload
+                </button>
               </div>
             </div>
           )}
+
+          {uploadKind !== 'bulk' && (
+            <>
+              {defaultCollectionId && store.step !== 3 && (
+                <div
+                  className="upload-target-banner"
+                  role="status"
+                  style={{
+                    marginBottom: store.step === 1 ? 12 : 14,
+                    marginTop: 0,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: '1px solid rgba(61, 122, 106, 0.35)',
+                    background: 'var(--accent-dim)',
+                    color: 'var(--text-2)',
+                    fontSize: 12,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--accent)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    Target collection
+                  </span>
+                  <div style={{ fontWeight: 600, color: 'var(--text)', marginTop: 2 }}>
+                    {targetCollectionName ?? 'Selected collection'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                    You can change this per photo in the next step.
+                  </div>
+                </div>
+              )}
 
           {/* Step 1 — Drop zone */}
           {store.step === 1 && (
@@ -962,6 +1398,8 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 <button className="btn btn-primary" onClick={handleClose}>Done</button>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

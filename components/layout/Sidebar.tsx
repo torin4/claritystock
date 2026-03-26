@@ -180,7 +180,6 @@ export default function Sidebar({
   const openSettings = useUIStore(s => s.openSettings)
   const toggleNotif = useUIStore(s => s.toggleNotif)
   const openUpload = useUIStore(s => s.openUpload)
-  const openBulkUpload = useUIStore(s => s.openBulkUpload)
   const unreadCount = useNotificationsStore(s => s.unreadCount)
 
   /** Keep Admin under Library so it stays visible when Recents fills the scroll area. */
@@ -270,24 +269,6 @@ export default function Sidebar({
               </svg>
             </span>
             Add Photos
-          </button>
-          <button
-            className="ni"
-            onClick={() => { openBulkUpload(); useUIStore.getState().setSidebarOpen(false) }}
-            style={{ color: 'var(--text-2)' }}
-          >
-            <span className="ni-ic">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                <path
-                  d="M3 4.5h10v9H3v-9Z"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinejoin="round"
-                />
-                <path d="M5 2.5h6v2H5v-2Z" stroke="currentColor" strokeWidth="1.2" />
-              </svg>
-            </span>
-            Bulk ZIP
           </button>
 
           {/* My Space section */}
