@@ -774,8 +774,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         setBulkPhase('idle')
         setBulkMessage('')
 
-        if (fail > 0) useUIStore.getState().openBulkReview(jobId)
-        if (needsLocationOk > 0) useUIStore.getState().openBulkUpdate(jobId)
+        if (ok > 0 || fail > 0) useUIStore.getState().openBulkReview(jobId)
 
         onSuccess()
         useUIStore.getState().bumpSidebarCollections()

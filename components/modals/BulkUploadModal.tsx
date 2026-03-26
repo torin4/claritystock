@@ -347,8 +347,7 @@ export default function BulkUploadModal({ userId }: Props) {
         setMessage('')
         const ui = useUIStore.getState()
         ui.closeBulkUpload()
-        if (fail > 0) ui.openBulkReview(jobId)
-        if (needsLocationOk > 0) ui.openBulkUpdate(jobId)
+        if (ok > 0 || fail > 0) ui.openBulkReview(jobId)
         router.refresh()
         ui.bumpSidebarCollections()
       } finally {

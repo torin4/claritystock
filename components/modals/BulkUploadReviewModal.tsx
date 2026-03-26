@@ -166,6 +166,13 @@ export default function BulkUploadReviewModal({ userId }: Props) {
     })
   }, [successItems])
 
+  const hasCollections = useMemo(() => byCollection.some(([key]) => key !== ''), [byCollection])
+
+  // If collections disappear (e.g. after reload), reset to all view
+  useEffect(() => {
+    if (!hasCollections) setViewMode('all')
+  }, [hasCollections])
+
   const needsLocSet = useMemo(() => new Set(needsLocationPhotoIds), [needsLocationPhotoIds])
 
   const handleBulkApply = async () => {
@@ -389,7 +396,9 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setViewMode('collection')}
+                    onClick={() => hasCollections && setViewMode('collection')}
+                    disabled={!hasCollections}
+                    title={!hasCollections ? 'No collections in this import' : undefined}
                     style={{
                       padding: '4px 10px',
                       fontSize: 12,
@@ -397,7 +406,8 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                       color: viewMode === 'collection' ? '#fff' : 'var(--text-2)',
                       border: 'none',
                       borderLeft: '1px solid var(--border)',
-                      cursor: 'pointer',
+                      cursor: hasCollections ? 'pointer' : 'not-allowed',
+                      opacity: hasCollections ? 1 : 0.4,
                     }}
                   >
                     By Collection
