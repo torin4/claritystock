@@ -700,6 +700,36 @@ body {
   font-size: 12px;
   padding: 6px 10px;
 }
+.mp-select-bar-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+  order: 4;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.mp-select-bar-edit .ui {
+  font-size: 12px;
+  padding: 5px 8px;
+  min-width: 110px;
+}
+.mp-select-bar-edit input.ui {
+  flex: 1;
+  min-width: 140px;
+}
+@media (min-width: 769px) {
+  .mp-select-bar-edit {
+    width: auto;
+    order: 0;
+    padding-top: 0;
+    border-top: none;
+    border-left: 1px solid var(--border);
+    padding-left: 10px;
+    margin-left: 4px;
+  }
+}
 
 /* ── Filter drawer ── (above .mobile-bar z-index 300 so sheet covers header) */
 .drawer-overlay { display: none; position: fixed; inset: 0; z-index: 350; background: rgba(0,0,0,0.5); }

@@ -13,13 +13,15 @@ import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { devError } from '@/lib/utils/devLog'
 import { deleteCollection, renameCollection } from '@/lib/actions/collections.actions'
-import { deletePhotos, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
+import { deletePhotos, updatePhotosCollectionIds, updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
 import { MY_LIBRARY_PAGE_SIZE, PHOTO_MY_LIBRARY_CARD_SELECT } from '@/lib/queries/photoSelects'
 import { getMyDownloadedPhotos } from '@/lib/queries/photos.queries'
 import { useInView } from '@/lib/hooks/useInView'
-import type { Photo, Collection, User } from '@/lib/types/database.types'
+import type { Photo, Collection, User, Category } from '@/lib/types/database.types'
+import LocationField from '@/components/neighborhoods/LocationField'
+import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 
 type CollectionSummary = Collection
 
@@ -68,6 +70,11 @@ export default function MyPhotosClient({
   const [removeDownloadsBusy, setRemoveDownloadsBusy] = useState(false)
   const [bulkCollBusy, setBulkCollBusy] = useState(false)
   const [bulkAssignCollId, setBulkAssignCollId] = useState('')
+  const [bulkEditCategory, setBulkEditCategory] = useState<'' | Category>('')
+  const [bulkEditNeighborhood, setBulkEditNeighborhood] = useState('')
+  const [bulkEditBusy, setBulkEditBusy] = useState(false)
+  const [bulkEditError, setBulkEditError] = useState<string | null>(null)
+  const [locationLabels, setLocationLabels] = useState<string[]>([])
   const downloadsLoadedRef = useRef(false)
   const photosRequestSeqRef = useRef(0)
   const { openUpload, openEdit } = useUIStore()
@@ -75,6 +82,11 @@ export default function MyPhotosClient({
   const searchTerm = search.trim()
   const defaultPhotosViewActive = tab === 'photos' && !drillColl && !searchTerm
   const hasMorePhotos = photos.length < photoTotal
+
+  useEffect(() => {
+    if (!selectionMode || locationLabels.length) return
+    getNeighborhoodCanonicalLabels().then(setLocationLabels).catch(() => {})
+  }, [selectionMode, locationLabels.length])
 
   const beginSelection = useCallback((id: string) => {
     setSelectionMode(true)
@@ -90,6 +102,9 @@ export default function MyPhotosClient({
   const exitSelection = useCallback(() => {
     setSelectionMode(false)
     setSelectedIds([])
+    setBulkEditCategory('')
+    setBulkEditNeighborhood('')
+    setBulkEditError(null)
   }, [])
 
   useEffect(() => {
@@ -108,6 +123,30 @@ export default function MyPhotosClient({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectionMode, exitSelection])
+
+  const handleBulkEditApply = async () => {
+    if (!selectedIds.length) return
+    const applyCat = bulkEditCategory !== ''
+    const applyNeigh = bulkEditNeighborhood.trim().length > 0
+    if (!applyCat && !applyNeigh) { setBulkEditError('Choose a category or enter a neighborhood.'); return }
+    setBulkEditBusy(true)
+    setBulkEditError(null)
+    try {
+      await updatePhotosCategoryNeighborhood(selectedIds, {
+        ...(applyCat ? { category: bulkEditCategory } : {}),
+        ...(applyNeigh ? { neighborhood: bulkEditNeighborhood.trim() } : {}),
+        photographerId: userId,
+      })
+      setBulkEditCategory('')
+      setBulkEditNeighborhood('')
+      await refresh()
+      router.refresh()
+    } catch (e) {
+      setBulkEditError(e instanceof Error ? e.message : 'Update failed')
+    } finally {
+      setBulkEditBusy(false)
+    }
+  }
 
   const handleDownloadZip = async () => {
     if (!selectedIds.length || zipBusy) return
@@ -997,6 +1036,42 @@ export default function MyPhotosClient({
                 Remove from collection
               </button>
             </>
+          )}
+          {tab !== 'downloads' && (
+            <div className="mp-select-bar-edit">
+              <select
+                className="ui"
+                style={{ fontSize: 12, padding: '4px 6px' }}
+                value={bulkEditCategory}
+                onChange={e => { setBulkEditCategory(e.target.value as '' | Category); setBulkEditError(null) }}
+                disabled={bulkEditBusy}
+                aria-label="Bulk category"
+              >
+                <option value="">Category…</option>
+                <option value="neighborhood">Neighborhood</option>
+                <option value="city">City</option>
+                <option value="condo">Condo</option>
+              </select>
+              <LocationField
+                value={bulkEditNeighborhood}
+                onChange={v => { setBulkEditNeighborhood(v); setBulkEditError(null) }}
+                labels={locationLabels}
+                placeholder="Location…"
+                className="ui"
+                disabled={bulkEditBusy}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={bulkEditBusy || !selectedIds.length || (bulkEditCategory === '' && bulkEditNeighborhood.trim() === '')}
+                onClick={() => void handleBulkEditApply()}
+              >
+                {bulkEditBusy ? 'Saving…' : 'Apply'}
+              </button>
+              {bulkEditError && (
+                <span style={{ fontSize: 11, color: 'var(--cm-bad, #c44)' }}>{bulkEditError}</span>
+              )}
+            </div>
           )}
           <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelection}>
             Cancel
