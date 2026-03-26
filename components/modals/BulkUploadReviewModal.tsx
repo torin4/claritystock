@@ -83,6 +83,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [jobSummary, setJobSummary] = useState<JobSummary | null>(null)
   const [items, setItems] = useState<BulkItemRow[]>([])
   const [needsLocationPhotoIds, setNeedsLocationPhotoIds] = useState<string[]>([])
+  const [missingLocationOrCategoryPhotoIds, setMissingLocationOrCategoryPhotoIds] = useState<string[]>([])
   const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([])
   const [locationLabels, setLocationLabels] = useState<string[]>([])
   const [bulkCategory, setBulkCategory] = useState<'' | Category>('')
@@ -110,11 +111,13 @@ export default function BulkUploadReviewModal({ userId }: Props) {
         job?: { summary: unknown; status: string }
         items?: BulkItemRow[]
         needsLocationPhotoIds?: string[]
+        missingLocationOrCategoryPhotoIds?: string[]
       }
       if (!res.ok) {
         setError(body.error ?? res.statusText)
         setItems([])
         setNeedsLocationPhotoIds([])
+        setMissingLocationOrCategoryPhotoIds([])
         setSelectedBulkIds([])
         setLoading(false)
         return
@@ -124,6 +127,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       setItems(nextItems)
       const needs = body.needsLocationPhotoIds ?? []
       setNeedsLocationPhotoIds(needs)
+      setMissingLocationOrCategoryPhotoIds(body.missingLocationOrCategoryPhotoIds ?? [])
       const successIds = nextItems
         .filter((i) => i.status === 'success' && i.photo_id)
         .map((i) => i.photo_id as string)
@@ -132,6 +136,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       setError(e instanceof Error ? e.message : 'Could not load job')
       setItems([])
       setNeedsLocationPhotoIds([])
+      setMissingLocationOrCategoryPhotoIds([])
       setSelectedBulkIds([])
     }
     setLoading(false)
@@ -248,6 +253,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const ok = jobSummary?.success_count ?? items.filter((i) => i.status === 'success').length
   const fail = jobSummary?.failed_count ?? failed.length
   const needsCount = needsLocationPhotoIds.length
+  const allSet = successItems.length > 0 && failed.length === 0 && missingLocationOrCategoryPhotoIds.length === 0
 
   if (!bulkReviewJobId) return null
 
@@ -262,7 +268,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
               {loading
                 ? 'Loading…'
                 : `${ok} published · ${fail} failed${
-                    needsCount > 0 ? ` · ${needsCount} need neighborhood` : ''
+                    needsCount > 0 ? ` · ${needsCount} need location` : ''
                   }`}
             </div>
           </div>
@@ -279,154 +285,19 @@ export default function BulkUploadReviewModal({ userId }: Props) {
           {error && (
             <p style={{ color: 'var(--cm-bad, #c44)', fontSize: 13, marginBottom: 12 }}>{error}</p>
           )}
-          {!loading && successItems.length > 0 && (
+          {!loading && failed.length > 0 && (
             <>
               <div
                 style={{
-                  marginBottom: 16,
-                  padding: 12,
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface-1)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  marginTop: 20,
+                  marginBottom: 8,
+                  color: 'var(--text-1)',
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Bulk update</div>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-                  Check the photos below, then set category and/or neighborhood for all selected images.
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setSelectedBulkIds([...needsLocationPhotoIds])}
-                    disabled={!needsLocationPhotoIds.length}
-                  >
-                    Select needs neighborhood ({needsLocationPhotoIds.length})
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setSelectedBulkIds(successItems.map((i) => i.photo_id as string))}
-                  >
-                    Select all published ({successItems.length})
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedBulkIds([])}>
-                    Clear selection
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gap: 12, marginBottom: 12 }}>
-                  <label style={{ display: 'grid', gap: 6 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Category (optional)</span>
-                    <select
-                      className="ui"
-                      value={bulkCategory}
-                      onChange={(e) => setBulkCategory((e.target.value as Category | '') || '')}
-                      aria-label="Bulk category"
-                    >
-                      <option value="">— Leave unchanged —</option>
-                      <option value="neighborhood">Neighborhood</option>
-                      <option value="city">City</option>
-                      <option value="condo">Condo</option>
-                    </select>
-                  </label>
-                  <label style={{ display: 'grid', gap: 6 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Neighborhood (optional)</span>
-                    <LocationField
-                      value={bulkNeighborhood}
-                      onChange={setBulkNeighborhood}
-                      labels={locationLabels}
-                      placeholder="Type to match neighborhood list"
-                      aria-label="Bulk neighborhood"
-                    />
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  disabled={bulkBusy || selectedBulkIds.length === 0}
-                  onClick={() => void handleBulkApply()}
-                >
-                  {bulkBusy
-                    ? 'Applying…'
-                    : `Apply to ${selectedBulkIds.length} selected photo${selectedBulkIds.length === 1 ? '' : 's'}`}
-                </button>
+                Failed imports
               </div>
-
-              {successItems.map((item) => {
-                const pid = item.photo_id as string
-                const needs = needsLocSet.has(pid)
-                return (
-                  <div
-                    key={item.id}
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      alignItems: 'flex-start',
-                      padding: '10px 0',
-                      borderBottom: '1px solid var(--border)',
-                    }}
-                  >
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        paddingTop: 4,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedSet.has(pid)}
-                        onChange={() => toggleBulkId(pid)}
-                        aria-label={`Select ${item.relative_path}`}
-                      />
-                    </label>
-                    <FailedThumb path={item.thumbnail_path ?? item.storage_path} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}
-                      >
-                        {item.relative_path}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-                        {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
-                      </div>
-                      {needs && (
-                        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
-                          Needs neighborhood
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => openEdit(pid)}
-                        >
-                          {needs ? 'Add location (full edit)' : 'Full edit'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </>
-          )}
-
-          {!loading && failed.length > 0 && (
-            <>
-              {successItems.length > 0 && (
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    marginTop: 20,
-                    marginBottom: 8,
-                    color: 'var(--text-1)',
-                  }}
-                >
-                  Failed imports
-                </div>
-              )}
               {failed.map((item) => {
                 const canRetry = Boolean(item.storage_path && parseSnapshot(item.form_snapshot))
                 return (
@@ -483,14 +354,8 @@ export default function BulkUploadReviewModal({ userId }: Props) {
             </>
           )}
 
-          {!loading && failed.length === 0 && successItems.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>No published files in this job.</p>
-          )}
-
-          {!loading && failed.length === 0 && successItems.length > 0 && needsCount === 0 && (
-            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 12 }}>
-              All published photos have a neighborhood. You can still bulk-change category above if needed.
-            </p>
+          {!loading && failed.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>No failed files.</p>
           )}
         </div>
         <div style={{ padding: '0 20px 16px' }}>

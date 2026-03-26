@@ -18,11 +18,33 @@ import type { Collection, Category } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
+import { updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
+import { runWithConcurrency } from '@/lib/utils/runWithConcurrency'
 
 type UploadNotice = {
   tone: 'warning' | 'info'
   message: string
 } | null
+
+type BulkItemRow = {
+  id: string
+  relative_path: string
+  folder_name: string
+  status: string
+  photo_id: string | null
+  error_message: string | null
+  storage_path: string | null
+  thumbnail_path: string | null
+  display_path: string | null
+  content_hash: string | null
+  form_snapshot: Record<string, unknown> | null
+}
+
+type BulkJobSummary = {
+  success_count?: number
+  failed_count?: number
+  needs_location_count?: number
+}
 
 interface Props {
   userId: string
@@ -32,7 +54,7 @@ interface Props {
 }
 
 export default function UploadModal({ userId, onSuccess, defaultCollectionId = null }: Props) {
-  const { uploadModalOpen, closeUpload } = useUIStore()
+  const { uploadModalOpen, closeUpload, bulkUpdateJobId } = useUIStore()
   const store = useUploadStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -43,8 +65,22 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const [libraryDupNeedsMigration, setLibraryDupNeedsMigration] = useState(false)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
 
+  // Bulk update UI (moved from BulkUploadReviewModal)
+  const [bulkUpdateLoading, setBulkUpdateLoading] = useState(true)
+  const [bulkJobSummary, setBulkJobSummary] = useState<BulkJobSummary | null>(null)
+  const [bulkItems, setBulkItems] = useState<BulkItemRow[]>([])
+  const [bulkNeedsLocationPhotoIds, setBulkNeedsLocationPhotoIds] = useState<string[]>([])
+  const [bulkMissingLocationOrCategoryPhotoIds, setBulkMissingLocationOrCategoryPhotoIds] = useState<string[]>([])
+  const [bulkSelectedPhotoIds, setBulkSelectedPhotoIds] = useState<string[]>([])
+  const [bulkBulkCategory, setBulkBulkCategory] = useState<'' | Category>('')
+  const [bulkNeighborhood, setBulkNeighborhood] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkUpdateError, setBulkUpdateError] = useState<string | null>(null)
+  const cancelledRef = useRef(false)
+
   useEffect(() => {
     if (!uploadModalOpen) return
+    cancelledRef.current = false
     getNeighborhoodCanonicalLabels()
       .then(setLocationLabels)
       .catch(() => setLocationLabels([]))
@@ -61,6 +97,88 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       .then(({ data }) => setCollections((data as Collection[]) ?? []))
   }, [uploadModalOpen, userId])
 
+  const loadBulkUpdate = useCallback(async () => {
+    if (!bulkUpdateJobId) return
+    setBulkUpdateLoading(true)
+    setBulkUpdateError(null)
+    try {
+      const res = await fetch(`/api/bulk-upload/jobs/${bulkUpdateJobId}`, {
+        credentials: 'same-origin',
+      })
+      const body = (await res.json()) as {
+        error?: string
+        job?: { summary: BulkJobSummary; status: string }
+        items?: BulkItemRow[]
+        needsLocationPhotoIds?: string[]
+        missingLocationOrCategoryPhotoIds?: string[]
+      }
+      if (!res.ok) {
+        setBulkUpdateError(body.error ?? res.statusText)
+        setBulkItems([])
+        setBulkNeedsLocationPhotoIds([])
+        setBulkMissingLocationOrCategoryPhotoIds([])
+        setBulkSelectedPhotoIds([])
+        setBulkJobSummary(null)
+        return
+      }
+      setBulkJobSummary(body.job?.summary ?? null)
+      const nextItems = body.items ?? []
+      setBulkItems(nextItems)
+      const needs = body.needsLocationPhotoIds ?? []
+      const missing = body.missingLocationOrCategoryPhotoIds ?? []
+      setBulkNeedsLocationPhotoIds(needs)
+      setBulkMissingLocationOrCategoryPhotoIds(missing)
+
+      const successIds = nextItems
+        .filter((i) => i.status === 'success' && i.photo_id)
+        .map((i) => i.photo_id as string)
+      setBulkSelectedPhotoIds(missing.length > 0 ? missing : successIds)
+    } catch (e) {
+      setBulkUpdateError(e instanceof Error ? e.message : 'Could not load bulk job')
+      setBulkItems([])
+      setBulkNeedsLocationPhotoIds([])
+      setBulkMissingLocationOrCategoryPhotoIds([])
+      setBulkSelectedPhotoIds([])
+      setBulkJobSummary(null)
+    } finally {
+      setBulkUpdateLoading(false)
+    }
+  }, [bulkUpdateJobId])
+
+  useEffect(() => {
+    void loadBulkUpdate()
+  }, [loadBulkUpdate])
+
+  const handleBulkApply = useCallback(async () => {
+    const ids = bulkSelectedPhotoIds.filter(Boolean)
+    if (!ids.length) {
+      setBulkUpdateError('Select at least one photo.')
+      return
+    }
+
+    const applyCat = bulkBulkCategory !== ''
+    const applyNeigh = bulkNeighborhood.trim().length > 0
+    if (!applyCat && !applyNeigh) {
+      setBulkUpdateError('Choose a category and/or enter a neighborhood to apply.')
+      return
+    }
+
+    setBulkBusy(true)
+    setBulkUpdateError(null)
+    try {
+      await updatePhotosCategoryNeighborhood(ids, {
+        ...(applyCat ? { category: bulkBulkCategory } : {}),
+        ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
+      })
+      setBulkNeighborhood('')
+      await loadBulkUpdate()
+    } catch (e) {
+      setBulkUpdateError(e instanceof Error ? e.message : 'Bulk update failed')
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [bulkNeighborhood, bulkBulkCategory, bulkSelectedPhotoIds, loadBulkUpdate])
+
   const targetCollectionName = useMemo(
     () =>
       defaultCollectionId
@@ -70,6 +188,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   )
 
   const handleClose = () => {
+    cancelledRef.current = true
     store.reset()
     setUploadNotice(null)
     setLibraryDupNeedsMigration(false)
@@ -133,6 +252,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   }, [setLibraryDupNeedsMigration])
 
   const processFiles = useCallback(async (files: File[]) => {
+    cancelledRef.current = false
     const images = files.filter(f => f.type.startsWith('image/'))
     const tooLarge = images.filter(f => f.size > MAX_UPLOAD_BYTES)
     const valid = images.filter(f => f.size <= MAX_UPLOAD_BYTES)
@@ -169,25 +289,33 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     store.setStep(2)
     void runDuplicateFingerprint(valid)
 
-    for (let i = 0; i < valid.length; i++) {
+    // Parallelize EXIF/geocode + Gemini tagging (bounded to avoid CPU + API spikes).
+    const indices = Array.from({ length: valid.length }, (_, i) => i)
+    const REVIEW_CONCURRENCY = 2
+    await runWithConcurrency(indices, REVIEW_CONCURRENCY, async (i) => {
+      if (cancelledRef.current) return
       const file = valid[i]
-      const gps = await extractGps(file)
-      if (gps) store.setExif(i, gps)
+      try {
+        const gps = await extractGps(file)
+        if (!cancelledRef.current && gps) store.setExif(i, gps)
 
-      const neighborhood =
-        gps?.lat != null && gps?.lng != null
-          ? await neighborhoodFromCoordinates(gps.lat, gps.lng)
-          : null
-      if (neighborhood) store.updateForm(i, { neighborhood })
+        if (!cancelledRef.current && gps?.lat != null && gps?.lng != null) {
+          const neighborhood = await neighborhoodFromCoordinates(gps.lat, gps.lng)
+          if (neighborhood) store.updateForm(i, { neighborhood })
+        }
+      } catch {
+        /* ignore per-file EXIF/geocode errors */
+      }
 
+      if (cancelledRef.current) return
       store.setAiScanning(i, true)
       try {
         const ai = await runAiTaggingOnFile(file)
-        if (ai) store.setAi(i, ai)
+        if (!cancelledRef.current && ai) store.setAi(i, ai)
       } finally {
-        store.setAiScanning(i, false)
+        if (!cancelledRef.current) store.setAiScanning(i, false)
       }
-    }
+    })
   }, [store, defaultCollectionId, runDuplicateFingerprint])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -232,9 +360,13 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     }
     setPublishing(true)
     try {
-      for (let i = 0; i < store.files.length; i++) {
-        const f = store.files[i]
-        if (f.published) continue
+      const fileStates = store.files
+      const indices = Array.from({ length: fileStates.length }, (_, i) => i)
+      const PUBLISH_CONCURRENCY = 2
+      await runWithConcurrency(indices, PUBLISH_CONCURRENCY, async (i) => {
+        if (cancelledRef.current) return
+        const f = fileStates[i]
+        if (f?.published) return
         try {
           await publishPhotoFileFromUploadState({
             file: f.file,
@@ -247,7 +379,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         } catch (err) {
           store.setError(i, String(err))
         }
-      }
+      })
       store.setStep(3)
       onSuccess()
     } finally {
@@ -255,8 +387,185 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     }
   }
 
+  const bulkSuccessItems = useMemo(
+    () => bulkItems.filter((i) => i.status === 'success' && i.photo_id),
+    [bulkItems],
+  )
+  const bulkFailedItems = useMemo(() => bulkItems.filter((i) => i.status === 'failed'), [bulkItems])
+  const bulkAllSet =
+    bulkSuccessItems.length > 0 &&
+    bulkFailedItems.length === 0 &&
+    bulkMissingLocationOrCategoryPhotoIds.length === 0
+  const bulkSelectedSet = useMemo(() => new Set(bulkSelectedPhotoIds), [bulkSelectedPhotoIds])
+  const bulkNeedsLocationSet = useMemo(() => new Set(bulkNeedsLocationPhotoIds), [bulkNeedsLocationPhotoIds])
+  const bulkMissingSet = useMemo(
+    () => new Set(bulkMissingLocationOrCategoryPhotoIds),
+    [bulkMissingLocationOrCategoryPhotoIds],
+  )
+
   const reviewedCount = store.files.filter(f => f.ai !== null).length
   const publishedCount = store.files.filter(f => f.published).length
+
+  if (bulkUpdateJobId) {
+    const needsCount = bulkNeedsLocationPhotoIds.length
+    const failedCount = bulkFailedItems.length
+
+    const successIds = bulkSuccessItems.map((i) => i.photo_id as string)
+    const needsSelect = bulkNeedsLocationPhotoIds
+
+    const toggleBulkId = (pid: string) => {
+      setBulkSelectedPhotoIds((prev) => (prev.includes(pid) ? prev.filter((x) => x !== pid) : [...prev, pid]))
+    }
+
+    return (
+      <>
+        <div
+          className={`upload-modal-ov ${uploadModalOpen ? 'open' : ''}`}
+          onClick={handleOverlayClick}
+          aria-hidden
+        />
+        <div className={`upload-modal ${uploadModalOpen ? 'open' : ''}`} style={{ maxWidth: 600 }}>
+          <div className="upload-modal-hdr">
+            <div>
+              <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>Bulk update</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+                {bulkUpdateLoading
+                  ? 'Loading…'
+                  : bulkAllSet
+                    ? 'You’re all set'
+                    : `${bulkSuccessItems.length} published · ${failedCount} failed${needsCount > 0 ? ` · ${needsCount} need location` : ''}`}
+              </div>
+            </div>
+            <button className="modal-close" style={{ width: 30, height: 30, fontSize: 14 }} onClick={handleClose}>
+              ✕
+            </button>
+          </div>
+
+          <div className="upload-modal-body" style={{ paddingBottom: 20, maxHeight: '70vh', overflowY: 'auto' }}>
+            {bulkUpdateError && (
+              <p style={{ color: 'var(--cm-bad, #c44)', fontSize: 13, marginBottom: 12 }}>{bulkUpdateError}</p>
+            )}
+
+            {!bulkUpdateLoading && bulkAllSet && (
+              <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>You&apos;re all set.</p>
+            )}
+
+            {!bulkUpdateLoading && !bulkAllSet && (
+              <>
+                <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-1)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Choose photos to update</div>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+                    Select images, then set category and/or neighborhood. Location updates clear the “needs location” tag.
+                  </p>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setBulkSelectedPhotoIds(needsSelect)}
+                      disabled={!needsSelect.length}
+                    >
+                      Select needs location ({needsSelect.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setBulkSelectedPhotoIds(successIds)}
+                      disabled={!successIds.length}
+                    >
+                      Select all published ({successIds.length})
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBulkSelectedPhotoIds([])}>
+                      Clear selection
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 12, marginBottom: 12 }}>
+                    <label style={{ display: 'grid', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Category (optional)</span>
+                      <select
+                        className="ui"
+                        value={bulkBulkCategory}
+                        onChange={(e) => setBulkBulkCategory((e.target.value as Category | '') || '')}
+                        aria-label="Bulk category"
+                      >
+                        <option value="">— Leave unchanged —</option>
+                        <option value="neighborhood">Neighborhood</option>
+                        <option value="city">City</option>
+                        <option value="condo">Condo</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Neighborhood (optional)</span>
+                      <LocationField
+                        value={bulkNeighborhood}
+                        onChange={setBulkNeighborhood}
+                        labels={locationLabels}
+                        placeholder="Type to match neighborhood list"
+                        aria-label="Bulk neighborhood"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={bulkBusy || bulkSelectedPhotoIds.length === 0}
+                    onClick={() => void handleBulkApply()}
+                  >
+                    {bulkBusy
+                      ? 'Applying…'
+                      : `Apply to ${bulkSelectedPhotoIds.length} selected photo${bulkSelectedPhotoIds.length === 1 ? '' : 's'}`}
+                  </button>
+                </div>
+
+                {bulkSuccessItems.map((item) => {
+                  const pid = item.photo_id as string
+                  const needs = bulkNeedsLocationSet.has(pid)
+                  const checked = bulkSelectedSet.has(pid)
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        alignItems: 'flex-start',
+                        padding: '10px 0',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                    >
+                      <label style={{ display: 'flex', alignItems: 'flex-start', paddingTop: 4, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleBulkId(pid)} aria-label={`Select ${item.relative_path}`} />
+                      </label>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                          {item.relative_path}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                          {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
+                        </div>
+                        {(needs || bulkMissingSet.has(pid)) && (
+                          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+                            {needs ? 'Needs location' : 'Missing category'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
+            )}
+          </div>
+
+          <div style={{ padding: '0 20px 16px' }}>
+            <button type="button" className="btn btn-primary" onClick={handleClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

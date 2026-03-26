@@ -36,7 +36,7 @@ function notificationText(n: AppNotification): React.ReactNode {
           , <strong>{n.failedCount}</strong> failed
           {loc ? (
             <>
-              , <strong>{n.needsLocationCount}</strong> need updating (neighborhood)
+              , <strong>{n.needsLocationCount}</strong> need updating (location)
             </>
           ) : null}
           {' — Tap to see results.'}
@@ -44,7 +44,7 @@ function notificationText(n: AppNotification): React.ReactNode {
       ) : loc ? (
         <>
           {' — '}
-          <strong>{n.needsLocationCount}</strong> need updating (add neighborhood) — Tap to see results.
+          <strong>{n.needsLocationCount}</strong> need updating (add location) — Tap to see results.
         </>
       ) : (
         ' — All set ✓'
@@ -54,7 +54,7 @@ function notificationText(n: AppNotification): React.ReactNode {
 }
 
 export default function NotificationPopover() {
-  const { notifPopoverOpen, closeNotif, openBulkReview } = useUIStore()
+  const { notifPopoverOpen, closeNotif, openBulkReview, openBulkUpdate } = useUIStore()
   const { notifications, markAllRead, markBulkRead } = useNotificationsStore()
 
   const popoverRef = useRef<HTMLDivElement | null>(null)
@@ -91,7 +91,8 @@ export default function NotificationPopover() {
   const handleRowClick = (n: AppNotification) => {
     if (n.kind === 'bulk_upload') {
       markBulkRead(n.jobId)
-      openBulkReview(n.jobId)
+      if (n.failedCount > 0) openBulkReview(n.jobId)
+      if (n.needsLocationCount > 0) openBulkUpdate(n.jobId)
       closeNotif()
     }
   }

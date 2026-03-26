@@ -6,6 +6,8 @@ interface UIState {
   lightboxOpen: boolean
   lightboxPhotoId: string | null
   uploadModalOpen: boolean
+  /** When set, UploadModal shows the bulk category/location update UI for this job. */
+  bulkUpdateJobId: string | null
   bulkUploadModalOpen: boolean
   /** When set, BulkUploadReviewModal shows this job. */
   bulkReviewJobId: string | null
@@ -25,6 +27,8 @@ interface UIActions {
   closeLightbox: () => void
   openUpload: () => void
   closeUpload: () => void
+  openBulkUpdate: (jobId: string) => void
+  closeBulkUpdate: () => void
   openBulkUpload: () => void
   closeBulkUpload: () => void
   openBulkReview: (jobId: string) => void
@@ -49,6 +53,7 @@ const defaultState: UIState = {
   lightboxOpen: false,
   lightboxPhotoId: null,
   uploadModalOpen: false,
+  bulkUpdateJobId: null,
   bulkUploadModalOpen: false,
   bulkReviewJobId: null,
   editModalPhotoId: null,
@@ -75,12 +80,29 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
   openUpload: () =>
     set((s) => ({
       uploadModalOpen: true,
+      bulkUpdateJobId: null,
       bulkUploadModalOpen: false,
       lightboxOpen: false,
       editModalPhotoId: null,
       notifPopoverOpen: false,
     })),
-  closeUpload: () => set({ uploadModalOpen: false }),
+  closeUpload: () => set({ uploadModalOpen: false, bulkUpdateJobId: null }),
+
+  openBulkUpdate: (jobId) =>
+    set((s) => ({
+      ...s,
+      uploadModalOpen: true,
+      bulkUpdateJobId: jobId,
+      bulkUploadModalOpen: false,
+      lightboxOpen: false,
+      lightboxPhotoId: null,
+      editModalPhotoId: null,
+      filterDrawerOpen: false,
+      settingsPanelOpen: false,
+      sidebarOpen: false,
+      notifPopoverOpen: false,
+    })),
+  closeBulkUpdate: () => set({ bulkUpdateJobId: null, uploadModalOpen: false }),
 
   openBulkUpload: () =>
     set((s) => ({
@@ -134,6 +156,8 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
     set({
       lightboxOpen: false,
       lightboxPhotoId: null,
+      uploadModalOpen: false,
+      bulkUpdateJobId: null,
       filterDrawerOpen: false,
       notifPopoverOpen: false,
       settingsPanelOpen: false,

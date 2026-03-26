@@ -62,20 +62,35 @@ export async function GET(
     .map((row: { photo_id: string }) => row.photo_id)
 
   let needsLocationPhotoIds: string[] = []
+  let missingLocationOrCategoryPhotoIds: string[] = []
   if (successPhotoIds.length) {
     const { data: photoRows, error: photoErr } = await supabase
       .from('photos')
-      .select('id, tags')
+      .select('id, tags, category, neighborhood')
       .in('id', successPhotoIds)
       .eq('photographer_id', user.id)
 
     if (photoErr) {
       devError('[bulk-upload photos tags GET]', photoErr)
     } else {
-      needsLocationPhotoIds = (photoRows ?? [])
-        .filter((p: { id: string; tags: unknown }) => {
+      const rows = photoRows ?? []
+
+      needsLocationPhotoIds = rows
+        .filter((p: { id: string; tags: unknown; neighborhood: unknown }) => {
           const tags = p.tags as string[] | null
-          return Array.isArray(tags) && tags.includes(PHOTO_TAG_NEEDS_LOCATION)
+          const hasTag = Array.isArray(tags) && tags.includes(PHOTO_TAG_NEEDS_LOCATION)
+          const hasNeighborhood = typeof p.neighborhood === 'string' && p.neighborhood.trim().length > 0
+          return hasTag || !hasNeighborhood
+        })
+        .map((p: { id: string }) => p.id)
+
+      missingLocationOrCategoryPhotoIds = rows
+        .filter((p: { id: string; tags: unknown; neighborhood: unknown; category: unknown }) => {
+          const tags = p.tags as string[] | null
+          const hasTag = Array.isArray(tags) && tags.includes(PHOTO_TAG_NEEDS_LOCATION)
+          const hasNeighborhood = typeof p.neighborhood === 'string' && p.neighborhood.trim().length > 0
+          const hasCategory = typeof p.category === 'string' && p.category.trim().length > 0
+          return !hasCategory || hasTag || !hasNeighborhood
         })
         .map((p: { id: string }) => p.id)
     }
@@ -85,5 +100,6 @@ export async function GET(
     job: { summary: job.summary, status: job.status },
     items: list,
     needsLocationPhotoIds,
+    missingLocationOrCategoryPhotoIds,
   })
 }

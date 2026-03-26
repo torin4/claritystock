@@ -10,7 +10,7 @@ import type { AiTagResult, Category, PhotoFormValues } from '@/lib/types/databas
 
 /** Cap per ZIP — keeps browser memory and long-running import manageable. */
 export const MAX_BULK_IMAGES = 100
-export const BULK_CONCURRENCY = 2
+export const BULK_CONCURRENCY = 3
 
 /** Empty string = file at ZIP root — not assigned to any collection. */
 export const BULK_NO_FOLDER = ''

@@ -156,7 +156,9 @@ export default function NotificationProvider({ userId }: { userId: string }) {
         failedCount: summary.failed_count ?? 0,
         needsLocationCount: summary.needs_location_count ?? 0,
       })
-      useUIStore.getState().openBulkReview(row.id)
+      const ui = useUIStore.getState()
+      if ((summary.failed_count ?? 0) > 0) ui.openBulkReview(row.id)
+      if ((summary.needs_location_count ?? 0) > 0) ui.openBulkUpdate(row.id)
       rememberBulkCompletedAt(userId, row.completed_at)
     }
 
