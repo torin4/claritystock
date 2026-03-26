@@ -47,6 +47,7 @@ export async function getOrCreateSignedUrl(
         transform ? { transform } : undefined,
       )
       if (error || !data?.signedUrl) return null
+      console.log('[signedUrl]', transform ? `transform ${JSON.stringify(transform)}` : 'no transform', data.signedUrl.slice(0, 120))
       storeSignedUrl(key, data.signedUrl, expiresSec)
       return data.signedUrl
     } finally {
