@@ -310,18 +310,20 @@ export async function publishPhoto(
       ? { ...baseRow, content_hash: paths.contentHash }
       : baseRow
 
-  let { error } = await supabase.from('photos').insert(withHash)
+  let { data: inserted, error } = await supabase.from('photos').insert(withHash).select('id').single()
 
   if (error && paths?.contentHash && isMissingColumnError(error, 'content_hash')) {
     devWarn(
       '[publishPhoto] content_hash column missing — retry without it. Run migration 20260325210000_photos_content_hash.sql',
     )
-    ;({ error } = await supabase.from('photos').insert(baseRow))
+    ;({ data: inserted, error } = await supabase.from('photos').insert(baseRow).select('id').single())
   }
 
   if (error) throw error
+  if (!inserted?.id) throw new Error('Insert succeeded but no photo id returned')
   revalidatePath('/')
   revalidatePath('/my-photos')
   revalidatePath('/admin')
   revalidatePath('/admin/libraries')
+  return { id: inserted.id }
 }

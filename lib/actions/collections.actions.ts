@@ -50,6 +50,43 @@ export async function createCollection(input: {
   return { id: data.id }
 }
 
+/** Reuse an existing collection (case-insensitive name match) or create for bulk ZIP imports. */
+export async function getOrCreateCollectionByName(input: {
+  name: string
+  category?: Category | null
+}) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  const name = input.name.trim()
+  if (!name) throw new Error('Name is required')
+
+  const { data: rows } = await supabase
+    .from('collections')
+    .select('id, name')
+    .eq('created_by', user.id)
+
+  const lower = name.toLowerCase()
+  const existing = (rows ?? []).find((r) => r.name.trim().toLowerCase() === lower)
+  if (existing) return { id: existing.id }
+
+  const { data, error } = await supabase
+    .from('collections')
+    .insert({
+      name,
+      category: input.category ?? 'neighborhood',
+      created_by: user.id,
+    })
+    .select('id')
+    .single()
+
+  if (error || !data?.id) throw new Error(error?.message ?? 'Failed to create collection')
+  revalidatePath('/')
+  revalidatePath('/my-photos')
+  return { id: data.id }
+}
+
 /** Deletes the collection row in Supabase. Photos keep their files; `collection_id` is set to null (FK). */
 export async function deleteCollection(id: string) {
   const supabase = createClient()

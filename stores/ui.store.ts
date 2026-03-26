@@ -6,6 +6,9 @@ interface UIState {
   lightboxOpen: boolean
   lightboxPhotoId: string | null
   uploadModalOpen: boolean
+  bulkUploadModalOpen: boolean
+  /** When set, BulkUploadReviewModal shows this job. */
+  bulkReviewJobId: string | null
   editModalPhotoId: string | null
   filterDrawerOpen: boolean
   settingsPanelOpen: boolean
@@ -20,6 +23,10 @@ interface UIActions {
   closeLightbox: () => void
   openUpload: () => void
   closeUpload: () => void
+  openBulkUpload: () => void
+  closeBulkUpload: () => void
+  openBulkReview: (jobId: string) => void
+  closeBulkReview: () => void
   openEdit: (photoId: string) => void
   closeEdit: () => void
   openFilter: () => void
@@ -39,6 +46,8 @@ const defaultState: UIState = {
   lightboxOpen: false,
   lightboxPhotoId: null,
   uploadModalOpen: false,
+  bulkUploadModalOpen: false,
+  bulkReviewJobId: null,
   editModalPhotoId: null,
   filterDrawerOpen: false,
   settingsPanelOpen: false,
@@ -58,8 +67,32 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
     })),
   closeLightbox: () => set({ lightboxOpen: false, lightboxPhotoId: null }),
 
-  openUpload: () => set((s) => ({ uploadModalOpen: true, lightboxOpen: false, editModalPhotoId: null, notifPopoverOpen: false })),
+  openUpload: () =>
+    set((s) => ({
+      uploadModalOpen: true,
+      bulkUploadModalOpen: false,
+      lightboxOpen: false,
+      editModalPhotoId: null,
+      notifPopoverOpen: false,
+    })),
   closeUpload: () => set({ uploadModalOpen: false }),
+
+  openBulkUpload: () =>
+    set((s) => ({
+      bulkUploadModalOpen: true,
+      uploadModalOpen: false,
+      lightboxOpen: false,
+      editModalPhotoId: null,
+      notifPopoverOpen: false,
+    })),
+  closeBulkUpload: () => set({ bulkUploadModalOpen: false }),
+
+  openBulkReview: (jobId) =>
+    set({
+      bulkReviewJobId: jobId,
+      notifPopoverOpen: false,
+    }),
+  closeBulkReview: () => set({ bulkReviewJobId: null }),
 
   openEdit: (photoId) =>
     set(() => ({
@@ -97,5 +130,7 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
       settingsPanelOpen: false,
       editModalPhotoId: null,
       sidebarOpen: false,
+      bulkUploadModalOpen: false,
+      bulkReviewJobId: null,
     }),
 }))

@@ -104,6 +104,98 @@ CREATE TABLE IF NOT EXISTS public.favorites (
   UNIQUE (photo_id, user_id)
 );
 
+-- 5b. bulk ZIP upload jobs
+CREATE TABLE IF NOT EXISTS public.bulk_upload_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  photographer_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  status text NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  summary jsonb,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS bulk_upload_jobs_photographer_started_idx
+  ON public.bulk_upload_jobs (photographer_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.bulk_upload_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id uuid NOT NULL REFERENCES public.bulk_upload_jobs (id) ON DELETE CASCADE,
+  relative_path text NOT NULL,
+  folder_name text NOT NULL,
+  collection_id uuid REFERENCES public.collections (id) ON DELETE SET NULL,
+  status text NOT NULL CHECK (status IN ('pending', 'processing', 'success', 'failed')),
+  photo_id uuid REFERENCES public.photos (id) ON DELETE SET NULL,
+  error_message text,
+  storage_path text,
+  thumbnail_path text,
+  display_path text,
+  content_hash text,
+  form_snapshot jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (job_id, relative_path)
+);
+
+CREATE INDEX IF NOT EXISTS bulk_upload_items_job_idx ON public.bulk_upload_items (job_id);
+
+ALTER TABLE public.bulk_upload_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bulk_upload_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS bulk_upload_jobs_select_own ON public.bulk_upload_jobs;
+CREATE POLICY bulk_upload_jobs_select_own
+  ON public.bulk_upload_jobs FOR SELECT TO authenticated
+  USING (photographer_id = auth.uid());
+
+DROP POLICY IF EXISTS bulk_upload_jobs_insert_own ON public.bulk_upload_jobs;
+CREATE POLICY bulk_upload_jobs_insert_own
+  ON public.bulk_upload_jobs FOR INSERT TO authenticated
+  WITH CHECK (photographer_id = auth.uid());
+
+DROP POLICY IF EXISTS bulk_upload_jobs_update_own ON public.bulk_upload_jobs;
+CREATE POLICY bulk_upload_jobs_update_own
+  ON public.bulk_upload_jobs FOR UPDATE TO authenticated
+  USING (photographer_id = auth.uid())
+  WITH CHECK (photographer_id = auth.uid());
+
+DROP POLICY IF EXISTS bulk_upload_items_select_via_job ON public.bulk_upload_items;
+CREATE POLICY bulk_upload_items_select_via_job
+  ON public.bulk_upload_items FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.bulk_upload_jobs j
+      WHERE j.id = bulk_upload_items.job_id AND j.photographer_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS bulk_upload_items_insert_via_job ON public.bulk_upload_items;
+CREATE POLICY bulk_upload_items_insert_via_job
+  ON public.bulk_upload_items FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.bulk_upload_jobs j
+      WHERE j.id = bulk_upload_items.job_id AND j.photographer_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS bulk_upload_items_update_via_job ON public.bulk_upload_items;
+CREATE POLICY bulk_upload_items_update_via_job
+  ON public.bulk_upload_items FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.bulk_upload_jobs j
+      WHERE j.id = bulk_upload_items.job_id AND j.photographer_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.bulk_upload_jobs j
+      WHERE j.id = bulk_upload_items.job_id AND j.photographer_id = auth.uid()
+    )
+  );
+
+GRANT SELECT, INSERT, UPDATE ON public.bulk_upload_jobs TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.bulk_upload_items TO authenticated;
+
 -- ---------------------------------------------------------------------------
 -- FULL-TEXT SEARCH
 -- ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import MobileTopBar from '@/components/layout/MobileTopBar'
 import SidebarOverlay from '@/components/layout/SidebarOverlay'
 import NavigationUiReset from '@/components/layout/NavigationUiReset'
 import NotificationProvider from '@/components/providers/NotificationProvider'
+import BulkUploadShell from '@/components/modals/BulkUploadShell'
 import { mergeRecentNavItems } from '@/lib/navigation/recentNav'
 import { attachSignedCollectionPreviewUrls, attachSignedThumbnailUrls } from '@/lib/photos/serverSignedUrls'
 import { getCollections } from '@/lib/queries/collections.queries'
@@ -53,6 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {user ? (
           <>
             <NotificationProvider userId={user.id} />
+            <BulkUploadShell userId={user.id} />
             <MobileTopBar />
             <SidebarOverlay />
             <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>

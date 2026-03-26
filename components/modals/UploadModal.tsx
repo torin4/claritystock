@@ -2,22 +2,22 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { useUploadStore } from '@/stores/upload.store'
-import { blobToBase64, fileToBase64 } from '@/lib/utils/fileToBase64'
 import { extractGps } from '@/lib/utils/exif'
-import { uploadDisplayImage, uploadPhoto, uploadThumbnail } from '@/lib/utils/storage'
-import { createJpegForAiTagging, createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
-import { publishPhoto } from '@/lib/actions/photos.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { devWarn } from '@/lib/utils/devLog'
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MB,
+  neighborhoodFromCoordinates,
+  publishPhotoFileFromUploadState,
+  runAiTaggingOnFile,
+} from '@/lib/uploads/processImageForPublish'
 import { contentHashInFilter, isContentHashColumnMissingError } from '@/lib/utils/contentHashQuery'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
 import type { Collection, Category } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
-
-const MAX_UPLOAD_MB = 50
-const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 type UploadNotice = {
   tone: 'warning' | 'info'
@@ -171,51 +171,19 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
 
     for (let i = 0; i < valid.length; i++) {
       const file = valid[i]
-      // EXIF
       const gps = await extractGps(file)
       if (gps) store.setExif(i, gps)
 
-      // Geocode if GPS
-      let neighborhood: string | null = null
-      if (gps) {
-        try {
-          const res = await fetch(`/api/geocode?lat=${gps.lat}&lng=${gps.lng}`)
-          const geo = await res.json()
-          neighborhood = geo.neighborhood ?? null
-        } catch { /* silent */ }
-      }
+      const neighborhood =
+        gps?.lat != null && gps?.lng != null
+          ? await neighborhoodFromCoordinates(gps.lat, gps.lng)
+          : null
       if (neighborhood) store.updateForm(i, { neighborhood })
 
-      // Gemini AI tagging — downscale first so JSON body stays under platform limits (e.g. Vercel 4.5MB)
       store.setAiScanning(i, true)
       try {
-        const tagBlob = await createJpegForAiTagging(file)
-        let b64: string
-        let mimeType: string
-        if (tagBlob) {
-          b64 = await blobToBase64(tagBlob)
-          mimeType = 'image/jpeg'
-        } else if (file.size <= 2 * 1024 * 1024) {
-          b64 = await fileToBase64(file)
-          mimeType = file.type
-        } else {
-          devWarn('[Add Photos] AI tag skipped: could not downscale and file is too large to POST')
-          return
-        }
-        const res = await fetch('/api/ai/tag', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: b64, mimeType }),
-        })
-        if (res.ok) {
-          const ai = await res.json()
-          store.setAi(i, ai)
-        } else {
-          const err = await res.json().catch(() => ({}))
-          devWarn('[Add Photos] Gemini vision tag failed:', res.status, err)
-        }
-      } catch (e) {
-        devWarn('[Add Photos] Gemini vision tag error:', e)
+        const ai = await runAiTaggingOnFile(file)
+        if (ai) store.setAi(i, ai)
       } finally {
         store.setAiScanning(i, false)
       }
@@ -268,35 +236,13 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         const f = store.files[i]
         if (f.published) continue
         try {
-          const [storagePath, derivatives] = await Promise.all([
-            uploadPhoto(f.file, userId),
-            createPhotoDerivatives(f.file),
-          ])
-          let thumbnailPath: string | null = null
-          let displayPath: string | null = null
-
-          const [thumbnailUpload, displayUpload] = await Promise.allSettled([
-            derivatives.thumbnail ? uploadThumbnail(derivatives.thumbnail, userId) : Promise.resolve(null),
-            derivatives.display ? uploadDisplayImage(derivatives.display, userId) : Promise.resolve(null),
-          ])
-
-          if (thumbnailUpload.status === 'fulfilled') {
-            thumbnailPath = thumbnailUpload.value
-          } else {
-            devWarn('[Add Photos] Thumbnail upload failed:', thumbnailUpload.reason)
-          }
-
-          if (displayUpload.status === 'fulfilled') {
-            displayPath = displayUpload.value
-          } else {
-            devWarn('[Add Photos] Display image upload failed:', displayUpload.reason)
-          }
-          await publishPhoto(
-            { ...f.form, description: f.ai?.description },
-            storagePath,
+          await publishPhotoFileFromUploadState({
+            file: f.file,
             userId,
-            { thumbnailPath, displayPath, contentHash: f.contentHash },
-          )
+            form: f.form,
+            ai: f.ai,
+            contentHash: f.contentHash,
+          })
           store.markPublished(i)
         } catch (err) {
           store.setError(i, String(err))

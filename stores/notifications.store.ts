@@ -1,18 +1,48 @@
 import { create } from 'zustand'
-import type { Notification } from '@/lib/types/database.types'
+
+/** Download aggregation (existing behavior). */
+export interface DownloadNotification {
+  kind: 'download'
+  id: string
+  downloaderId: string
+  downloaderName: string
+  createdAt: string
+  count: number
+  read: boolean
+}
+
+/** Bulk ZIP job finished — tap to review failures. */
+export interface BulkUploadNotification {
+  kind: 'bulk_upload'
+  id: string
+  jobId: string
+  createdAt: string
+  successCount: number
+  failedCount: number
+  read: boolean
+}
+
+export type AppNotification = DownloadNotification | BulkUploadNotification
 
 interface NotificationsState {
-  notifications: Notification[]
+  notifications: AppNotification[]
   unreadCount: number
   userId: string | null
 }
 
 interface NotificationsActions {
-  addNotification: (n: {
+  addDownloadNotification: (event: {
     downloaderId: string
     downloaderName: string
     createdAt: string
   }) => void
+  addBulkUploadNotification: (event: {
+    jobId: string
+    createdAt: string
+    successCount: number
+    failedCount: number
+  }) => void
+  markBulkRead: (jobId: string) => void
   setUserId: (userId: string) => void
   markAllRead: () => void
   clearAll: () => void
@@ -23,14 +53,17 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
   unreadCount: 0,
   userId: null,
 
-  addNotification: (event) =>
+  addDownloadNotification: (event) =>
     set((s) => {
-      const existingIndex = s.notifications.findIndex((n) => n.downloaderId === event.downloaderId)
-      const existing = existingIndex >= 0 ? s.notifications[existingIndex] : null
+      const existingIndex = s.notifications.findIndex(
+        (n) => n.kind === 'download' && n.downloaderId === event.downloaderId,
+      )
+      const existing =
+        existingIndex >= 0 ? (s.notifications[existingIndex] as DownloadNotification) : null
 
       if (existing) {
         const wasRead = existing.read
-        const updated: Notification = {
+        const updated: DownloadNotification = {
           ...existing,
           downloaderName: event.downloaderName,
           createdAt: event.createdAt,
@@ -41,7 +74,6 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
         const next = [...s.notifications]
         next.splice(existingIndex, 1, updated)
 
-        // Keep newest-on-top ordering.
         next.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
         return {
@@ -50,7 +82,8 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
         }
       }
 
-      const created: Notification = {
+      const created: DownloadNotification = {
+        kind: 'download',
         id: event.downloaderId,
         downloaderId: event.downloaderId,
         downloaderName: event.downloaderName,
@@ -65,7 +98,61 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
       }
     }),
 
-  setUserId: (userId: string) => set({ userId }),
+  addBulkUploadNotification: (event) =>
+    set((s) => {
+      const n: BulkUploadNotification = {
+        kind: 'bulk_upload',
+        id: `bulk:${event.jobId}`,
+        jobId: event.jobId,
+        createdAt: event.createdAt,
+        successCount: event.successCount,
+        failedCount: event.failedCount,
+        read: false,
+      }
+      const existingIdx = s.notifications.findIndex(
+        (x) => x.kind === 'bulk_upload' && x.jobId === event.jobId,
+      )
+      if (existingIdx >= 0) {
+        const prev = s.notifications[existingIdx] as BulkUploadNotification
+        const sameCounts =
+          prev.successCount === n.successCount && prev.failedCount === n.failedCount
+        if (sameCounts) return s
+        const next = [...s.notifications]
+        next[existingIdx] = {
+          ...prev,
+          successCount: n.successCount,
+          failedCount: n.failedCount,
+          createdAt: n.createdAt,
+        }
+        next.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        return { notifications: next.slice(0, 50) }
+      }
+      const filtered = s.notifications.filter(
+        (x) => !(x.kind === 'bulk_upload' && x.jobId === event.jobId),
+      )
+      return {
+        notifications: [n, ...filtered].slice(0, 50),
+        unreadCount: s.unreadCount + 1,
+      }
+    }),
+
+  markBulkRead: (jobId) =>
+    set((s) => {
+      let dec = 0
+      const next = s.notifications.map((n) => {
+        if (n.kind === 'bulk_upload' && n.jobId === jobId && !n.read) {
+          dec = 1
+          return { ...n, read: true }
+        }
+        return n
+      })
+      return {
+        notifications: next,
+        unreadCount: Math.max(0, s.unreadCount - dec),
+      }
+    }),
+
+  setUserId: (userId) => set({ userId }),
 
   markAllRead: () =>
     set((s) => {
@@ -78,15 +165,18 @@ export const useNotificationsStore = create<NotificationsState & NotificationsAc
 
         const key = `claritystock:lastSeenAt:${uid}`
         try {
-          // If we had notifications, store the newest one’s timestamp.
-          // Otherwise, storing “now” avoids replay if the user immediately refreshes.
           window.localStorage.setItem(key, maxCreatedAt ?? new Date().toISOString())
+        } catch {
+          // ignore
+        }
+
+        try {
+          window.localStorage.setItem(`claritystock:lastSeenBulkCompletedAt:${uid}`, new Date().toISOString())
         } catch {
           // ignore
         }
       }
 
-      // Dismiss the current list so the popover can show "All caught up" immediately.
       return { notifications: [], unreadCount: 0 }
     }),
 
