@@ -20,6 +20,7 @@ import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 import { updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
 import { runWithConcurrency } from '@/lib/utils/runWithConcurrency'
+import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 
 type UploadNotice = {
   tone: 'warning' | 'info'
@@ -44,6 +45,31 @@ type BulkJobSummary = {
   success_count?: number
   failed_count?: number
   needs_location_count?: number
+}
+
+function BulkUpdateRowThumb({ path }: { path: string | null }) {
+  const url = useSignedPhotoUrl(path, { enabled: !!path })
+  if (!url) {
+    return (
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 4,
+          background: 'var(--surface-2)',
+          flexShrink: 0,
+        }}
+      />
+    )
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt=""
+      style={{ width: 48, height: 48, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
+    />
+  )
 }
 
 interface Props {
@@ -523,6 +549,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                   const pid = item.photo_id as string
                   const needs = bulkNeedsLocationSet.has(pid)
                   const checked = bulkSelectedSet.has(pid)
+                  const thumbPath = item.thumbnail_path ?? item.storage_path
                   return (
                     <div
                       key={item.id}
@@ -537,6 +564,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       <label style={{ display: 'flex', alignItems: 'flex-start', paddingTop: 4, cursor: 'pointer' }}>
                         <input type="checkbox" checked={checked} onChange={() => toggleBulkId(pid)} aria-label={`Select ${item.relative_path}`} />
                       </label>
+                      <BulkUpdateRowThumb path={thumbPath} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
                           {item.relative_path}
