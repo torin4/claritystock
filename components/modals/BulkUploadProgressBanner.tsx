@@ -32,11 +32,11 @@ export default function BulkUploadProgressBanner() {
         type="button"
         className="bulk-upload-banner-inner"
         onClick={() => openBulkUpload()}
-        title="Open bulk upload — import continues in the background"
+        title="Open advanced upload — import continues in the background"
       >
         <span className="bulk-upload-banner-spinner" aria-hidden />
         <span className="bulk-upload-banner-text">
-          <span className="bulk-upload-banner-title">Bulk import</span>
+          <span className="bulk-upload-banner-title">Advanced import</span>
           <span className="bulk-upload-banner-sub">{progress.label}</span>
         </span>
         <span className="bulk-upload-banner-pct">{pct}%</span>
