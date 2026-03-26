@@ -441,7 +441,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
 
         {/* Sticky footer — location/category editor + close */}
         {(!allSet || allSetDismissed) && <div style={{ borderTop: '1px solid var(--border)', padding: '12px 20px 16px', background: 'var(--surface)', flexShrink: 0 }}>
-          {!loading && !allSet && (
+          {!loading && (!allSet || allSetDismissed) && (
             <>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
                 {selectedPhotoIds.length > 0
