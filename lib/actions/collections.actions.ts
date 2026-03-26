@@ -11,7 +11,7 @@ export async function createCollection(input: {
   /** Admin only: create collection owned by this user (proxy onboarding). */
   ownedByUserId?: string
 }) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -55,7 +55,7 @@ export async function getOrCreateCollectionByName(input: {
   name: string
   category?: Category | null
 }) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -89,7 +89,7 @@ export async function getOrCreateCollectionByName(input: {
 
 /** Deletes the collection row in Supabase. Photos keep their files; `collection_id` is set to null (FK). */
 export async function deleteCollection(id: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -104,7 +104,7 @@ export async function deleteCollection(id: string) {
 }
 
 export async function renameCollection(id: string, name: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 

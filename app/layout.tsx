@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 }
 
 async function loadSidebarRecents(userId: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const [collections, photoRows] = await Promise.all([
     getCollections(supabase, { excludeCreatedBy: userId, limit: SIDEBAR_RECENTS_POOL }),
     getRecentSidebarPhotos(supabase, { excludePhotographerId: userId, limit: SIDEBAR_RECENTS_POOL }),

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 
 /** All canonical location labels (Puget Sound seed + any manual rows). */
 export async function getNeighborhoodCanonicalLabels(): Promise<string[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from('neighborhood_canonicals')
     .select('label')

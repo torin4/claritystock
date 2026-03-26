@@ -7,7 +7,7 @@ export async function recordDownload(
   photoId: string,
   jobRef?: string
 ): Promise<string> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -22,7 +22,7 @@ export async function recordDownload(
 
 /** Delete your download rows for these photos and decrement global download counts. Library / Browse list unchanged. */
 export async function removeMyDownloads(photoIds: string[]) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -40,7 +40,7 @@ export async function removeMyDownloads(photoIds: string[]) {
 }
 
 export async function updateJobRef(downloadId: string, jobRef: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 

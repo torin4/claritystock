@@ -2,8 +2,12 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env'
 
-export function createClient() {
-  const cookieStore = cookies()
+/**
+ * Server-side Supabase client (cookie session).
+ * Must be `async` so `await cookies()` works on Next.js 15+ (and remains valid on 14).
+ */
+export async function createClient() {
+  const cookieStore = await cookies()
   return createServerClient(
     getSupabaseUrl(),
     getSupabaseAnonKey(),
@@ -22,6 +26,6 @@ export function createClient() {
           }
         },
       },
-    }
+    },
   )
 }

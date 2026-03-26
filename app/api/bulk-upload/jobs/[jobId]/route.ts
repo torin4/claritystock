@@ -18,7 +18,7 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()

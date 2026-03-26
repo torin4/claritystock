@@ -10,7 +10,7 @@ import { createServiceClient } from '@/lib/supabase/service'
  * Requires `SUPABASE_SERVICE_ROLE_KEY` on the server.
  */
 export async function deleteMyAccount() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()

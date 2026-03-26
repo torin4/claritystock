@@ -11,7 +11,7 @@ const INITIAL_GRID_THUMBNAILS = 18
 const INITIAL_COLLECTION_PREVIEWS = 12
 
 export default async function MyPhotosPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await getServerUser()
   if (!user) redirect('/login')
 

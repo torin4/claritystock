@@ -11,7 +11,7 @@ export async function isUserAdmin(client: SupabaseClient, userId: string): Promi
 
 /** Throws if not signed in or not admin. Use in server actions that require admin. */
 export async function assertAdmin() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
   if (!(await isUserAdmin(supabase, user.id))) throw new Error('Forbidden')
@@ -23,7 +23,7 @@ export async function assertAdmin() {
  * When admin, verifies `photographerId` exists in `public.users`.
  */
 export async function assertOwnerOrAdmin(photographerId: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
   if (user.id === photographerId) {

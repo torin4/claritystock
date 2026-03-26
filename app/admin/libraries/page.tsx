@@ -11,12 +11,16 @@ import AdminPhotographerLibraryPicker from '@/components/admin/AdminPhotographer
 const INITIAL_GRID_THUMBNAILS = 18
 const INITIAL_COLLECTION_PREVIEWS = 12
 
+type LibrariesSearchParams = { photographer?: string }
+
 export default async function AdminLibrariesPage({
   searchParams,
 }: {
-  searchParams: { photographer?: string }
+  /** Next.js 15+ may pass a Promise; normalize for both versions. */
+  searchParams: LibrariesSearchParams | Promise<LibrariesSearchParams>
 }) {
-  const supabase = createClient()
+  const sp = await Promise.resolve(searchParams)
+  const supabase = await createClient()
   const userRows = await getAdminUsersWithPhotoCounts(supabase)
   const photographers = userRows.map(u => ({
     id: u.id,
@@ -25,7 +29,7 @@ export default async function AdminLibrariesPage({
     libraryPhotos: u.libraryPhotos,
   }))
 
-  const requested = searchParams.photographer
+  const requested = sp.photographer
   const validIds = new Set(photographers.map(p => p.id))
 
   if (photographers.length) {

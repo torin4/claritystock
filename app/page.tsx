@@ -11,7 +11,7 @@ const INITIAL_GRID_THUMBNAILS = 18
 const INITIAL_COLLECTION_PREVIEWS = 12
 
 export default async function BrowsePage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await getServerUser()
   const uid = user?.id
 

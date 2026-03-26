@@ -25,7 +25,7 @@ function enrichRange(
 }
 
 export default async function InsightsPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await getServerUser()
   if (!user) redirect('/login')
 

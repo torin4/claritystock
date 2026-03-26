@@ -10,7 +10,7 @@ import {
 } from '@/lib/queries/admin.queries'
 
 export default async function AdminPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const [allTime, thisMonth, userRows] = await Promise.all([
     getAdminAnalyticsAllTime(supabase),
     getAdminAnalyticsThisMonth(supabase),

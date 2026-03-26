@@ -25,7 +25,7 @@ async function assertOwnedCollectionId(
   userId: string,
 ) {
   if (!collectionId) return
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from('collections')
     .select('id')
@@ -53,7 +53,7 @@ async function assertCollectionOwnedByPhotographer(
   photographerId: string,
 ) {
   if (!collectionId) return
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from('collections')
     .select('id')
@@ -64,7 +64,7 @@ async function assertCollectionOwnedByPhotographer(
 }
 
 export async function updatePhoto(id: string, values: Partial<PhotoFormValues>) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
   const admin = await isUserAdmin(supabase, user.id)
@@ -132,7 +132,7 @@ export async function updatePhotosCollectionIds(
   collectionId: string | null,
   opts?: { photographerId?: string },
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
   const admin = await isUserAdmin(supabase, user.id)
@@ -171,7 +171,7 @@ export async function updatePhotosCategoryNeighborhood(
   photoIds: string[],
   opts: { category?: Category | null; neighborhood?: string | null; photographerId?: string },
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -240,7 +240,7 @@ export async function deletePhoto(
   thumbnailPath?: string | null,
   displayPath?: string | null,
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -261,7 +261,7 @@ export async function deletePhoto(
 
 /** Remove every photo you uploaded (storage files + DB). Favorites/downloads rows cascade. Collections are not deleted. */
 export async function deleteAllMyPhotos() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -302,7 +302,7 @@ export async function deleteAllMyPhotos() {
 
 /** Delete specific photos you own (storage + rows). */
 export async function deletePhotos(ids: string[]) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
