@@ -36,6 +36,7 @@ export default function BulkUploadModal({ userId }: Props) {
   }, [bulkUploadProgress])
   const fileRef = useRef<HTMLInputElement>(null)
   const cancelledRef = useRef(false)
+  const jobIdRef = useRef<string | null>(null)
   /** True for the whole runBulk() call — set synchronously so close can’t cancel before React applies phase. */
   const bulkRunActiveRef = useRef(false)
   const [phase, setPhase] = useState<'idle' | 'running' | 'error'>('idle')
@@ -100,6 +101,7 @@ export default function BulkUploadModal({ userId }: Props) {
       }
 
       const jobId = jobRow.id as string
+      jobIdRef.current = jobId
 
       const itemRows = entries.map((e) => ({
         job_id: jobId,
@@ -327,7 +329,16 @@ export default function BulkUploadModal({ userId }: Props) {
         }
       })
 
-          const completedAt = new Date().toISOString()
+        // Mark any items skipped due to cancellation as failed
+        if (cancelledRef.current) {
+          await supabase
+            .from('bulk_upload_items')
+            .update({ status: 'failed', error_message: 'Cancelled by user' })
+            .eq('job_id', jobId)
+            .eq('status', 'pending')
+        }
+
+        const completedAt = new Date().toISOString()
         const summary = {
           success_count: ok,
           failed_count: fail,
@@ -342,6 +353,7 @@ export default function BulkUploadModal({ userId }: Props) {
           })
           .eq('id', jobId)
 
+        jobIdRef.current = null
         setBulkUploadProgress(null)
         setPhase('idle')
         setMessage('')
@@ -404,9 +416,19 @@ export default function BulkUploadModal({ userId }: Props) {
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                 {bulkUploadProgress?.label ?? message ?? 'Processing…'}
               </p>
-              <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={handleClose}>
-                Close (import continues)
-              </button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={handleClose}>
+                  Close (continues in background)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: 'var(--cm-bad, #c44)' }}
+                  onClick={() => { cancelledRef.current = true; closeBulkUpload() }}
+                >
+                  Cancel import
+                </button>
+              </div>
             </div>
           )}
           {phase === 'error' && (

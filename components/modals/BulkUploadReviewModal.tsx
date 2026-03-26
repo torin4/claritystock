@@ -252,6 +252,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const ok = jobSummary?.success_count ?? successItems.length
   const fail = jobSummary?.failed_count ?? failed.length
   const needsCount = needsLocationPhotoIds.length
+  const allSet = !loading && ok > 0 && fail === 0 && needsCount === 0
 
   if (!bulkReviewJobId) return null
 
@@ -311,7 +312,9 @@ export default function BulkUploadReviewModal({ userId }: Props) {
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
               {loading
                 ? 'Loading…'
-                : `${ok} published · ${fail} failed${needsCount > 0 ? ` · ${needsCount} need location` : ''}`}
+                : allSet
+                  ? 'All set ✓'
+                  : `${ok} published · ${fail} failed${needsCount > 0 ? ` · ${needsCount} need location` : ''}`}
             </div>
           </div>
           <button type="button" className="modal-close" style={{ width: 30, height: 30, fontSize: 14 }} onClick={closeBulkReview}>

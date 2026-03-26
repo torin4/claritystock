@@ -113,6 +113,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const bulkUploadProgress = useUIStore((s) => s.bulkUploadProgress)
   const bulkRunActiveRef = useRef(false)
   const bulkCancelledRef = useRef(false)
+  const bulkJobIdRef = useRef<string | null>(null)
   const [uploadKind, setUploadKind] = useState<'standard' | 'bulk'>('standard')
   const [bulkPhase, setBulkPhase] = useState<'idle' | 'running' | 'error'>('idle')
   const [bulkMessage, setBulkMessage] = useState('')
@@ -434,8 +435,10 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           store.setError(i, String(err))
         }
       })
-      store.setStep(3)
-      onSuccess()
+      if (!cancelledRef.current) {
+        store.setStep(3)
+        onSuccess()
+      }
     } finally {
       setPublishing(false)
     }
@@ -524,6 +527,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         }
 
         const jobId = jobRow.id as string
+        bulkJobIdRef.current = jobId
 
         const itemRows = entries.map((e) => ({
           job_id: jobId,
@@ -755,6 +759,15 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           }
         })
 
+        // Mark any items that were skipped due to cancellation as failed
+        if (bulkCancelledRef.current) {
+          await supabase
+            .from('bulk_upload_items')
+            .update({ status: 'failed', error_message: 'Cancelled by user' })
+            .eq('job_id', jobId)
+            .eq('status', 'pending')
+        }
+
         const completedAt = new Date().toISOString()
         const summary = {
           success_count: ok,
@@ -770,6 +783,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           })
           .eq('id', jobId)
 
+        bulkJobIdRef.current = null
         setBulkUploadProgress(null)
         setBulkPhase('idle')
         setBulkMessage('')
@@ -1048,6 +1062,23 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                   <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                     {bulkUploadProgress?.label ?? bulkMessage ?? 'Processing…'}
                   </p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={handleClose}
+                    >
+                      Close (continues in background)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--cm-bad, #c44)' }}
+                      onClick={() => { bulkCancelledRef.current = true }}
+                    >
+                      Cancel import
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1394,7 +1425,16 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               </div>
 
               <div className="upload-actions">
-                <button className="btn btn-ghost" onClick={() => store.setStep(1)}>Back</button>
+                {!publishing && <button className="btn btn-ghost" onClick={() => store.setStep(1)}>Back</button>}
+                {publishing && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => { cancelledRef.current = true }}
+                  >
+                    Cancel
+                  </button>
+                )}
                 <button
                   className="btn btn-primary"
                   onClick={handlePublish}
