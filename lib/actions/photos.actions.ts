@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { assertOwnerOrAdmin, isUserAdmin } from '@/lib/auth/admin'
 import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
-import type { PhotoFormValues } from '@/lib/types/database.types'
+import type { Category, PhotoFormValues } from '@/lib/types/database.types'
 import type { PostgrestError } from '@supabase/supabase-js'
 import { devWarn } from '@/lib/utils/devLog'
 import { resolveNeighborhoodToCanonical } from '@/lib/neighborhoods/canonical'
@@ -160,6 +160,70 @@ export async function updatePhotosCollectionIds(
   revalidatePath('/my-photos')
   revalidatePath('/admin/libraries')
   return { updated: data?.length ?? 0 }
+}
+
+/**
+ * Apply the same category and/or neighborhood to many photos you own (bulk import follow-up).
+ * Setting neighborhood clears the internal `needs-location` tag when a canonical neighborhood is saved.
+ */
+export async function updatePhotosCategoryNeighborhood(
+  photoIds: string[],
+  opts: { category?: Category | null; neighborhood?: string | null },
+) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  const unique = Array.from(new Set(photoIds)).filter(Boolean)
+  if (!unique.length) return { updated: 0 }
+
+  const willCategory = opts.category !== undefined
+  const willNeighborhood = opts.neighborhood !== undefined
+  if (!willCategory && !willNeighborhood) throw new Error('Nothing to update')
+
+  const neighborhoodResolved = willNeighborhood
+    ? await resolveNeighborhoodForDb(supabase, opts.neighborhood)
+    : undefined
+  if (willNeighborhood) {
+    if (neighborhoodResolved == null || !String(neighborhoodResolved).trim()) {
+      throw new Error('Choose a neighborhood that matches the list, or add it in admin first.')
+    }
+  }
+
+  const { data: rows, error: fetchErr } = await supabase
+    .from('photos')
+    .select('id, tags')
+    .in('id', unique)
+    .eq('photographer_id', user.id)
+
+  if (fetchErr) throw fetchErr
+  if (!rows?.length) throw new Error('No matching photos')
+
+  for (const row of rows) {
+    const patch: {
+      category?: Category | null
+      neighborhood?: string | null
+      tags?: string[]
+    } = {}
+    if (willCategory) patch.category = opts.category ?? null
+    if (willNeighborhood) {
+      patch.neighborhood = neighborhoodResolved
+      const cur = (row.tags as string[] | null) ?? []
+      patch.tags = cur.filter((t) => t !== PHOTO_TAG_NEEDS_LOCATION)
+    }
+
+    const { error } = await supabase
+      .from('photos')
+      .update(patch)
+      .eq('id', row.id)
+      .eq('photographer_id', user.id)
+    if (error) throw error
+  }
+
+  revalidatePath('/')
+  revalidatePath('/my-photos')
+  revalidatePath('/admin/libraries')
+  return { updated: rows.length }
 }
 
 export async function deletePhoto(

@@ -38,13 +38,8 @@ export default function BulkUploadModal({ userId }: Props) {
   const cancelledRef = useRef(false)
   /** True for the whole runBulk() call — set synchronously so close can’t cancel before React applies phase. */
   const bulkRunActiveRef = useRef(false)
-  const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'running' | 'error'>('idle')
   const [message, setMessage] = useState('')
-  const [lastSummary, setLastSummary] = useState<{
-    ok: number
-    fail: number
-    needsLocation: number
-  } | null>(null)
 
   const handleClose = () => {
     /** While a bulk run is active, only dismiss the modal — do not cancel (phase can lag behind runBulk). */
@@ -52,7 +47,6 @@ export default function BulkUploadModal({ userId }: Props) {
       cancelledRef.current = true
       setPhase('idle')
       setMessage('')
-      setLastSummary(null)
     }
     closeBulkUpload()
   }
@@ -349,11 +343,13 @@ export default function BulkUploadModal({ userId }: Props) {
           .eq('id', jobId)
 
         setBulkUploadProgress(null)
-        setLastSummary({ ok, fail, needsLocation: needsLocationOk })
-        setPhase('done')
+        setPhase('idle')
         setMessage('')
+        const ui = useUIStore.getState()
+        ui.closeBulkUpload()
+        ui.openBulkReview(jobId)
         router.refresh()
-        useUIStore.getState().bumpSidebarCollections()
+        ui.bumpSidebarCollections()
       } finally {
         bulkRunActiveRef.current = false
       }
@@ -410,34 +406,6 @@ export default function BulkUploadModal({ userId }: Props) {
               </p>
               <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={handleClose}>
                 Close (import continues)
-              </button>
-            </div>
-          )}
-          {phase === 'done' && lastSummary && (
-            <div>
-              <p style={{ fontSize: 14, marginBottom: 8 }}>
-                Import finished: <strong>{lastSummary.ok}</strong> published
-                {lastSummary.fail > 0 ? (
-                  <>
-                    , <strong>{lastSummary.fail}</strong> failed
-                    {lastSummary.needsLocation > 0 ? (
-                      <>
-                        ; <strong>{lastSummary.needsLocation}</strong> without GPS need a neighborhood
-                      </>
-                    ) : null}
-                    {' — check notifications to review.'}
-                  </>
-                ) : lastSummary.needsLocation > 0 ? (
-                  <>
-                    . <strong>{lastSummary.needsLocation}</strong> need a neighborhood (no GPS in file) — open
-                    notifications to review and edit.
-                  </>
-                ) : (
-                  ' ✓'
-                )}
-              </p>
-              <button type="button" className="btn btn-primary" onClick={handleClose}>
-                Done
               </button>
             </div>
           )}

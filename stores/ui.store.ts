@@ -103,6 +103,8 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
     set((s) => ({
       ...defaultState,
       bulkUploadProgress: s.bulkUploadProgress,
+      /** Keep bulk review open so “Add location” can return to the list after editing. */
+      bulkReviewJobId: s.bulkReviewJobId,
       editModalPhotoId: photoId,
     })),
   closeEdit: () => set({ editModalPhotoId: null }),

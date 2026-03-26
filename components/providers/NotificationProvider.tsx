@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useNotificationsStore } from '@/stores/notifications.store'
+import { useUIStore } from '@/stores/ui.store'
 
 const BULK_SEEN_KEY = (uid: string) => `claritystock:lastSeenBulkCompletedAt:${uid}`
 
@@ -155,6 +156,7 @@ export default function NotificationProvider({ userId }: { userId: string }) {
         failedCount: summary.failed_count ?? 0,
         needsLocationCount: summary.needs_location_count ?? 0,
       })
+      useUIStore.getState().openBulkReview(row.id)
       rememberBulkCompletedAt(userId, row.completed_at)
     }
 
