@@ -252,7 +252,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const ok = jobSummary?.success_count ?? successItems.length
   const fail = jobSummary?.failed_count ?? failed.length
   const needsCount = needsLocationPhotoIds.length
-  const allSet = !loading && ok > 0 && fail === 0 && needsCount === 0
+  const allSet = !loading && successItems.length > 0 && needsCount === 0
 
   if (!bulkReviewJobId) return null
 
