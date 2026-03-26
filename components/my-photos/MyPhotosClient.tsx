@@ -990,13 +990,6 @@ export default function MyPhotosClient({
           >
             {allVisibleSelected ? 'Deselect visible' : 'Select all'}
           </button>
-          <span className="mp-select-bar-hint">
-            {tab === 'downloads'
-              ? `Remove from downloads only clears your list (Library unchanged; Browse checkmark clears) · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS}`
-              : adminMode
-                ? `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · assign to this photographer’s collections`
-                : `Long-press or right-click to add · tap to toggle · ZIP up to ${ZIP_DOWNLOAD_MAX_PHOTOS} · choose a collection to assign`}
-          </span>
           {tab !== 'downloads' && (tab === 'photos' || drillColl) && (
             <>
               <select
