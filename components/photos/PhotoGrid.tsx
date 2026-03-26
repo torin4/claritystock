@@ -43,7 +43,7 @@ export default function PhotoGrid({
       Array.from(
         new Set(
           photos
-            .map((photo) => photo.thumbnail_path ?? photo.storage_path)
+            .map((photo) => photo.display_path ?? photo.storage_path)
             .filter((path): path is string => Boolean(path)),
         ),
       ).join('\n'),
@@ -110,7 +110,7 @@ export default function PhotoGrid({
           key={photo.id}
           photo={photo}
           userId={userId}
-          imageUrl={signedUrls[photo.thumbnail_path ?? photo.storage_path ?? ''] ?? null}
+          imageUrl={signedUrls[photo.display_path ?? photo.storage_path ?? ''] ?? null}
           onFavoriteToggle={onFavoriteToggle}
           onDownload={onDownload}
           showEdit={showEdit}
