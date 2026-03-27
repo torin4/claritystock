@@ -52,9 +52,12 @@ export default function BrowseClient({
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
 
   useEffect(() => {
-    console.log('[BrowseClient] initialPhotos changed, setting photos', { count: initialPhotos.length })
+    // Skip when a collection is active — fetchPhotos owns the photos then.
+    // initialPhotos is always the unfiltered server batch and would overwrite
+    // the correctly-filtered client fetch triggered by ?collection= in the URL.
+    if (collectionId) return
     setPhotos(initialPhotos)
-  }, [initialPhotos])
+  }, [initialPhotos, collectionId])
   const [browseMode, setBrowseMode] = useState<'photos' | 'collections'>('photos')
   const [loading, setLoading] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -190,7 +193,6 @@ export default function BrowseClient({
     const ac = new AbortController()
     fetchAbortRef.current = ac
     setLoading(true)
-    console.log('[BrowseClient] fetchPhotos START', { collectionId, search, category, sort, quickFilter })
     try {
       const supabase = getSupabaseBrowserClient()
       let query = supabase
@@ -240,7 +242,6 @@ export default function BrowseClient({
       }
 
       const { data } = await query.limit(BROWSE_PAGE_SIZE)
-      console.log('[BrowseClient] main query done', { aborted: ac.signal.aborted, count: data?.length, collectionId })
       if (ac.signal.aborted) return
       const photoIds = (data ?? []).map((p: { id: string }) => p.id)
       if (!photoIds.length) {
@@ -272,7 +273,6 @@ export default function BrowseClient({
       })) as Photo[]
 
       if (ac.signal.aborted) return
-      console.log('[BrowseClient] setPhotos', { count: result.length, collectionId, ids: result.map(p => p.id).slice(0, 5) })
       setPhotos(result)
     } finally {
       if (fetchAbortRef.current === ac) {
@@ -292,7 +292,6 @@ export default function BrowseClient({
       setLoading(false)
       return
     }
-    console.log('[BrowseClient] fetch effect triggered', { filterKey, browseMode, collectionId })
     setLoading(true)
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(fetchPhotos, search ? 400 : 0)
@@ -329,7 +328,6 @@ export default function BrowseClient({
     if (param) {
       prevCollectionParamRef.current = param
       if (collectionId !== param) {
-        console.log('[BrowseClient] URL param set collection', { param, prev: collectionId })
         setCollection(param)
         setBrowseMode('collections')
       }
@@ -337,7 +335,6 @@ export default function BrowseClient({
     }
 
     if (prevCollectionParamRef.current && collectionId) {
-      console.log('[BrowseClient] URL param cleared collection')
       setCollection(null)
     }
     prevCollectionParamRef.current = null
