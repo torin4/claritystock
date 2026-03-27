@@ -50,14 +50,6 @@ export default function BrowseClient({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
-
-  useEffect(() => {
-    // Skip when a collection is active — fetchPhotos owns the photos then.
-    // initialPhotos is always the unfiltered server batch and would overwrite
-    // the correctly-filtered client fetch triggered by ?collection= in the URL.
-    if (collectionId) return
-    setPhotos(initialPhotos)
-  }, [initialPhotos, collectionId])
   const [browseMode, setBrowseMode] = useState<'photos' | 'collections'>('photos')
   const [loading, setLoading] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -74,6 +66,14 @@ export default function BrowseClient({
   const quickFilter = useFilterStore((s) => s.quickFilter)
   const collectionId = useFilterStore((s) => s.collectionId)
   const setCollection = useFilterStore((s) => s.setCollection)
+
+  useEffect(() => {
+    // Skip when a collection is active — fetchPhotos owns the photos then.
+    // initialPhotos is always the unfiltered server batch and would overwrite
+    // the correctly-filtered client fetch triggered by ?collection= in the URL.
+    if (collectionId) return
+    setPhotos(initialPhotos)
+  }, [initialPhotos, collectionId])
   const openUpload = useUIStore((s) => s.openUpload)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const didRunInitialFetch = useRef(false)
