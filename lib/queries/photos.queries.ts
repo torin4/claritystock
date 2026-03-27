@@ -56,9 +56,13 @@ export async function getPhotos(
     if (ids.length) query = query.not('id', 'in', `(${ids.join(',')})`)
   }
   if (filters.quickFilter === 'fav') {
-    query = query
-      .select(PHOTO_CARD_SELECT + ', favorites!inner(photo_id)')
-      .eq('favorites.user_id', userId)
+    const { data: favs } = await supabase
+      .from('favorites')
+      .select('photo_id')
+      .eq('user_id', userId)
+      .limit(2000)
+    const ids = (favs ?? []).map((f: { photo_id: string }) => f.photo_id)
+    query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
   }
 
   if (filters.sort === 'used') {

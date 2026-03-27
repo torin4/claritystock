@@ -23,6 +23,9 @@ import type { Photo, Collection, User, Category } from '@/lib/types/database.typ
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 
+const COLL_LONG_PRESS_MS = 520
+const COLL_MOVE_CANCEL_PX = 12
+
 type CollectionSummary = Collection
 
 type LibraryPhotographer = Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'>
@@ -62,6 +65,9 @@ export default function MyPhotosClient({
   const [drillColl, setDrillColl] = useState<CollectionSummary | null>(null)
   const [deletingColl, setDeletingColl] = useState(false)
   const [renamingColl, setRenamingColl] = useState(false)
+  const [collSelectionMode, setCollSelectionMode] = useState(false)
+  const [selectedCollIds, setSelectedCollIds] = useState<string[]>([])
+  const [deletingColls, setDeletingColls] = useState(false)
   const [createCollOpen, setCreateCollOpen] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -107,6 +113,22 @@ export default function MyPhotosClient({
     setBulkEditError(null)
   }, [])
 
+  const beginCollectionSelection = useCallback((id: string) => {
+    setCollSelectionMode(true)
+    setSelectedCollIds(prev => prev.includes(id) ? prev : [...prev, id])
+  }, [])
+
+  const toggleCollectionSelected = useCallback((id: string) => {
+    setSelectedCollIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    )
+  }, [])
+
+  const exitCollectionSelection = useCallback(() => {
+    setCollSelectionMode(false)
+    setSelectedCollIds([])
+  }, [])
+
   useEffect(() => {
     exitSelection()
   }, [drillColl?.id, searchTerm, tab, exitSelection])
@@ -123,6 +145,15 @@ export default function MyPhotosClient({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectionMode, exitSelection])
+
+  useEffect(() => {
+    if (!collSelectionMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitCollectionSelection()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [collSelectionMode, exitCollectionSelection])
 
   const handleBulkEditApply = async () => {
     if (!selectedIds.length) return
@@ -566,6 +597,29 @@ export default function MyPhotosClient({
     }
   }
 
+  const handleDeleteSelectedCollections = async () => {
+    if (!selectedCollIds.length) return
+    const count = selectedCollIds.length
+    if (!confirm(
+      adminMode
+        ? `Delete ${count} collection${count !== 1 ? 's' : ''}? Photos stay in this photographer's library.`
+        : `Delete ${count} collection${count !== 1 ? 's' : ''}? Photos stay in your library.`,
+    )) return
+    setDeletingColls(true)
+    try {
+      await Promise.all(selectedCollIds.map(id => deleteCollection(id)))
+      useUIStore.getState().bumpSidebarCollections()
+      setLocalCollections(prev => prev.filter(c => !selectedCollIds.includes(c.id)))
+      exitCollectionSelection()
+      router.refresh()
+    } catch (e) {
+      devError(e)
+      alert(e instanceof Error ? e.message : 'Could not delete collections')
+    } finally {
+      setDeletingColls(false)
+    }
+  }
+
   const handleRenameCollection = async () => {
     if (!drillColl || renamingColl) return
     const next = prompt('Rename collection', drillColl.name)
@@ -658,18 +712,20 @@ export default function MyPhotosClient({
 
       {/* Collections view */}
       {tab === 'collections' && !drillColl && (
-        <div>
+        <div style={{ paddingBottom: collSelectionMode ? 88 : undefined }}>
           <div className="mp-toolbar" style={{ justifyContent: 'space-between' }}>
             <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
               {localCollections.length} collection{localCollections.length !== 1 ? 's' : ''}
             </span>
-            <button
-              type="button"
-              className="coll-create-text"
-              onClick={() => setCreateCollOpen(true)}
-            >
-              + Create collection
-            </button>
+            {!collSelectionMode && (
+              <button
+                type="button"
+                className="coll-create-text"
+                onClick={() => setCreateCollOpen(true)}
+              >
+                + Create collection
+              </button>
+            )}
           </div>
           {localCollections.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
@@ -682,8 +738,40 @@ export default function MyPhotosClient({
                   key={coll.id}
                   collection={coll}
                   onClick={() => { setDrillColl(coll); setTab('photos') }}
+                  selectable
+                  selectionMode={collSelectionMode}
+                  selected={selectedCollIds.includes(coll.id)}
+                  onBeginSelection={beginCollectionSelection}
+                  onToggleSelected={toggleCollectionSelected}
                 />
               ))}
+            </div>
+          )}
+          {collSelectionMode && (
+            <div className="mp-select-bar">
+              <span className="mp-select-bar-count">{selectedCollIds.length} selected</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  const allIds = localCollections.map(c => c.id)
+                  const allSelected = allIds.every(id => selectedCollIds.includes(id))
+                  setSelectedCollIds(allSelected ? [] : allIds)
+                }}
+              >
+                {localCollections.every(c => selectedCollIds.includes(c.id)) ? 'Deselect all' : 'Select all'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={exitCollectionSelection}>
+                Done
+              </button>
+              <button
+                type="button"
+                className="btn-del-sm"
+                disabled={!selectedCollIds.length || deletingColls}
+                onClick={() => void handleDeleteSelectedCollections()}
+              >
+                {deletingColls ? 'Deleting…' : 'Delete'}
+              </button>
             </div>
           )}
         </div>
@@ -1118,15 +1206,91 @@ function MosaicCell({
 function CollectionTile({
   collection,
   onClick,
+  selectable,
+  selectionMode,
+  selected,
+  onBeginSelection,
+  onToggleSelected,
 }: {
   collection: Collection
   onClick: () => void
+  selectable?: boolean
+  selectionMode?: boolean
+  selected?: boolean
+  onBeginSelection?: (id: string) => void
+  onToggleSelected?: (id: string) => void
 }) {
   const topPhotos = (collection.photos ?? []).slice(0, 3)
   const single = (collection.photo_count ?? topPhotos.length) === 1
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
+  const suppressNextClick = useRef(false)
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    pointerStart.current = null
+  }, [])
+
+  useEffect(() => () => clearLongPress(), [clearLongPress])
+
+  function handlePointerDown(e: React.PointerEvent) {
+    if (!selectable || selectionMode) return
+    if (e.button !== 0) return
+    suppressNextClick.current = false
+    pointerStart.current = { x: e.clientX, y: e.clientY }
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null
+      suppressNextClick.current = true
+      onBeginSelection?.(collection.id)
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(12)
+      } catch { /* ignore */ }
+    }, COLL_LONG_PRESS_MS)
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!pointerStart.current || !longPressTimer.current) return
+    const dx = e.clientX - pointerStart.current.x
+    const dy = e.clientY - pointerStart.current.y
+    if (dx * dx + dy * dy > COLL_MOVE_CANCEL_PX * COLL_MOVE_CANCEL_PX) clearLongPress()
+  }
+
+  function handlePointerEnd() { clearLongPress() }
+
+  function handleContextMenu(e: React.MouseEvent) {
+    if (!selectable) return
+    e.preventDefault()
+    suppressNextClick.current = true
+    onBeginSelection?.(collection.id)
+  }
+
+  function handleTileClick() {
+    if (suppressNextClick.current) {
+      suppressNextClick.current = false
+      return
+    }
+    if (selectionMode) {
+      onToggleSelected?.(collection.id)
+      return
+    }
+    onClick()
+  }
 
   return (
-    <div className="coll-tile" onClick={onClick}>
+    <div
+      className={`coll-tile${selectionMode ? ' coll-tile-selecting' : ''}${selected ? ' selected' : ''}`}
+      style={selectable && !selectionMode ? { touchAction: 'manipulation' } : undefined}
+      onClick={handleTileClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onPointerLeave={handlePointerEnd}
+      onContextMenu={handleContextMenu}
+    >
       <div className={`coll-mosaic${single ? ' coll-mosaic--single' : ''}`}>
         {single ? (
           <MosaicCell photo={topPhotos[0]} />
@@ -1136,6 +1300,15 @@ function CollectionTile({
           ))
         )}
       </div>
+      {selectionMode && (
+        <div className="ptile-sel-check" aria-hidden>
+          {selected ? (
+            <svg className="ptile-sel-check-svg" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : null}
+        </div>
+      )}
       <div className="coll-ov">
         <div className="coll-name">{collection.name}</div>
         <div className="coll-count">
