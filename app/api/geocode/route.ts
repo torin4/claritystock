@@ -9,6 +9,9 @@ async function geocodeLatLng(lat: number, lng: number) {
 
   const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`
   const res = await fetch(url)
+  if (!res.ok) {
+    return NextResponse.json({ neighborhood: null, subarea: null })
+  }
   const data = await res.json()
 
   if (data.status !== 'OK' || !data.results?.length) {

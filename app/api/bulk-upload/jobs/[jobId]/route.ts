@@ -37,7 +37,10 @@ export async function GET(
   }
 
   if (job.photographer_id !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const { data: isAdmin } = await supabase.rpc('is_admin')
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
   }
 
   const { data: items, error: itemsErr } = await supabase
@@ -68,7 +71,7 @@ export async function GET(
       .from('photos')
       .select('id, tags, category, neighborhood')
       .in('id', successPhotoIds)
-      .eq('photographer_id', user.id)
+      .eq('photographer_id', job.photographer_id)
 
     if (photoErr) {
       devError('[bulk-upload photos tags GET]', photoErr)
