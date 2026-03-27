@@ -288,6 +288,7 @@ export default function BrowseClient({
       setLoading(false)
       return
     }
+    setLoading(true)
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(fetchPhotos, search ? 400 : 0)
     return () => {
