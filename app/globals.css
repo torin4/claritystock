@@ -458,7 +458,7 @@ body {
 /* ── Browse search bar ── */
 .browse-search-bar {
   display: flex; align-items: center; gap: 8px; padding: 12px 20px;
-  border-bottom: 1px solid var(--border); position: sticky; top: 65px;
+  position: sticky; top: 65px;
   background: var(--bg); z-index: 19;
 }
 .si-wrap { position: relative; flex: 1; }
@@ -473,7 +473,7 @@ body {
 .filter-dot.on { display: block; }
 
 /* ── Quick filter chips ── */
-.quick-filter-row { display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.quick-filter-row { display: flex; align-items: center; gap: 10px; padding: 8px 20px; overflow-x: auto; }
 .qchip { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: none; color: var(--text-3); font-family: var(--font-body); white-space: nowrap; transition: all 0.12s; flex-shrink: 0; }
 .qchip:hover { border-color: var(--border-hi); color: var(--text-2); }
 .qchip.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
