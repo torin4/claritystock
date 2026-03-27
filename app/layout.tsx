@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileTopBar from '@/components/layout/MobileTopBar'
@@ -6,6 +6,7 @@ import SidebarOverlay from '@/components/layout/SidebarOverlay'
 import NavigationUiReset from '@/components/layout/NavigationUiReset'
 import NotificationProvider from '@/components/providers/NotificationProvider'
 import BulkUploadShell from '@/components/modals/BulkUploadShell'
+import InstallPrompt from '@/components/pwa/InstallPrompt'
 import { mergeRecentNavItems, type RecentNavItem } from '@/lib/navigation/recentNav'
 import { attachSignedCollectionPreviewUrls, attachSignedThumbnailUrls } from '@/lib/photos/serverSignedUrls'
 import { getCollections } from '@/lib/queries/collections.queries'
@@ -20,6 +21,16 @@ const SIDEBAR_RECENTS_LIMIT = 8
 export const metadata: Metadata = {
   title: 'Clarity Stock',
   description: 'Internal photo library for Clarity Northwest Photography',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Clarity Stock',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#0a0a0a',
 }
 
 async function loadSidebarRecents(userId: string) {
@@ -51,8 +62,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en">
+      <head>
+        <link rel="apple-touch-icon" href="/apple-icon-180.png" />
+      </head>
       <body>
         <NavigationUiReset />
+        <InstallPrompt />
         {user ? (
           <>
             <NotificationProvider userId={user.id} />
