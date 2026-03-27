@@ -69,7 +69,7 @@ export default function InsightsClient({ allTime, thisMonth, topContributors, us
             Your library contribution ·{' '}
             {range === 'all' ? 'Lifetime totals below' : 'Current UTC month only'}
           </div>
-          <div className="browse-mode-row" style={{ marginTop: 10 }}>
+          <div className="browse-mode-row" style={{ marginTop: 10, borderBottom: 'none' }}>
             <button
               type="button"
               className={`browse-mode-btn ${range === 'all' ? 'active' : ''}`}
