@@ -15,8 +15,9 @@ export default function InstallPrompt() {
     // Don't show if already installed (standalone mode)
     if (window.matchMedia('(display-mode: standalone)').matches) return
 
-    // Don't show if user previously dismissed
-    if (localStorage.getItem('pwa-install-dismissed')) return
+    // Don't show if user dismissed within the last 30 days
+    const dismissedAt = localStorage.getItem('pwa-install-dismissed')
+    if (dismissedAt && Date.now() - Number(dismissedAt) < 30 * 24 * 60 * 60 * 1000) return
 
     const handler = (e: Event) => {
       e.preventDefault()
@@ -46,7 +47,7 @@ export default function InstallPrompt() {
   const handleDismiss = useCallback(() => {
     setDismissed(true)
     setDeferredPrompt(null)
-    localStorage.setItem('pwa-install-dismissed', '1')
+    localStorage.setItem('pwa-install-dismissed', String(Date.now()))
   }, [])
 
   if (!deferredPrompt || dismissed) return null
