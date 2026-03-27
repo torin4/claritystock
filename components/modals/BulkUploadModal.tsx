@@ -11,8 +11,8 @@ import {
   buildFormForBulkFile,
   MAX_BULK_IMAGES,
   parseBulkZipToEntries,
-  runWithConcurrency,
 } from '@/lib/uploads/bulkZipImport'
+import { runWithConcurrency } from '@/lib/utils/runWithConcurrency'
 import { runAiTaggingOnFile, uploadPhotoAssetsForPublish } from '@/lib/uploads/processImageForPublish'
 import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
@@ -142,7 +142,7 @@ export default function BulkUploadModal({ userId }: Props) {
       const uniqueFolders = Array.from(new Set(entries.map((e) => e.folderName))).filter((name) => name.length > 0)
       for (const folder of uniqueFolders) {
         try {
-          const { id } = await getOrCreateCollectionByName({ name: folder, category: 'neighborhood' })
+          const { id } = await getOrCreateCollectionByName({ name: folder, category: 'neighborhood', ownerId: userId })
           folderToCollection.set(folder, id)
         } catch (e) {
           await supabase.from('bulk_upload_jobs').update({ status: 'failed', completed_at: new Date().toISOString() }).eq('id', jobId)
@@ -325,7 +325,6 @@ export default function BulkUploadModal({ userId }: Props) {
             label,
             inFlight: false,
           })
-          setMessage(`Processing ${entry.relativePath}…`)
         }
       })
 

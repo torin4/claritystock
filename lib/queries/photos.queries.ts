@@ -41,6 +41,7 @@ export async function getPhotos(
       .select('photo_id')
       .eq('downloaded_by', userId)
       .is('archived_at', null)
+      .limit(2000)
     const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
     query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
   }
@@ -50,16 +51,14 @@ export async function getPhotos(
       .select('photo_id')
       .eq('downloaded_by', userId)
       .is('archived_at', null)
+      .limit(2000)
     const ids = (downloads ?? []).map((d: { photo_id: string }) => d.photo_id)
     if (ids.length) query = query.not('id', 'in', `(${ids.join(',')})`)
   }
   if (filters.quickFilter === 'fav') {
-    const { data: favs } = await supabase
-      .from('favorites')
-      .select('photo_id')
-      .eq('user_id', userId)
-    const ids = (favs ?? []).map((f: { photo_id: string }) => f.photo_id)
-    query = query.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
+    query = query
+      .select(PHOTO_CARD_SELECT + ', favorites!inner(photo_id)')
+      .eq('favorites.user_id', userId)
   }
 
   if (filters.sort === 'used') {
@@ -129,22 +128,6 @@ export async function getMyPhotosPage(
   }
 }
 
-/**
- * Your uploads for My Photos. Uses {@link PHOTO_MY_LIBRARY_CARD_SELECT} (no per-row photographer join).
- * Pass `photographer` from {@link getServerProfile} to avoid an extra `users` round-trip.
- */
-export async function getMyPhotos(
-  supabase: SupabaseClient,
-  userId: string,
-  photographer?: LibraryPhotographer | null,
-) {
-  const { photos } = await getMyPhotosPage(supabase, userId, {
-    photographer,
-    limit: 10_000,
-  })
-  return photos
-}
-
 /** Photos you’ve downloaded from the library (any photographer), most recently saved first; deduped per photo. */
 export async function getMyDownloadedPhotos(supabase: SupabaseClient, userId: string) {
   const { data: dls, error: dErr } = await supabase
@@ -153,6 +136,7 @@ export async function getMyDownloadedPhotos(supabase: SupabaseClient, userId: st
     .eq('downloaded_by', userId)
     .is('archived_at', null)
     .order('created_at', { ascending: false })
+    .limit(2000)
 
   if (dErr) throw dErr
 

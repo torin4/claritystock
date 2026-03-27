@@ -32,6 +32,23 @@ function vaultKey(): Buffer {
   return scryptSync('clarity-stock-dev-google-vault', 'v1', 32)
 }
 
+/** Returns null if decryption fails (wrong key, corrupt ciphertext, or missing env). */
+export function decryptGoogleRefreshTokenFromStorage(ciphertext: string): string | null {
+  try {
+    const key = vaultKey()
+    const buf = Buffer.from(ciphertext, 'base64')
+    const iv = buf.subarray(0, IV_LEN)
+    const tag = buf.subarray(IV_LEN, IV_LEN + TAG_LEN)
+    const enc = buf.subarray(IV_LEN + TAG_LEN)
+    const decipher = createDecipheriv(ALGO, key, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8')
+  } catch (e) {
+    devError('[googleRefreshVault] decrypt failed', e)
+    return null
+  }
+}
+
 /** Returns null if encryption is not configured (production without key). */
 export function encryptGoogleRefreshTokenForStorage(plain: string): string | null {
   try {
@@ -43,22 +60,6 @@ export function encryptGoogleRefreshTokenForStorage(plain: string): string | nul
     return Buffer.concat([iv, tag, enc]).toString('base64')
   } catch (e) {
     devError('[googleRefreshVault] encrypt failed', e)
-    return null
-  }
-}
-
-export function decryptGoogleRefreshTokenFromStorage(stored: string): string | null {
-  try {
-    const key = vaultKey()
-    const buf = Buffer.from(stored, 'base64')
-    if (buf.length < IV_LEN + TAG_LEN + 1) return null
-    const iv = buf.subarray(0, IV_LEN)
-    const tag = buf.subarray(IV_LEN, IV_LEN + TAG_LEN)
-    const data = buf.subarray(IV_LEN + TAG_LEN)
-    const decipher = createDecipheriv(ALGO, key, iv)
-    decipher.setAuthTag(tag)
-    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
-  } catch {
     return null
   }
 }

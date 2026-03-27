@@ -61,19 +61,6 @@ export async function createPhotoDerivatives(file: File): Promise<{
 }
 
 /**
- * Client-side JPEG thumbnail for grid tiles (small uploads vs multi‑MB originals).
- */
-export async function createJpegThumbnail(file: File): Promise<Blob | null> {
-  const { thumbnail } = await createPhotoDerivatives(file)
-  return thumbnail
-}
-
-export async function createJpegDisplayImage(file: File): Promise<Blob | null> {
-  const { display } = await createPhotoDerivatives(file)
-  return display
-}
-
-/**
  * Downscaled JPEG for `/api/ai/tag` — avoids 413 on large originals when sent as base64 JSON.
  */
 export async function createJpegForAiTagging(file: File): Promise<Blob | null> {

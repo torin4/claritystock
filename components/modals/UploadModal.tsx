@@ -483,7 +483,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           MAX_BULK_IMAGES,
           buildFormForBulkFile,
           parseBulkZipToEntries,
-          runWithConcurrency: runBulkWithConcurrency,
         } = bulk
 
         let entries: Awaited<ReturnType<typeof parseBulkZipToEntries>>
@@ -500,13 +499,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           setBulkUploadProgress(null)
           setBulkPhase('error')
           setBulkMessage('No images found in ZIP (JPEG/PNG/WebP/HEIC; max size limits apply).')
-          return
-        }
-
-        if (entries.length > MAX_BULK_IMAGES) {
-          setBulkUploadProgress(null)
-          setBulkPhase('error')
-          setBulkMessage(`ZIP contains ${entries.length} images. Max is ${MAX_BULK_IMAGES}.`)
           return
         }
 
@@ -596,7 +588,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
           inFlight: false,
         })
 
-        await runBulkWithConcurrency(entries, BULK_CONCURRENCY, async (entry) => {
+        await runWithConcurrency(entries, BULK_CONCURRENCY, async (entry) => {
           if (bulkCancelledRef.current) return
           const itemId = pathToItemId.get(entry.relativePath)
           const shortName = entry.relativePath.split('/').pop() ?? entry.relativePath
@@ -755,7 +747,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               label,
               inFlight: false,
             })
-            setBulkMessage(`Processing ${entry.relativePath}…`)
           }
         })
 
