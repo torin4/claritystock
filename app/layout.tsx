@@ -51,6 +51,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')`,
+          }}
+        />
+      </head>
       <body>
         <NavigationUiReset />
         {user ? (
