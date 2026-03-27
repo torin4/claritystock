@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { extractGps } from '@/lib/utils/exif'
 import { fileToBase64 } from '@/lib/utils/fileToBase64'
 import { uploadPhoto, uploadThumbnail } from '@/lib/utils/storage'
-import { createJpegThumbnail } from '@/lib/utils/imageThumbnail'
+import { createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { createCollection } from '@/lib/actions/collections.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -251,7 +251,7 @@ export default function AdminUploadClient({ photographers, embedded = false }: P
         try {
           const [storagePath, thumbBlob] = await Promise.all([
             uploadPhoto(r.file, targetUserId),
-            createJpegThumbnail(r.file),
+            createPhotoDerivatives(r.file).then(d => d.thumbnail),
           ])
           let thumbnailPath: string | null = null
           if (thumbBlob) {
