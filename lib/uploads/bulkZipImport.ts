@@ -29,7 +29,7 @@ export type BulkZipEntry = {
   file: File
 }
 
-/** Expand ZIP to flat list of images with folder = first path segment (`""` = ZIP root, no collection). */
+/** Expand ZIP to flat list of images with folder = chosen collection segment (`""` = ZIP root, no collection). */
 export async function parseBulkZipToEntries(zipFile: File): Promise<BulkZipEntry[]> {
   const buf = await zipFile.arrayBuffer()
   const zip = await JSZip.loadAsync(buf)
@@ -47,11 +47,14 @@ export async function parseBulkZipToEntries(zipFile: File): Promise<BulkZipEntry
     if (parts.length < 1) continue
     const fileName = parts[parts.length - 1]
     let folderName: string
-    if (parts.length <= 2) {
-      // Root file or single-folder file — no collection assigned
+    if (parts.length === 1) {
+      // Root file (photo.jpg) — no collection assigned.
       folderName = BULK_NO_FOLDER
+    } else if (parts.length === 2) {
+      // Single-folder file (Folder/photo.jpg) — folder becomes collection.
+      folderName = parts[0].trim() || BULK_NO_FOLDER
     } else {
-      // Second-level folder (parts[1]) becomes the collection
+      // Multi-level file (City/Neighborhood/photo.jpg) — second-level folder becomes collection.
       folderName = parts[1].trim() || BULK_NO_FOLDER
     }
 

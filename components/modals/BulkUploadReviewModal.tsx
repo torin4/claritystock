@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useUIStore } from '@/stores/ui.store'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
@@ -66,7 +65,6 @@ interface Props {
 }
 
 export default function BulkUploadReviewModal({ userId }: Props) {
-  const router = useRouter()
   const bulkReviewJobId = useUIStore((s) => s.bulkReviewJobId)
   const closeBulkReview = useUIStore((s) => s.closeBulkReview)
   const openEdit = useUIStore((s) => s.openEdit)
@@ -187,7 +185,6 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       })
       setBulkNeighborhood('')
       await load()
-      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk update failed')
     } finally {
@@ -236,7 +233,6 @@ export default function BulkUploadReviewModal({ userId }: Props) {
         setNeedsLocationPhotoIds((prev) => (prev.includes(photoId) ? prev : [...prev, photoId]))
         setSelectedPhotoIds((prev) => (prev.includes(photoId) ? prev : [...prev, photoId]))
       }
-      router.refresh()
       useUIStore.getState().bumpSidebarCollections()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Retry failed')

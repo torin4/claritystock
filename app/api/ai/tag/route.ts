@@ -221,6 +221,16 @@ function normalizeCategory(raw: unknown): Category {
   return 'neighborhood'
 }
 
+function fallbackTagPayload() {
+  return {
+    title: 'Untitled photo',
+    tags: [],
+    category: 'neighborhood' as Category,
+    description: '',
+    fallback: true,
+  }
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -327,13 +337,6 @@ export async function POST(request: NextRequest) {
 
   const message = lastErr instanceof Error ? lastErr.message : String(lastErr)
   devError('[api/ai/tag]', message, lastErr)
-  return NextResponse.json(
-    {
-      error: 'AI tagging failed',
-      detail: message,
-      hint:
-        'Set GEMINI_VISION_MODEL in .env to a model your key supports (list: https://ai.google.dev/gemini-api/docs/models ). Use a Google AI Studio API key, not Vertex.',
-    },
-    { status: 500 },
-  )
+  // Fail-soft in production: uploads should continue even if AI provider/model is unavailable.
+  return NextResponse.json(fallbackTagPayload())
 }
