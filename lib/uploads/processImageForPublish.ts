@@ -32,6 +32,7 @@ export async function neighborhoodFromExifFile(file: File): Promise<string | nul
 
 /** Gemini vision tagging (same as UploadModal). */
 export async function runAiTaggingOnFile(file: File): Promise<AiTagResult | null> {
+  const debug = process.env.NEXT_PUBLIC_AI_TAG_DEBUG === '1'
   try {
     const tagBlob = await createJpegForAiTagging(file)
     let b64: string
@@ -53,11 +54,31 @@ export async function runAiTaggingOnFile(file: File): Promise<AiTagResult | null
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
+      if (debug) {
+        // eslint-disable-next-line no-console
+        console.warn('[ai-tag] non-OK response', {
+          status: res.status,
+          statusText: res.statusText,
+          err,
+          mimeType,
+          bytes: file.size,
+          name: file.name,
+        })
+      }
       devWarn('[upload] Gemini vision tag failed:', res.status, err)
       return null
     }
-    return (await res.json()) as AiTagResult
+    const payload = (await res.json()) as AiTagResult & { debug?: unknown }
+    if (debug) {
+      // eslint-disable-next-line no-console
+      console.log('[ai-tag] ok', { name: file.name, bytes: file.size, mimeType, payload })
+    }
+    return payload as AiTagResult
   } catch (e) {
+    if (debug) {
+      // eslint-disable-next-line no-console
+      console.error('[ai-tag] fetch error', e)
+    }
     devWarn('[upload] Gemini vision tag error:', e)
     return null
   }

@@ -18,6 +18,7 @@ type InlinePart =
 const CATEGORY_REF_DIR = join(process.cwd(), 'lib', 'ai', 'category-refs')
 const CATEGORY_REF_MIME = 'image/png' as const
 const INCLUDE_CATEGORY_REFS = process.env.AI_TAG_INCLUDE_CATEGORY_REFS === '1'
+const AI_TAG_DEBUG = process.env.AI_TAG_DEBUG === '1'
 
 /** Reject huge JSON before parsing (Content-Length is advisory; we also check decoded size). */
 const MAX_CONTENT_LENGTH = Math.ceil(6.5 * 1024 * 1024)
@@ -279,6 +280,11 @@ export async function POST(request: NextRequest) {
 
   const genAI = new GoogleGenerativeAI(key)
   let lastErr: unknown
+  const debugAttempts: Array<{
+    model: string
+    mode: GenMode
+    error: string
+  }> = []
 
   const modes: GenMode[] = ['plain', 'json', 'json_schema']
 
@@ -327,14 +333,30 @@ export async function POST(request: NextRequest) {
         const description =
           typeof parsed.description === 'string' ? parsed.description.trim() : ''
 
-        return NextResponse.json({
+        const payload = {
           title,
           tags,
           category,
           description,
+        }
+        if (!AI_TAG_DEBUG) return NextResponse.json(payload)
+        return NextResponse.json({
+          ...payload,
+          debug: {
+            usedFallback: false,
+            includeCategoryRefs: INCLUDE_CATEGORY_REFS,
+            model: modelName,
+            mode,
+            attempts: debugAttempts,
+          },
         })
       } catch (e) {
         lastErr = e
+        debugAttempts.push({
+          model: modelName,
+          mode,
+          error: e instanceof Error ? e.message : String(e),
+        })
       }
     }
   }
@@ -342,5 +364,17 @@ export async function POST(request: NextRequest) {
   const message = lastErr instanceof Error ? lastErr.message : String(lastErr)
   devError('[api/ai/tag]', message, lastErr)
   // Fail-soft in production: uploads should continue even if AI provider/model is unavailable.
-  return NextResponse.json(fallbackTagPayload())
+  const fallback = fallbackTagPayload()
+  if (!AI_TAG_DEBUG) return NextResponse.json(fallback)
+  return NextResponse.json({
+    ...fallback,
+    debug: {
+      usedFallback: true,
+      includeCategoryRefs: INCLUDE_CATEGORY_REFS,
+      lastError: message,
+      attempts: debugAttempts,
+      hint:
+        'Check GEMINI_API_KEY and GEMINI_VISION_MODEL compatibility; review Vercel function logs for full error. Enable/disable AI_TAG_INCLUDE_CATEGORY_REFS as needed.',
+    },
+  })
 }
