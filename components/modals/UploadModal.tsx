@@ -952,7 +952,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                   </button>
                 </div>
 
-                {bulkSuccessItems.map((item) => {
                 {bulkGroupedSuccessItems.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                     <button
