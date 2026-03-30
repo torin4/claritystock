@@ -38,6 +38,10 @@ interface UploadActions {
   setAiScanning: (i: number, scanning: boolean) => void
   setAi: (i: number, ai: AiTagResult) => void
   updateForm: (i: number, partial: Partial<PhotoFormValues>) => void
+  /** Copy category, collection, location, sub-area & tags from the current photo to every other photo (titles unchanged). */
+  applySharedMetadataFromCurrentToAll: () => void
+  /** Every photo uses the current photo’s new-collection name (clears existing collection picks). */
+  applyNewCollectionFromCurrentToAllPhotos: () => void
   markReviewed: (i: number) => void
   markPublished: (i: number) => void
   setError: (i: number, error: string | null) => void
@@ -127,6 +131,57 @@ export const useUploadStore = create<UploadState & UploadActions>((set) => ({
       const files = [...s.files]
       files[i] = { ...files[i], form: { ...files[i].form, ...partial } }
       return { files }
+    }),
+
+  applySharedMetadataFromCurrentToAll: () =>
+    set((s) => {
+      const i = s.currentIndex
+      const row = s.files[i]
+      if (!row || s.files.length < 2) return {}
+      const {
+        category,
+        collection_id,
+        new_collection_name,
+        neighborhood,
+        subarea,
+        tags,
+      } = row.form
+      return {
+        files: s.files.map((f, j) =>
+          j === i
+            ? f
+            : {
+                ...f,
+                form: {
+                  ...f.form,
+                  category,
+                  collection_id,
+                  new_collection_name,
+                  neighborhood,
+                  subarea,
+                  tags: [...tags],
+                },
+              },
+        ),
+      }
+    }),
+
+  applyNewCollectionFromCurrentToAllPhotos: () =>
+    set((s) => {
+      const i = s.currentIndex
+      const row = s.files[i]?.form
+      const name = row?.new_collection_name?.trim()
+      if (!name || s.files.length < 2) return {}
+      return {
+        files: s.files.map((f) => ({
+          ...f,
+          form: {
+            ...f.form,
+            collection_id: null,
+            new_collection_name: name,
+          },
+        })),
+      }
     }),
 
   markReviewed: (i) =>

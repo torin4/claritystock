@@ -9,6 +9,7 @@ import type { PostgrestError } from '@supabase/supabase-js'
 import { devWarn } from '@/lib/utils/devLog'
 import { resolveNeighborhoodToCanonical } from '@/lib/neighborhoods/canonical'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getOrCreateCollectionByName } from '@/lib/actions/collections.actions'
 
 /** PostgREST when a column is not in the live schema (migration not applied yet). */
 function isMissingColumnError(error: PostgrestError | null, column: string): boolean {
@@ -172,7 +173,12 @@ export async function updatePhotosCollectionIds(
  */
 export async function updatePhotosCategoryNeighborhood(
   photoIds: string[],
-  opts: { category?: Category | null; neighborhood?: string | null; photographerId?: string },
+  opts: {
+    category?: Category | null
+    neighborhood?: string | null
+    subarea?: string | null
+    photographerId?: string
+  },
 ) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -190,10 +196,14 @@ export async function updatePhotosCategoryNeighborhood(
 
   const willCategory = opts.category !== undefined
   const willNeighborhood = opts.neighborhood !== undefined
-  if (!willCategory && !willNeighborhood) throw new Error('Nothing to update')
+  const willSubarea = opts.subarea !== undefined
+  if (!willCategory && !willNeighborhood && !willSubarea) throw new Error('Nothing to update')
 
   const neighborhoodResolved = willNeighborhood
     ? await resolveNeighborhoodForDb(supabase, opts.neighborhood)
+    : undefined
+  const subareaResolved = willSubarea
+    ? (opts.subarea?.trim() ? opts.subarea.trim() : null)
     : undefined
 
   const { data: rows, error: fetchErr } = await supabase
@@ -209,6 +219,7 @@ export async function updatePhotosCategoryNeighborhood(
     const patch: {
       category?: Category | null
       neighborhood?: string | null
+      subarea?: string | null
       tags?: string[]
     } = {}
     if (willCategory) patch.category = opts.category ?? null
@@ -217,6 +228,7 @@ export async function updatePhotosCategoryNeighborhood(
       const cur = (row.tags as string[] | null) ?? []
       patch.tags = cur.filter((t) => t !== PHOTO_TAG_NEEDS_LOCATION)
     }
+    if (willSubarea) patch.subarea = subareaResolved ?? null
 
     const { error } = await supabase
       .from('photos')
@@ -363,16 +375,16 @@ export async function publishPhoto(
     await assertOwnedCollectionId(formValues.collection_id, photographerId)
   }
 
-  // If creating a new collection
+  // New collection: reuse same row when name matches (multi-photo batch / retries).
   let collectionId = formValues.collection_id
-  if (formValues.new_collection_name) {
-    const { data: newColl, error: collErr } = await supabase
-      .from('collections')
-      .insert({ name: formValues.new_collection_name, category: formValues.category, created_by: photographerId })
-      .select('id')
-      .single()
-    if (collErr) throw collErr
-    collectionId = newColl.id
+  const newName = formValues.new_collection_name?.trim()
+  if (newName) {
+    const { id } = await getOrCreateCollectionByName({
+      name: newName,
+      category: formValues.category,
+      ownerId: photographerId,
+    })
+    collectionId = id
   }
 
   const neighborhoodResolved = await resolveNeighborhoodForDb(supabase, formValues.neighborhood)

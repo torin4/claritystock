@@ -78,6 +78,7 @@ export default function MyPhotosClient({
   const [bulkAssignCollId, setBulkAssignCollId] = useState('')
   const [bulkEditCategory, setBulkEditCategory] = useState<'' | Category>('')
   const [bulkEditNeighborhood, setBulkEditNeighborhood] = useState('')
+  const [bulkEditSubarea, setBulkEditSubarea] = useState('')
   const [bulkEditBusy, setBulkEditBusy] = useState(false)
   const [bulkEditError, setBulkEditError] = useState<string | null>(null)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
@@ -110,6 +111,7 @@ export default function MyPhotosClient({
     setSelectedIds([])
     setBulkEditCategory('')
     setBulkEditNeighborhood('')
+    setBulkEditSubarea('')
     setBulkEditError(null)
   }, [])
 
@@ -159,17 +161,23 @@ export default function MyPhotosClient({
     if (!selectedIds.length) return
     const applyCat = bulkEditCategory !== ''
     const applyNeigh = bulkEditNeighborhood.trim().length > 0
-    if (!applyCat && !applyNeigh) { setBulkEditError('Choose a category or enter a neighborhood.'); return }
+    const applySub = bulkEditSubarea.trim().length > 0
+    if (!applyCat && !applyNeigh && !applySub) {
+      setBulkEditError('Choose a category, neighborhood, and/or sub-area.')
+      return
+    }
     setBulkEditBusy(true)
     setBulkEditError(null)
     try {
       await updatePhotosCategoryNeighborhood(selectedIds, {
         ...(applyCat ? { category: bulkEditCategory } : {}),
         ...(applyNeigh ? { neighborhood: bulkEditNeighborhood.trim() } : {}),
+        ...(applySub ? { subarea: bulkEditSubarea.trim() } : {}),
         photographerId: userId,
       })
       setBulkEditCategory('')
       setBulkEditNeighborhood('')
+      setBulkEditSubarea('')
       await refresh()
       router.refresh()
     } catch (e) {
@@ -1141,10 +1149,23 @@ export default function MyPhotosClient({
                 className="ui"
                 disabled={bulkEditBusy}
               />
+              <input
+                className="ui"
+                style={{ fontSize: 12, padding: '4px 6px', minWidth: 100 }}
+                value={bulkEditSubarea}
+                onChange={e => { setBulkEditSubarea(e.target.value); setBulkEditError(null) }}
+                placeholder="Sub-area…"
+                disabled={bulkEditBusy}
+                aria-label="Bulk sub-area"
+              />
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                disabled={bulkEditBusy || !selectedIds.length || (bulkEditCategory === '' && bulkEditNeighborhood.trim() === '')}
+                disabled={
+                  bulkEditBusy ||
+                  !selectedIds.length ||
+                  (bulkEditCategory === '' && bulkEditNeighborhood.trim() === '' && bulkEditSubarea.trim() === '')
+                }
                 onClick={() => void handleBulkEditApply()}
               >
                 {bulkEditBusy ? 'Saving…' : 'Apply'}

@@ -105,6 +105,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const [bulkSelectedPhotoIds, setBulkSelectedPhotoIds] = useState<string[]>([])
   const [bulkBulkCategory, setBulkBulkCategory] = useState<'' | Category>('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
+  const [bulkSubarea, setBulkSubarea] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkUpdateError, setBulkUpdateError] = useState<string | null>(null)
 
@@ -204,8 +205,9 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
 
     const applyCat = bulkBulkCategory !== ''
     const applyNeigh = bulkNeighborhood.trim().length > 0
-    if (!applyCat && !applyNeigh) {
-      setBulkUpdateError('Choose a category and/or enter a neighborhood to apply.')
+    const applySub = bulkSubarea.trim().length > 0
+    if (!applyCat && !applyNeigh && !applySub) {
+      setBulkUpdateError('Choose a category, neighborhood, and/or sub-area to apply.')
       return
     }
 
@@ -215,9 +217,11 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       await updatePhotosCategoryNeighborhood(ids, {
         ...(applyCat ? { category: bulkBulkCategory } : {}),
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
+        ...(applySub ? { subarea: bulkSubarea.trim() } : {}),
         ...(userId ? { photographerId: userId } : {}),
       })
       setBulkNeighborhood('')
+      setBulkSubarea('')
       await loadBulkUpdate()
       // After applying, clear selection so nothing remains checked.
       setBulkSelectedPhotoIds([])
@@ -226,7 +230,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     } finally {
       setBulkBusy(false)
     }
-  }, [bulkNeighborhood, bulkBulkCategory, bulkSelectedPhotoIds, loadBulkUpdate, userId])
+  }, [bulkNeighborhood, bulkSubarea, bulkBulkCategory, bulkSelectedPhotoIds, loadBulkUpdate, userId])
 
   const targetCollectionName = useMemo(
     () =>
@@ -938,6 +942,16 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                         aria-label="Bulk neighborhood"
                       />
                     </label>
+                    <label style={{ display: 'grid', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Sub-area or landmark (optional)</span>
+                      <input
+                        className="ui"
+                        value={bulkSubarea}
+                        onChange={(e) => setBulkSubarea(e.target.value)}
+                        placeholder="Sub-area or landmark"
+                        aria-label="Bulk sub-area"
+                      />
+                    </label>
                   </div>
 
                   <button
@@ -1369,13 +1383,25 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       <option value="__new__">+ Create new collection…</option>
                     </select>
                     {currentForm.new_collection_name !== null && (
-                      <input
-                        className="ui"
-                        style={{ marginTop: 5 }}
-                        placeholder="New collection name…"
-                        value={currentForm.new_collection_name ?? ''}
-                        onChange={e => store.updateForm(store.currentIndex, { new_collection_name: e.target.value })}
-                      />
+                      <>
+                        <input
+                          className="ui"
+                          style={{ marginTop: 5 }}
+                          placeholder="New collection name…"
+                          value={currentForm.new_collection_name ?? ''}
+                          onChange={e => store.updateForm(store.currentIndex, { new_collection_name: e.target.value })}
+                        />
+                        {store.files.length > 1 && currentForm.new_collection_name.trim().length > 0 && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ marginTop: 8, display: 'block' }}
+                            onClick={() => store.applyNewCollectionFromCurrentToAllPhotos()}
+                          >
+                            Use this new collection for all {store.files.length} photos
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -1403,6 +1429,20 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                         onChange={e => store.updateForm(store.currentIndex, { subarea: e.target.value || null })}
                       />
                     </div>
+                    {store.files.length > 1 && (
+                      <div style={{ marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => store.applySharedMetadataFromCurrentToAll()}
+                        >
+                          Apply category, collection, location, sub-area & tags to all {store.files.length} photos
+                        </button>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.4 }}>
+                          Photo names stay per image. Uses values from this photo.
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Tags */}

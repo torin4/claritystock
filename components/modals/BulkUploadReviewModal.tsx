@@ -78,6 +78,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [locationLabels, setLocationLabels] = useState<string[]>([])
   const [bulkCategory, setBulkCategory] = useState<'' | Category>('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
+  const [bulkSubarea, setBulkSubarea] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
@@ -171,16 +172,22 @@ export default function BulkUploadReviewModal({ userId }: Props) {
     if (!ids.length) { setError('Select at least one photo.'); return }
     const applyCat = bulkCategory !== ''
     const applyNeigh = bulkNeighborhood.trim().length > 0
-    if (!applyCat && !applyNeigh) { setError('Choose a category and/or enter a neighborhood.'); return }
+    const applySub = bulkSubarea.trim().length > 0
+    if (!applyCat && !applyNeigh && !applySub) {
+      setError('Choose a category, neighborhood, and/or sub-area.')
+      return
+    }
     setBulkBusy(true)
     setError(null)
     try {
       await updatePhotosCategoryNeighborhood(ids, {
         ...(applyCat ? { category: bulkCategory } : {}),
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
+        ...(applySub ? { subarea: bulkSubarea.trim() } : {}),
         ...(jobPhotographerId ? { photographerId: jobPhotographerId } : {}),
       })
       setBulkNeighborhood('')
+      setBulkSubarea('')
       await load()
       // After applying, clear selection so nothing remains checked.
       setSelectedPhotoIds([])
@@ -457,7 +464,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                     ))}
                   </select>
                 </div>
-                <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Neighborhood</div>
                   <LocationField
                     value={bulkNeighborhood}
@@ -466,10 +473,25 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                     placeholder="Type neighborhood…"
                   />
                 </div>
+                <div style={{ flex: 1, minWidth: 120 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Sub-area</div>
+                  <input
+                    value={bulkSubarea}
+                    onChange={(e) => setBulkSubarea(e.target.value)}
+                    placeholder="Landmark…"
+                    className="ui"
+                    style={{ fontSize: 13, padding: '6px 8px', borderRadius: 6, width: '100%', boxSizing: 'border-box' }}
+                    aria-label="Bulk sub-area"
+                  />
+                </div>
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={bulkBusy || selectedPhotoIds.length === 0 || (bulkCategory === '' && bulkNeighborhood.trim() === '')}
+                  disabled={
+                    bulkBusy ||
+                    selectedPhotoIds.length === 0 ||
+                    (bulkCategory === '' && bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
+                  }
                   onClick={() => void handleBulkApply()}
                 >
                   {bulkBusy ? 'Applying…' : 'Apply'}
