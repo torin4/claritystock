@@ -119,11 +119,8 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       const needs = body.needsLocationPhotoIds ?? []
       setNeedsLocationPhotoIds(needs)
       setMissingLocationOrCategoryPhotoIds(body.missingLocationOrCategoryPhotoIds ?? [])
-      // Pre-select photos needing location, or all successful photos
-      const successIds = nextItems
-        .filter((i) => i.status === 'success' && i.photo_id)
-        .map((i) => i.photo_id as string)
-      setSelectedPhotoIds(needs.length > 0 ? needs : successIds)
+      // Start unchecked by default; user chooses selection explicitly.
+      setSelectedPhotoIds([])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load job')
       setItems([])
@@ -185,6 +182,8 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       })
       setBulkNeighborhood('')
       await load()
+      // After applying, clear selection so nothing remains checked.
+      setSelectedPhotoIds([])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk update failed')
     } finally {

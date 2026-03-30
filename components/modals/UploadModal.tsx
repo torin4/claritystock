@@ -177,10 +177,8 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       setBulkNeedsLocationPhotoIds(needs)
       setBulkMissingLocationOrCategoryPhotoIds(missing)
 
-      const successIds = nextItems
-        .filter((i) => i.status === 'success' && i.photo_id)
-        .map((i) => i.photo_id as string)
-      setBulkSelectedPhotoIds(missing.length > 0 ? missing : successIds)
+      // Start unchecked by default; user must choose explicit targets.
+      setBulkSelectedPhotoIds([])
     } catch (e) {
       setBulkUpdateError(e instanceof Error ? e.message : 'Could not load bulk job')
       setBulkItems([])
@@ -221,6 +219,8 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       })
       setBulkNeighborhood('')
       await loadBulkUpdate()
+      // After applying, clear selection so nothing remains checked.
+      setBulkSelectedPhotoIds([])
     } catch (e) {
       setBulkUpdateError(e instanceof Error ? e.message : 'Bulk update failed')
     } finally {
