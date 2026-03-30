@@ -1436,10 +1436,10 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                           className="btn btn-secondary btn-sm"
                           onClick={() => store.applySharedMetadataFromCurrentToAll()}
                         >
-                          Apply category, collection, location, sub-area & tags to all {store.files.length} photos
+                          Apply collection, location & sub-area to all {store.files.length} photos
                         </button>
                         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.4 }}>
-                          Photo names stay per image. Uses values from this photo.
+                          Category, tags, and photo names stay per image.
                         </div>
                       </div>
                     )}
