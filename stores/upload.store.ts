@@ -102,15 +102,21 @@ export const useUploadStore = create<UploadState & UploadActions>((set) => ({
   setAi: (i, ai) =>
     set((s) => {
       const files = [...s.files]
+      if (!files[i]) return {}
+      const curForm = files[i].form
+      const nextTitle = typeof ai.title === 'string' ? ai.title.trim() : ''
+      const nextTags = Array.isArray(ai.tags) ? ai.tags.filter(Boolean) : []
+      const nextCategory = ai.category
       files[i] = {
         ...files[i],
         ai,
         aiScanning: false,
         form: {
-          ...files[i].form,
-          title: ai.title,
-          tags: ai.tags,
-          category: ai.category,
+          ...curForm,
+          // Only apply AI values when they’re present; don’t overwrite user edits with blanks.
+          ...(nextTitle ? { title: curForm.title?.trim() ? curForm.title : nextTitle } : {}),
+          ...(nextTags.length ? { tags: (curForm.tags?.length ? curForm.tags : nextTags) } : {}),
+          ...(nextCategory ? { category: curForm.category ?? nextCategory } : {}),
         },
       }
       return { files }

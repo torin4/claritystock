@@ -1432,9 +1432,13 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 <button
                   className="btn btn-primary"
                   onClick={handlePublish}
-                  disabled={publishing}
+                  disabled={publishing || anyAiScanning}
                 >
-                  {publishing ? 'Publishing…' : `Publish ${store.files.length} photo${store.files.length !== 1 ? 's' : ''} →`}
+                  {publishing
+                    ? 'Publishing…'
+                    : anyAiScanning
+                      ? 'Waiting for AI…'
+                      : `Publish ${store.files.length} photo${store.files.length !== 1 ? 's' : ''} →`}
                 </button>
               </div>
             </>
