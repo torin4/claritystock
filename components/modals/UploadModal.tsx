@@ -365,7 +365,10 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       if (cancelledRef.current) return
       store.setAiScanning(i, true)
       try {
-        const ai = await runAiTaggingOnFile(file)
+        const ai = await runAiTaggingOnFile(file, {
+          debug: process.env.NEXT_PUBLIC_AI_TAG_DEBUG_UPLOAD === '1',
+          debugLabel: 'simple-upload',
+        })
         if (!cancelledRef.current && ai) store.setAi(i, ai)
       } finally {
         if (!cancelledRef.current) store.setAiScanning(i, false)
