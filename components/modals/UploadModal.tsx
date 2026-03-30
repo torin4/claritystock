@@ -814,6 +814,27 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     () => new Set(bulkMissingLocationOrCategoryPhotoIds),
     [bulkMissingLocationOrCategoryPhotoIds],
   )
+  const [bulkCollapsedGroups, setBulkCollapsedGroups] = useState<Record<string, boolean>>({})
+  const bulkGroupedSuccessItems = useMemo(() => {
+    const map = new Map<string, BulkItemRow[]>()
+    for (const item of bulkSuccessItems) {
+      const key = item.folder_name?.trim() ? item.folder_name.trim() : '__root__'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(item)
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === '__root__' && b !== '__root__') return 1
+      if (a !== '__root__' && b === '__root__') return -1
+      return a.localeCompare(b)
+    })
+  }, [bulkSuccessItems])
+
+  useEffect(() => {
+    if (!bulkUpdateJobId) return
+    const next: Record<string, boolean> = {}
+    for (const [groupKey] of bulkGroupedSuccessItems) next[groupKey] = true
+    setBulkCollapsedGroups(next)
+  }, [bulkUpdateJobId, bulkGroupedSuccessItems])
 
   const reviewedCount = store.files.filter(f => f.ai !== null).length
   const publishedCount = store.files.filter(f => f.published).length
@@ -932,38 +953,82 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 </div>
 
                 {bulkSuccessItems.map((item) => {
-                  const pid = item.photo_id as string
-                  const needs = bulkNeedsLocationSet.has(pid)
-                  const checked = bulkSelectedSet.has(pid)
-                  const thumbPath = item.thumbnail_path ?? item.storage_path
-                  return (
-                    <div
-                      key={item.id}
-                      style={{
-                        display: 'flex',
-                        gap: 12,
-                        alignItems: 'flex-start',
-                        padding: '10px 0',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <label style={{ display: 'flex', alignItems: 'flex-start', paddingTop: 4, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleBulkId(pid)} aria-label={`Select ${item.relative_path}`} />
-                      </label>
-                      <BulkUpdateRowThumb path={thumbPath} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
-                          {item.relative_path}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-                          {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
-                        </div>
-                        {(needs || bulkMissingSet.has(pid)) && (
-                          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
-                            {needs ? 'Needs location' : 'Missing category'}
-                          </div>
+                {bulkGroupedSuccessItems.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        setBulkCollapsedGroups(() =>
+                          Object.fromEntries(bulkGroupedSuccessItems.map(([k]) => [k, false])),
                         )}
-                      </div>
+                    >
+                      Expand all groups
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        setBulkCollapsedGroups(() =>
+                          Object.fromEntries(bulkGroupedSuccessItems.map(([k]) => [k, true])),
+                        )}
+                    >
+                      Collapse all groups
+                    </button>
+                  </div>
+                )}
+                {bulkGroupedSuccessItems.map(([groupKey, groupItems]) => {
+                  const collapsed = bulkCollapsedGroups[groupKey] ?? true
+                  const groupLabel = groupKey === '__root__' ? 'ZIP root (no collection)' : groupKey
+                  return (
+                    <div key={groupKey}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ width: '100%', justifyContent: 'flex-start', marginBottom: 6 }}
+                        onClick={() =>
+                          setBulkCollapsedGroups((prev) => ({ ...prev, [groupKey]: !collapsed }))
+                        }
+                      >
+                        {collapsed ? '▸' : '▾'} {groupLabel} ({groupItems.length})
+                      </button>
+                      {!collapsed &&
+                        groupItems.map((item) => {
+                          const pid = item.photo_id as string
+                          const needs = bulkNeedsLocationSet.has(pid)
+                          const checked = bulkSelectedSet.has(pid)
+                          const thumbPath = item.thumbnail_path ?? item.storage_path
+                          return (
+                            <div
+                              key={item.id}
+                              style={{
+                                display: 'flex',
+                                gap: 12,
+                                alignItems: 'flex-start',
+                                padding: '10px 0',
+                                borderBottom: '1px solid var(--border)',
+                              }}
+                            >
+                              <label style={{ display: 'flex', alignItems: 'flex-start', paddingTop: 4, cursor: 'pointer' }}>
+                                <input type="checkbox" checked={checked} onChange={() => toggleBulkId(pid)} aria-label={`Select ${item.relative_path}`} />
+                              </label>
+                              <BulkUpdateRowThumb path={thumbPath} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                                  {item.relative_path}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                                  {item.folder_name?.trim() ? item.folder_name : 'ZIP root (no collection)'}
+                                </div>
+                                {(needs || bulkMissingSet.has(pid)) && (
+                                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+                                    {needs ? 'Needs location' : 'Missing category'}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
                     </div>
                   )
                 })}
