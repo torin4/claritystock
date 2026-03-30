@@ -43,9 +43,12 @@ async function resolveNeighborhoodForDb(
   const t = input?.trim()
   if (!t) return null
   const { data, error } = await supabase.from('neighborhood_canonicals').select('label')
-  if (error) throw error
+  if (error) {
+    devWarn('[photos] neighborhood_canonicals unavailable; using raw neighborhood value', error.message)
+    return t
+  }
   const labels = (data ?? []).map((r: { label: string }) => r.label)
-  return resolveNeighborhoodToCanonical(t, labels)
+  return resolveNeighborhoodToCanonical(t, labels) ?? t
 }
 
 async function assertCollectionOwnedByPhotographer(
@@ -192,11 +195,6 @@ export async function updatePhotosCategoryNeighborhood(
   const neighborhoodResolved = willNeighborhood
     ? await resolveNeighborhoodForDb(supabase, opts.neighborhood)
     : undefined
-  if (willNeighborhood) {
-    if (neighborhoodResolved == null || !String(neighborhoodResolved).trim()) {
-      throw new Error('Choose a neighborhood that matches the list, or add it in admin first.')
-    }
-  }
 
   const { data: rows, error: fetchErr } = await supabase
     .from('photos')
