@@ -17,6 +17,7 @@ type InlinePart =
 
 const CATEGORY_REF_DIR = join(process.cwd(), 'lib', 'ai', 'category-refs')
 const CATEGORY_REF_MIME = 'image/png' as const
+const INCLUDE_CATEGORY_REFS = process.env.AI_TAG_INCLUDE_CATEGORY_REFS === '1'
 
 /** Reject huge JSON before parsing (Content-Length is advisory; we also check decoded size). */
 const MAX_CONTENT_LENGTH = Math.ceil(6.5 * 1024 * 1024)
@@ -89,6 +90,9 @@ function loadCategoryRefBase64(): { neighborhood: string; city: string; condo: s
 }
 
 function buildVisionParts(uploadMimeType: string, uploadBase64: string): InlinePart[] {
+  if (!INCLUDE_CATEGORY_REFS) {
+    return [{ text: PROMPT }, { inlineData: { mimeType: uploadMimeType, data: uploadBase64 } }]
+  }
   const refs = loadCategoryRefBase64()
   if (!refs) {
     return [{ text: PROMPT }, { inlineData: { mimeType: uploadMimeType, data: uploadBase64 } }]
