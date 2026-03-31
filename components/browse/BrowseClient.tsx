@@ -63,6 +63,7 @@ export default function BrowseClient({
   const category = useFilterStore((s) => s.category)
   const neighborhood = useFilterStore((s) => s.neighborhood)
   const neighborhoodForFetch = neighborhood?.trim() || ''
+  const photographerId = useFilterStore((s) => s.photographerId)
   const sort = useFilterStore((s) => s.sort)
   const quickFilter = useFilterStore((s) => s.quickFilter)
   const collectionId = useFilterStore((s) => s.collectionId)
@@ -92,6 +93,7 @@ export default function BrowseClient({
         search,
         category ?? '',
         neighborhoodForFetch,
+        photographerId ?? '',
         sort,
         quickFilter,
         collectionId ?? '',
@@ -100,6 +102,7 @@ export default function BrowseClient({
       search,
       category,
       neighborhoodForFetch,
+      photographerId,
       sort,
       quickFilter,
       collectionId,
@@ -207,6 +210,7 @@ export default function BrowseClient({
       if (category) query = query.eq('category', category)
       // Case-insensitive so legacy rows (e.g. bellevue) still match filter "Bellevue".
       if (neighborhoodForFetch) query = query.eq('neighborhood', neighborhoodForFetch)
+      if (photographerId) query = query.eq('photographer_id', photographerId)
       if (collectionId) query = query.eq('collection_id', collectionId)
 
       if (hideEffective && userId) {
@@ -281,7 +285,7 @@ export default function BrowseClient({
         setLoading(false)
       }
     }
-  }, [search, category, neighborhoodForFetch, collectionId, sort, quickFilter, userId, hideEffective])
+  }, [search, category, neighborhoodForFetch, photographerId, collectionId, sort, quickFilter, userId, hideEffective])
 
   useEffect(() => {
     if (!didRunInitialFetch.current) {

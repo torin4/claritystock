@@ -1,7 +1,8 @@
 'use client'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFilterStore } from '@/stores/filter.store'
 import { useUIStore } from '@/stores/ui.store'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Category, SortOption } from '@/lib/types/database.types'
 
 const CATEGORIES: { label: string; value: Category | null }[] = [
@@ -23,7 +24,36 @@ interface FilterDrawerProps {
 
 export default function FilterDrawer({ neighborhoodOptions }: FilterDrawerProps) {
   const { filterDrawerOpen, closeFilter } = useUIStore()
-  const { category, neighborhood, sort, setCategory, setNeighborhood, setSort, clearAll } = useFilterStore()
+  const { category, neighborhood, photographerId, sort, setCategory, setNeighborhood, setPhotographerId, setSort, clearAll } = useFilterStore()
+
+  const [photographers, setPhotographers] = useState<Array<{ id: string; name: string | null; initials: string | null }>>([])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, name, initials, role')
+          .eq('role', 'photographer')
+          .order('name', { ascending: true })
+        if (cancelled) return
+        if (error) {
+          setPhotographers([])
+          return
+        }
+        setPhotographers((data ?? []).map((r) => ({
+          id: r.id as string,
+          name: (r as { name: string | null }).name ?? null,
+          initials: (r as { initials: string | null }).initials ?? null,
+        })))
+      } catch {
+        if (!cancelled) setPhotographers([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const dedupedOptions = useMemo(() => {
     const byKey = new Map<string, string>()
@@ -82,6 +112,22 @@ export default function FilterDrawer({ neighborhoodOptions }: FilterDrawerProps)
               <option value="">Anywhere</option>
               {locationChoices.map(n => (
                 <option key={n.toLowerCase()} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="fd-sec">
+            <div className="fd-lbl">Photographer</div>
+            <select
+              className="fd-select"
+              value={photographerId ?? ''}
+              onChange={(e) => setPhotographerId(e.target.value || null)}
+            >
+              <option value="">Anyone</option>
+              {photographers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name ?? p.initials ?? 'Photographer'}
+                </option>
               ))}
             </select>
           </div>
