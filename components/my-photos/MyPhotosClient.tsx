@@ -28,6 +28,7 @@ import type { Photo, Collection, User, Category } from '@/lib/types/database.typ
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 import { sortCollectionsByName } from '@/lib/utils/sortCollectionsByName'
+import { buildPhotosSearchOrClause } from '@/lib/photos/photoTextSearch'
 
 const COLL_LONG_PRESS_MS = 520
 const COLL_MOVE_CANCEL_PX = 12
@@ -585,8 +586,9 @@ export default function MyPhotosClient({
       } else if (photoLibraryScope === 'orphans') {
         query = query.is('collection_id', null)
       }
-      if (searchTerm) {
-        query = query.textSearch('fts', searchTerm, { type: 'websearch' })
+      {
+        const searchOr = buildPhotosSearchOrClause(searchTerm)
+        if (searchOr) query = query.or(searchOr)
       }
 
       if (photoLibrarySort === 'oldest') {
@@ -791,13 +793,15 @@ export default function MyPhotosClient({
       void (async () => {
         try {
           const supabase = getSupabaseBrowserClient()
-          const { data, error } = await supabase
+          const searchOr = buildPhotosSearchOrClause(collectionSearchTerm)
+          let collSearch = supabase
             .from('photos')
             .select('collection_id')
             .eq('photographer_id', userId)
             .not('collection_id', 'is', null)
-            .textSearch('fts', collectionSearchTerm, { type: 'websearch' })
             .limit(5000)
+          collSearch = searchOr ? collSearch.or(searchOr) : collSearch
+          const { data, error } = await collSearch
           if (error) throw error
           if (cancelled) return
           const ids = Array.from(
@@ -1091,7 +1095,8 @@ export default function MyPhotosClient({
                 alignItems: 'center',
                 gap: 10,
                 marginLeft: 'auto',
-                flexWrap: 'wrap',
+                flexWrap: 'nowrap',
+                flexShrink: 0,
               }}
             >
               {localCollections.length > 0 ? (
@@ -1102,7 +1107,7 @@ export default function MyPhotosClient({
                   <select
                     id="mp-coll-sort"
                     className="ui"
-                    style={{ fontSize: 12, padding: '4px 8px', minWidth: 140, maxWidth: 200 }}
+                    style={{ fontSize: 12, padding: '4px 8px', minWidth: 140, maxWidth: 200, flexShrink: 0 }}
                     value={collectionSort}
                     onChange={(e) => setCollectionSort(e.target.value as CollectionSort)}
                     aria-label="Sort collections"
@@ -1292,7 +1297,7 @@ export default function MyPhotosClient({
               width: '100%',
             }}
           >
-            <div className="si-wrap" style={{ flex: '1 1 240px', minWidth: 180, maxWidth: 520 }}>
+            <div className="si-wrap" style={{ flex: '1 1 240px', minWidth: 0, maxWidth: 520 }}>
               <span className="si-icon">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.5"/>
@@ -1318,45 +1323,56 @@ export default function MyPhotosClient({
                 alignItems: 'center',
                 gap: 10,
                 marginLeft: 'auto',
-                flexWrap: 'wrap',
+                flexWrap: 'nowrap',
+                flexShrink: 0,
               }}
             >
-              {!drillColl && tab === 'photos' && (
-                <>
-                  <label htmlFor="mp-photo-scope" className="sr-only">
-                    Library filter
-                  </label>
-                  <select
-                    id="mp-photo-scope"
-                    className="ui"
-                    style={{ fontSize: 12, padding: '4px 8px', minWidth: 120, maxWidth: 220 }}
-                    value={photoLibraryScope}
-                    onChange={(e) => setPhotoLibraryScope(e.target.value as PhotoLibraryScope)}
-                    aria-label="Filter photos by collection assignment"
-                    disabled={selectionMode}
-                  >
-                    <option value="all">All photos</option>
-                    <option value="orphans">No collection</option>
-                  </select>
-                </>
-              )}
-              <label htmlFor="mp-photo-sort" className="sr-only">
-                Sort photos
-              </label>
-              <select
-                id="mp-photo-sort"
-                className="ui"
-                style={{ fontSize: 12, padding: '4px 8px', minWidth: 140, maxWidth: 200 }}
-                value={photoLibrarySort}
-                onChange={(e) => setPhotoLibrarySort(e.target.value as PhotoLibrarySort)}
-                aria-label="Sort photos"
-                disabled={selectionMode}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'nowrap',
+                  flexShrink: 0,
+                }}
               >
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="title-asc">Title A–Z</option>
-                <option value="title-desc">Title Z–A</option>
-              </select>
+                {!drillColl && tab === 'photos' && (
+                  <>
+                    <label htmlFor="mp-photo-scope" className="sr-only">
+                      Library filter
+                    </label>
+                    <select
+                      id="mp-photo-scope"
+                      className="ui"
+                      style={{ fontSize: 12, padding: '4px 8px', minWidth: 120, maxWidth: 220, flexShrink: 0 }}
+                      value={photoLibraryScope}
+                      onChange={(e) => setPhotoLibraryScope(e.target.value as PhotoLibraryScope)}
+                      aria-label="Filter photos by collection assignment"
+                      disabled={selectionMode}
+                    >
+                      <option value="all">All photos</option>
+                      <option value="orphans">No collection</option>
+                    </select>
+                  </>
+                )}
+                <label htmlFor="mp-photo-sort" className="sr-only">
+                  Sort photos
+                </label>
+                <select
+                  id="mp-photo-sort"
+                  className="ui"
+                  style={{ fontSize: 12, padding: '4px 8px', minWidth: 140, maxWidth: 200, flexShrink: 0 }}
+                  value={photoLibrarySort}
+                  onChange={(e) => setPhotoLibrarySort(e.target.value as PhotoLibrarySort)}
+                  aria-label="Sort photos"
+                  disabled={selectionMode}
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="title-asc">Title A–Z</option>
+                  <option value="title-desc">Title Z–A</option>
+                </select>
+              </div>
               <span
                 style={{
                   fontSize: 11,

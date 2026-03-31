@@ -19,6 +19,7 @@ import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import type { Photo, Collection } from '@/lib/types/database.types'
 import { devError } from '@/lib/utils/devLog'
+import { buildPhotosSearchOrClause } from '@/lib/photos/photoTextSearch'
 
 interface BrowseClientProps {
   initialPhotos: Photo[]
@@ -199,8 +200,9 @@ export default function BrowseClient({
         .from('photos')
         .select(PHOTO_CARD_SELECT)
 
-      if (search) {
-        query = query.textSearch('fts', search, { type: 'websearch' })
+      {
+        const searchOr = buildPhotosSearchOrClause(search)
+        if (searchOr) query = query.or(searchOr)
       }
       if (category) query = query.eq('category', category)
       // Case-insensitive so legacy rows (e.g. bellevue) still match filter "Bellevue".

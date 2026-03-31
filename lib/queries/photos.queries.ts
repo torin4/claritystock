@@ -7,6 +7,7 @@ import {
   PHOTO_DETAIL_SELECT,
   PHOTO_MY_LIBRARY_CARD_SELECT,
 } from '@/lib/queries/photoSelects'
+import { buildPhotosSearchOrClause } from '@/lib/photos/photoTextSearch'
 
 export async function getPhotos(
   supabase: SupabaseClient,
@@ -22,8 +23,9 @@ export async function getPhotos(
     query = query.or(`photographer_id.is.null,photographer_id.neq.${userId}`)
   }
 
-  if (filters.search) {
-    query = query.textSearch('fts', filters.search, { type: 'websearch' })
+  {
+    const searchOr = buildPhotosSearchOrClause(filters.search ?? '')
+    if (searchOr) query = query.or(searchOr)
   }
   if (filters.category) {
     query = query.eq('category', filters.category)
@@ -96,10 +98,8 @@ export async function getMyPhotosPage(
     .select(PHOTO_MY_LIBRARY_CARD_SELECT, { count: 'exact' })
     .eq('photographer_id', userId)
 
-  const search = options.search?.trim()
-  if (search) {
-    query = query.textSearch('fts', search, { type: 'websearch' })
-  }
+  const searchOr = buildPhotosSearchOrClause(options.search ?? '')
+  if (searchOr) query = query.or(searchOr)
   if (options.collectionId) {
     query = query.eq('collection_id', options.collectionId)
   }
