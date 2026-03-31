@@ -592,7 +592,7 @@ export default function BrowseClient({
                   disabled={loading || loadingMore}
                   onClick={() => { void loadMorePhotos() }}
                 >
-                  {loadingMore ? 'Loading…' : `Load more (${BROWSE_PAGE_SIZE})`}
+                  {loadingMore ? 'Loading…' : 'Load more'}
                 </button>
               </div>
             )}
