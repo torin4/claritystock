@@ -485,9 +485,19 @@ export default function BulkUploadReviewModal({ userId }: Props) {
               </div>
             </>
           )}
-          <button type="button" className="btn btn-ghost" onClick={closeBulkReview}>
-            Close
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={bulkBusy || selectedPhotoIds.length === 0}
+              onClick={() => openEdit(selectedPhotoIds[0])}
+            >
+              Edit selected photo
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={closeBulkReview}>
+              Close
+            </button>
+          </div>
         </div>}
       </div>
     </>
