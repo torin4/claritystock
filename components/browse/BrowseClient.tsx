@@ -53,6 +53,8 @@ export default function BrowseClient({
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [browseMode, setBrowseMode] = useState<'photos' | 'collections'>('photos')
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMorePhotos, setHasMorePhotos] = useState(true)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [zipBusy, setZipBusy] = useState(false)
@@ -192,11 +194,18 @@ export default function BrowseClient({
     }
   }
 
-  const fetchPhotos = useCallback(async () => {
+  const fetchPhotos = useCallback(async (opts?: { offset?: number; append?: boolean }) => {
     fetchAbortRef.current?.abort()
     const ac = new AbortController()
     fetchAbortRef.current = ac
-    setLoading(true)
+    const offset = opts?.offset ?? 0
+    const append = opts?.append === true
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+      setHasMorePhotos(true)
+    }
     try {
       const supabase = getSupabaseBrowserClient()
       let query = supabase
@@ -247,11 +256,14 @@ export default function BrowseClient({
         if (ids.length) query = query.not('id', 'in', `(${ids.join(',')})`)
       }
 
-      const { data } = await query.limit(BROWSE_PAGE_SIZE)
+      const { data } = await query.range(offset, offset + BROWSE_PAGE_SIZE - 1)
       if (ac.signal.aborted) return
       const photoIds = (data ?? []).map((p: { id: string }) => p.id)
       if (!photoIds.length) {
-        if (!ac.signal.aborted) setPhotos([])
+        if (!ac.signal.aborted) {
+          if (!append) setPhotos([])
+          setHasMorePhotos(false)
+        }
         return
       }
 
@@ -279,10 +291,16 @@ export default function BrowseClient({
       })) as Photo[]
 
       if (ac.signal.aborted) return
-      setPhotos(result)
+      setHasMorePhotos((data ?? []).length === BROWSE_PAGE_SIZE)
+      setPhotos((prev) => {
+        if (!append) return result
+        const seen = new Set(prev.map((p) => p.id))
+        return [...prev, ...result.filter((p) => !seen.has(p.id))]
+      })
     } finally {
       if (fetchAbortRef.current === ac) {
         setLoading(false)
+        setLoadingMore(false)
       }
     }
   }, [search, category, neighborhoodForFetch, photographerId, collectionId, sort, quickFilter, userId, hideEffective])
@@ -300,11 +318,16 @@ export default function BrowseClient({
     }
     setLoading(true)
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(fetchPhotos, search ? 400 : 0)
+    debounceRef.current = setTimeout(() => { void fetchPhotos({ offset: 0, append: false }) }, search ? 400 : 0)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [fetchPhotos, filterKey, search, browseMode, collectionId])
+
+  const loadMorePhotos = useCallback(async () => {
+    if (loading || loadingMore || !hasMorePhotos) return
+    await fetchPhotos({ offset: photos.length, append: true })
+  }, [fetchPhotos, hasMorePhotos, loading, loadingMore, photos.length])
 
   useEffect(() => {
     if (browseMode !== 'collections') return
@@ -558,6 +581,18 @@ export default function BrowseClient({
               onBeginSelection={beginSelection}
               onToggleSelected={toggleSelected}
             />
+            {hasMorePhotos && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 20px 20px' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={loading || loadingMore}
+                  onClick={() => { void loadMorePhotos() }}
+                >
+                  {loadingMore ? 'Loading…' : `Load more (${BROWSE_PAGE_SIZE})`}
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
