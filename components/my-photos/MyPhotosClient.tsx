@@ -94,6 +94,8 @@ export default function MyPhotosClient({
   const [bulkNewCollName, setBulkNewCollName] = useState('')
   const [bulkExistingCollNotice, setBulkExistingCollNotice] = useState<string | null>(null)
   const [bulkEditCategory, setBulkEditCategory] = useState<'' | Category>('')
+  /** When set, category matches this collection’s stored type (neighborhood / city / condo). */
+  const [bulkCategoryFromCollId, setBulkCategoryFromCollId] = useState('')
   const [bulkEditNeighborhood, setBulkEditNeighborhood] = useState('')
   const [bulkEditSubarea, setBulkEditSubarea] = useState('')
   const [bulkEditBusy, setBulkEditBusy] = useState(false)
@@ -147,6 +149,7 @@ export default function MyPhotosClient({
     setSelectionMode(false)
     setSelectedIds([])
     setBulkEditCategory('')
+    setBulkCategoryFromCollId('')
     setBulkEditNeighborhood('')
     setBulkEditSubarea('')
     setBulkEditError(null)
@@ -231,6 +234,7 @@ export default function MyPhotosClient({
         photographerId: userId,
       })
       setBulkEditCategory('')
+      setBulkCategoryFromCollId('')
       setBulkEditNeighborhood('')
       setBulkEditSubarea('')
       await refresh()
@@ -1902,7 +1906,11 @@ export default function MyPhotosClient({
                 className="ui"
                 style={{ fontSize: 12, padding: '4px 6px' }}
                 value={bulkEditCategory}
-                onChange={e => { setBulkEditCategory(e.target.value as '' | Category); setBulkEditError(null) }}
+                onChange={e => {
+                  setBulkEditCategory(e.target.value as '' | Category)
+                  setBulkCategoryFromCollId('')
+                  setBulkEditError(null)
+                }}
                 disabled={bulkEditBusy}
                 aria-label="Bulk category"
               >
@@ -1911,6 +1919,35 @@ export default function MyPhotosClient({
                 <option value="city">City</option>
                 <option value="condo">Condo</option>
               </select>
+              {collectionsForSelect.length > 0 && (
+                <select
+                  className="ui mp-select-bar-cat-coll"
+                  value={bulkCategoryFromCollId}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    setBulkCategoryFromCollId(id)
+                    setBulkEditError(null)
+                    if (id) {
+                      const c = collectionsForSelect.find((x) => x.id === id)
+                      const cat = c?.category ?? null
+                      setBulkEditCategory((cat ?? 'neighborhood') as Category)
+                    }
+                  }}
+                  disabled={bulkEditBusy}
+                  aria-label="Set category from an existing collection’s type"
+                  title="Use the neighborhood / city / condo type saved on that collection"
+                >
+                  <option value="">From collection…</option>
+                  {collectionsForSelect.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.category
+                        ? ` (${categoryShortLabel(c.category)})`
+                        : ' (neighborhood default)'}
+                    </option>
+                  ))}
+                </select>
+              )}
               <LocationField
                 value={bulkEditNeighborhood}
                 onChange={v => { setBulkEditNeighborhood(v); setBulkEditError(null) }}
@@ -1971,6 +2008,19 @@ export default function MyPhotosClient({
       )}
     </div>
   )
+}
+
+function categoryShortLabel(c: Category): string {
+  switch (c) {
+    case 'neighborhood':
+      return 'Neighborhood'
+    case 'city':
+      return 'City'
+    case 'condo':
+      return 'Condo'
+    default:
+      return String(c)
+  }
 }
 
 function OrphanPickerRow({
