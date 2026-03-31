@@ -9,6 +9,9 @@ import type { AiTagResult, PhotoFormValues } from '@/lib/types/database.types'
 export const MAX_UPLOAD_MB = 50
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
+/** Standard (non-ZIP) Add Photos flow: max files per batch. */
+export const MAX_SIMPLE_UPLOAD_PHOTOS = 20
+
 /** Geocode GPS coordinates into a neighborhood label (same as UploadModal). */
 export async function neighborhoodFromCoordinates(
   lat: number,

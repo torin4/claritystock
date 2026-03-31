@@ -9,6 +9,8 @@ export interface LibraryDuplicateMatch {
 }
 
 export interface UploadFileState {
+  /** Stable key for React lists (survives reorder/remove). */
+  uploadId: string
   file: File
   exif: ExifResult | null
   ai: AiTagResult | null
@@ -44,6 +46,8 @@ interface UploadActions {
   applyNewCollectionFromCurrentToAllPhotos: () => void
   markReviewed: (i: number) => void
   markPublished: (i: number) => void
+  /** Remove one photo from the batch; empty batch returns to step 1. */
+  removeFileAt: (index: number) => void
   setError: (i: number, error: string | null) => void
   /** One entry per file, same order as files[] — sets contentHash + libraryDuplicates after hashing */
   setAllFileFingerprints: (
@@ -72,6 +76,7 @@ export const useUploadStore = create<UploadState & UploadActions>((set) => ({
   setFiles: (files) =>
     set({
       files: files.map((file) => ({
+        uploadId: crypto.randomUUID(),
         file,
         exif: null,
         ai: null,
@@ -187,6 +192,24 @@ export const useUploadStore = create<UploadState & UploadActions>((set) => ({
       const files = [...s.files]
       files[i] = { ...files[i], published: true }
       return { files }
+    }),
+
+  removeFileAt: (index) =>
+    set((s) => {
+      if (index < 0 || index >= s.files.length) return {}
+      const files = s.files.filter((_, j) => j !== index)
+      const n = files.length
+      if (n === 0) {
+        return { files: [], currentIndex: 0, step: 1 }
+      }
+      let currentIndex = s.currentIndex
+      if (index < currentIndex) currentIndex -= 1
+      else if (index === currentIndex) currentIndex = Math.min(index, n - 1)
+      return {
+        files,
+        currentIndex: Math.max(0, Math.min(currentIndex, n - 1)),
+        step: s.step,
+      }
     }),
 
   setError: (i, error) =>

@@ -6,6 +6,7 @@ import { extractGps } from '@/lib/utils/exif'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { devWarn } from '@/lib/utils/devLog'
 import {
+  MAX_SIMPLE_UPLOAD_PHOTOS,
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_MB,
   neighborhoodFromCoordinates,
@@ -316,44 +317,57 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     const tooLarge = images.filter(f => f.size > MAX_UPLOAD_BYTES)
     const valid = images.filter(f => f.size <= MAX_UPLOAD_BYTES)
     const nonImages = files.length - images.length
+    const capped =
+      valid.length > MAX_SIMPLE_UPLOAD_PHOTOS
+        ? valid.slice(0, MAX_SIMPLE_UPLOAD_PHOTOS)
+        : valid
+    const overflow = valid.length - capped.length
 
-    if (tooLarge.length || nonImages) {
+    const noticeParts: string[] = []
+    if (tooLarge.length) {
       const rejectedNames = tooLarge.slice(0, 3).map(f => f.name).join(', ')
+      noticeParts.push(
+        `${tooLarge.length} photo${tooLarge.length === 1 ? '' : 's'} skipped for being over ${MAX_UPLOAD_MB}MB each${rejectedNames ? `: ${rejectedNames}` : ''}.`,
+      )
+    }
+    if (nonImages) {
+      noticeParts.push(`${nonImages} non-image file${nonImages === 1 ? '' : 's'} ignored.`)
+    }
+    if (overflow > 0) {
+      noticeParts.push(
+        `${overflow} photo${overflow === 1 ? '' : 's'} not added — simple upload allows at most ${MAX_SIMPLE_UPLOAD_PHOTOS} at a time.`,
+      )
+    }
+
+    if (noticeParts.length) {
       setUploadNotice({
         tone: 'warning',
-        message: [
-          tooLarge.length
-            ? `${tooLarge.length} photo${tooLarge.length === 1 ? '' : 's'} skipped for being over ${MAX_UPLOAD_MB}MB each${rejectedNames ? `: ${rejectedNames}` : ''}.`
-            : null,
-          nonImages
-            ? `${nonImages} non-image file${nonImages === 1 ? '' : 's'} ignored.`
-            : null,
-        ].filter(Boolean).join(' '),
+        message: noticeParts.join(' '),
       })
     } else {
       setUploadNotice({
         tone: 'info',
-        message: `Upload limit: ${MAX_UPLOAD_MB}MB per photo.`,
+        message: `Upload limit: ${MAX_UPLOAD_MB}MB per photo, up to ${MAX_SIMPLE_UPLOAD_PHOTOS} photos at a time.`,
       })
     }
 
-    if (!valid.length) return
+    if (!capped.length) return
     setLibraryDupNeedsMigration(false)
-    store.setFiles(valid)
+    store.setFiles(capped)
     if (defaultCollectionId) {
-      for (let i = 0; i < valid.length; i++) {
+      for (let i = 0; i < capped.length; i++) {
         store.updateForm(i, { collection_id: defaultCollectionId, new_collection_name: null })
       }
     }
     store.setStep(2)
-    void runDuplicateFingerprint(valid)
+    void runDuplicateFingerprint(capped)
 
     // Parallelize EXIF/geocode + Gemini tagging (bounded to avoid CPU + API spikes).
-    const indices = Array.from({ length: valid.length }, (_, i) => i)
+    const indices = Array.from({ length: capped.length }, (_, i) => i)
     const REVIEW_CONCURRENCY = 2
     await runWithConcurrency(indices, REVIEW_CONCURRENCY, async (i) => {
       if (cancelledRef.current) return
-      const file = valid[i]
+      const file = capped[i]
       try {
         const gps = await extractGps(file)
         if (!cancelledRef.current && gps) store.setExif(i, gps)
@@ -1230,7 +1244,9 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 <PlusIcon size={26} />
               </div>
               <div className="dz-title">Drop photos into Library</div>
-              <div className="dz-sub">JPEG or PNG · up to {MAX_UPLOAD_MB}MB each</div>
+              <div className="dz-sub">
+                JPEG or PNG · up to {MAX_UPLOAD_MB}MB each · max {MAX_SIMPLE_UPLOAD_PHOTOS} photos per upload
+              </div>
               <div
                 style={{
                   marginTop: 8,
@@ -1240,7 +1256,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                   textAlign: 'center',
                 }}
               >
-                Files over {MAX_UPLOAD_MB}MB are skipped before upload starts.
+                Files over {MAX_UPLOAD_MB}MB are skipped; extra photos beyond {MAX_SIMPLE_UPLOAD_PHOTOS} are not included.
               </div>
               <button
                 className="btn btn-primary"
@@ -1288,17 +1304,29 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               {/* Filmstrip */}
               <div className="filmstrip">
                 {store.files.map((f, i) => {
-                  const previewUrl = URL.createObjectURL(f.file)
-                  const dup = dupHints[i]?.inLibrary || dupHints[i]?.inBatch
+                  const hint = dupHints[i]
+                  const dup = !!(hint?.inLibrary || hint?.inBatch)
+                  const titleHint = dup
+                    ? [
+                        hint?.inLibrary ? 'Matches a photo already in your library (same file)' : null,
+                        hint?.inBatch ? 'Repeated in this upload' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : `Photo ${i + 1} of ${store.files.length}`
                   return (
-                    <div
-                      key={i}
-                      className={`ft ${store.currentIndex === i ? 'active' : ''} ${f.ai ? 'reviewed' : ''} ${dup ? 'dup' : ''}`}
-                      onClick={() => store.setCurrentIndex(i)}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
+                    <UploadFilmstripThumb
+                      key={f.uploadId}
+                      file={f.file}
+                      active={store.currentIndex === i}
+                      reviewed={!!f.ai}
+                      isDup={dup}
+                      dupInLibrary={!!hint?.inLibrary}
+                      title={titleHint}
+                      onSelect={() => store.setCurrentIndex(i)}
+                      onRemove={() => store.removeFileAt(i)}
+                      disableRemove={publishing || anyAiScanning}
+                    />
                   )
                 })}
               </div>
@@ -1327,6 +1355,16 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       </ul>
                     </div>
                   )}
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={publishing || anyAiScanning}
+                      onClick={() => store.removeFileAt(store.currentIndex)}
+                    >
+                      Remove from upload
+                    </button>
+                  </div>
                   {/* Title */}
                   <div className="uf">
                     <div className="ul-row">
@@ -1518,7 +1556,9 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       <b>{dupWarningCount}</b> duplicate{dupWarningCount !== 1 ? 's' : ''} flagged
                     </span>
                   )}
-                  <span>Limit <b>{MAX_UPLOAD_MB}MB</b> each</span>
+                  <span>
+                    Max <b>{MAX_SIMPLE_UPLOAD_PHOTOS}</b> photos · <b>{MAX_UPLOAD_MB}MB</b> each
+                  </span>
                 </div>
               </div>
 
@@ -1568,6 +1608,67 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
         </div>
       </div>
     </>
+  )
+}
+
+function UploadFilmstripThumb({
+  file,
+  active,
+  reviewed,
+  isDup,
+  dupInLibrary,
+  title,
+  onSelect,
+  onRemove,
+  disableRemove,
+}: {
+  file: File
+  active: boolean
+  reviewed: boolean
+  isDup: boolean
+  dupInLibrary: boolean
+  title: string
+  onSelect: () => void
+  onRemove: () => void
+  disableRemove: boolean
+}) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    const u = URL.createObjectURL(file)
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [file])
+
+  return (
+    <div
+      className={`ft ${active ? 'active' : ''} ${reviewed ? 'reviewed' : ''} ${isDup ? 'dup' : ''}`}
+      onClick={onSelect}
+      title={title}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <div style={{ width: '100%', height: '100%', background: 'var(--surface-2)' }} />
+      )}
+      {isDup ? (
+        <span className={`ft-dup-badge${dupInLibrary ? ' ft-dup-badge--lib' : ''}`} aria-hidden>
+          Dup
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className="ft-remove"
+        aria-label="Remove from upload"
+        disabled={disableRemove}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (!disableRemove) onRemove()
+        }}
+      >
+        ×
+      </button>
+    </div>
   )
 }
 
