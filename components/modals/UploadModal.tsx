@@ -16,7 +16,7 @@ import {
 } from '@/lib/uploads/processImageForPublish'
 import { contentHashInFilter, isContentHashColumnMissingError } from '@/lib/utils/contentHashQuery'
 import { sha256HexFromFile } from '@/lib/utils/sha256File'
-import type { Collection, Category } from '@/lib/types/database.types'
+import type { Collection } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
@@ -107,7 +107,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const [bulkNeedsLocationPhotoIds, setBulkNeedsLocationPhotoIds] = useState<string[]>([])
   const [bulkMissingLocationOrCategoryPhotoIds, setBulkMissingLocationOrCategoryPhotoIds] = useState<string[]>([])
   const [bulkSelectedPhotoIds, setBulkSelectedPhotoIds] = useState<string[]>([])
-  const [bulkBulkCategory, setBulkBulkCategory] = useState<'' | Category>('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
   const [bulkSubarea, setBulkSubarea] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -201,6 +200,11 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     void loadBulkUpdate()
   }, [loadBulkUpdate])
 
+  useEffect(() => {
+    setBulkNeighborhood('')
+    setBulkSubarea('')
+  }, [bulkUpdateJobId])
+
   const handleBulkApply = useCallback(async () => {
     const ids = bulkSelectedPhotoIds.filter(Boolean)
     if (!ids.length) {
@@ -208,11 +212,10 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       return
     }
 
-    const applyCat = bulkBulkCategory !== ''
     const applyNeigh = bulkNeighborhood.trim().length > 0
     const applySub = bulkSubarea.trim().length > 0
-    if (!applyCat && !applyNeigh && !applySub) {
-      setBulkUpdateError('Choose a category, neighborhood, and/or sub-area to apply.')
+    if (!applyNeigh && !applySub) {
+      setBulkUpdateError('Choose a neighborhood and/or sub-area to apply.')
       return
     }
 
@@ -220,7 +223,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     setBulkUpdateError(null)
     try {
       await updatePhotosCategoryNeighborhood(ids, {
-        ...(applyCat ? { category: bulkBulkCategory } : {}),
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
         ...(applySub ? { subarea: bulkSubarea.trim() } : {}),
         ...(userId ? { photographerId: userId } : {}),
@@ -235,7 +237,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     } finally {
       setBulkBusy(false)
     }
-  }, [bulkNeighborhood, bulkSubarea, bulkBulkCategory, bulkSelectedPhotoIds, loadBulkUpdate, userId])
+  }, [bulkNeighborhood, bulkSubarea, bulkSelectedPhotoIds, loadBulkUpdate, userId])
 
   const targetCollectionName = useMemo(
     () =>
@@ -940,7 +942,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                 <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-1)' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Choose photos to update</div>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-                    Select images, then set category and/or neighborhood. Location updates clear the “needs location” tag.
+                    Select images, then set neighborhood and/or sub-area. Category is set by AI at import; use Edit on a photo to change it. Location updates clear the “needs location” tag.
                   </p>
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
@@ -967,20 +969,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
 
                   <div style={{ display: 'grid', gap: 12, marginBottom: 12 }}>
                     <label style={{ display: 'grid', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Category (optional)</span>
-                      <select
-                        className="ui"
-                        value={bulkBulkCategory}
-                        onChange={(e) => setBulkBulkCategory((e.target.value as Category | '') || '')}
-                        aria-label="Bulk category"
-                      >
-                        <option value="">— Leave unchanged —</option>
-                        <option value="neighborhood">Neighborhood</option>
-                        <option value="city">City</option>
-                        <option value="condo">Condo</option>
-                      </select>
-                    </label>
-                    <label style={{ display: 'grid', gap: 6 }}>
                       <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Neighborhood (optional)</span>
                       <LocationField
                         value={bulkNeighborhood}
@@ -1005,7 +993,11 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    disabled={bulkBusy || bulkSelectedPhotoIds.length === 0}
+                    disabled={
+                      bulkBusy ||
+                      bulkSelectedPhotoIds.length === 0 ||
+                      (bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
+                    }
                     onClick={() => void handleBulkApply()}
                   >
                     {bulkBusy
@@ -1414,24 +1406,6 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                     />
                   </div>
 
-                  {/* Category */}
-                  <div className="uf">
-                    <div className="ul-row">
-                      <div className="ul">Category</div>
-                      {current.ai && <span className="ai-badge">✦ AI</span>}
-                    </div>
-                    <select
-                      className="ui"
-                      value={currentForm.category ?? ''}
-                      onChange={e => store.updateForm(store.currentIndex, { category: (e.target.value as Category) || null })}
-                    >
-                      <option value="">Select category…</option>
-                      <option value="neighborhood">Neighborhood</option>
-                      <option value="city">City</option>
-                      <option value="condo">Condo</option>
-                    </select>
-                  </div>
-
                   {/* Collection */}
                   <div className="uf">
                     <div className="ul-row">
@@ -1531,7 +1505,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                           Apply collection, location & sub-area to all {store.files.length} photos
                         </button>
                         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.4 }}>
-                          Category, tags, and photo names stay per image.
+                          Tags and photo names stay per image. Category is set by AI (change via Edit if needed).
                         </div>
                       </div>
                     )}

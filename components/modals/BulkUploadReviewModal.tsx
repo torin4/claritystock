@@ -9,7 +9,7 @@ import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 import { updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
-import type { Category, PhotoFormValues } from '@/lib/types/database.types'
+import type { PhotoFormValues } from '@/lib/types/database.types'
 
 type BulkItemRow = {
   id: string
@@ -54,12 +54,6 @@ function ItemThumb({ path }: { path: string | null }) {
   )
 }
 
-const CATEGORIES: { value: Category; label: string }[] = [
-  { value: 'neighborhood', label: 'Neighborhood' },
-  { value: 'city', label: 'City' },
-  { value: 'condo', label: 'Condo' },
-]
-
 interface Props {
   userId: string
 }
@@ -76,7 +70,6 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
   const [jobPhotographerId, setJobPhotographerId] = useState<string | null>(null)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
-  const [bulkCategory, setBulkCategory] = useState<'' | Category>('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
   const [bulkSubarea, setBulkSubarea] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -134,6 +127,11 @@ export default function BulkUploadReviewModal({ userId }: Props) {
 
   useEffect(() => { void load() }, [load])
 
+  useEffect(() => {
+    setBulkNeighborhood('')
+    setBulkSubarea('')
+  }, [bulkReviewJobId])
+
   const selectedSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds])
 
   const togglePhotoId = (id: string) => {
@@ -170,18 +168,16 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const handleBulkApply = async () => {
     const ids = selectedPhotoIds.filter(Boolean)
     if (!ids.length) { setError('Select at least one photo.'); return }
-    const applyCat = bulkCategory !== ''
     const applyNeigh = bulkNeighborhood.trim().length > 0
     const applySub = bulkSubarea.trim().length > 0
-    if (!applyCat && !applyNeigh && !applySub) {
-      setError('Choose a category, neighborhood, and/or sub-area.')
+    if (!applyNeigh && !applySub) {
+      setError('Choose a neighborhood and/or sub-area to apply.')
       return
     }
     setBulkBusy(true)
     setError(null)
     try {
       await updatePhotosCategoryNeighborhood(ids, {
-        ...(applyCat ? { category: bulkCategory } : {}),
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
         ...(applySub ? { subarea: bulkSubarea.trim() } : {}),
         ...(jobPhotographerId ? { photographerId: jobPhotographerId } : {}),
@@ -450,20 +446,10 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                   ? `Update ${selectedPhotoIds.length} selected photo${selectedPhotoIds.length !== 1 ? 's' : ''}`
                   : 'Select photos above to update'}
               </div>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px', lineHeight: 1.45 }}>
+                Set neighborhood and/or sub-area. Category is set by AI at import; use Edit on a photo to change it. Group headers are ZIP folder names — tags and names stay per image.
+              </p>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
-                <div style={{ flex: '0 0 auto' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Category</div>
-                  <select
-                    value={bulkCategory}
-                    onChange={(e) => setBulkCategory(e.target.value as '' | Category)}
-                    style={{ fontSize: 13, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)' }}
-                  >
-                    <option value="">— unchanged —</option>
-                    {CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Neighborhood</div>
                   <LocationField
@@ -490,7 +476,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                   disabled={
                     bulkBusy ||
                     selectedPhotoIds.length === 0 ||
-                    (bulkCategory === '' && bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
+                    (bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
                   }
                   onClick={() => void handleBulkApply()}
                 >
