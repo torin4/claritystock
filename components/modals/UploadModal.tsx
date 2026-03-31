@@ -94,6 +94,8 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const [publishing, setPublishing] = useState(false)
   const [collections, setCollections] = useState<Collection[]>([])
   const [uploadNotice, setUploadNotice] = useState<UploadNotice>(null)
+  /** Shown when “new collection” name matches an existing collection (same rules as publish). */
+  const [existingCollNameNotice, setExistingCollNameNotice] = useState<string | null>(null)
   /** Set when DB has no `content_hash` column — library dup check skipped; same-batch still works */
   const [libraryDupNeedsMigration, setLibraryDupNeedsMigration] = useState(false)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
@@ -252,6 +254,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     }
     store.reset()
     setUploadNotice(null)
+    setExistingCollNameNotice(null)
     setLibraryDupNeedsMigration(false)
     setUploadKind('standard')
     closeUpload()
@@ -355,6 +358,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
 
     if (!capped.length) return
     setLibraryDupNeedsMigration(false)
+    setExistingCollNameNotice(null)
     store.setFiles(capped)
     if (defaultCollectionId) {
       for (let i = 0; i < capped.length; i++) {
@@ -418,6 +422,26 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
   const current = store.files[store.currentIndex]
   const currentForm = current?.form
   const anyAiScanning = store.files.some(f => f.aiScanning)
+
+  useEffect(() => {
+    setExistingCollNameNotice(null)
+  }, [store.currentIndex])
+
+  useEffect(() => {
+    if (store.step !== 2) return
+    const row = store.files[store.currentIndex]
+    if (!row?.form) return
+    const raw = row.form.new_collection_name
+    if (raw === null) return
+    const name = raw.trim()
+    if (!name) return
+    const hit = collections.find((c) => c.name.trim().toLowerCase() === name.toLowerCase())
+    if (!hit) return
+    store.updateForm(store.currentIndex, { collection_id: hit.id, new_collection_name: null })
+    setExistingCollNameNotice(
+      `A collection named "${hit.name}" already exists — this photo will be added there.`,
+    )
+  }, [store.step, store.currentIndex, store.files, collections, store])
 
   const dupHints = useMemo(() => {
     return store.files.map((f, i) => {
@@ -1417,6 +1441,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       className="ui"
                       value={currentForm.new_collection_name ? '__new__' : (currentForm.collection_id ?? '')}
                       onChange={e => {
+                        setExistingCollNameNotice(null)
                         if (e.target.value === '__new__') {
                           store.updateForm(store.currentIndex, { new_collection_name: '', collection_id: null })
                         } else {
@@ -1444,13 +1469,32 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                             type="button"
                             className="btn btn-ghost btn-sm"
                             style={{ marginTop: 8, display: 'block' }}
-                            onClick={() => store.applyNewCollectionFromCurrentToAllPhotos()}
+                            onClick={() => {
+                              const n = currentForm.new_collection_name?.trim()
+                              if (!n) return
+                              const hit = collections.find(
+                                (c) => c.name.trim().toLowerCase() === n.toLowerCase(),
+                              )
+                              if (hit) {
+                                store.assignCollectionIdToAll(hit.id)
+                                setExistingCollNameNotice(
+                                  `A collection named "${hit.name}" already exists — all ${store.files.length} photos will be added there.`,
+                                )
+                              } else {
+                                store.applyNewCollectionFromCurrentToAllPhotos()
+                              }
+                            }}
                           >
                             Use this new collection for all {store.files.length} photos
                           </button>
                         )}
                       </>
                     )}
+                    {existingCollNameNotice ? (
+                      <div className="upload-dup-hint upload-dup-hint--pending" role="status" style={{ marginTop: 8 }}>
+                        {existingCollNameNotice}
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Location */}
@@ -1573,7 +1617,18 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               </div>
 
               <div className="upload-actions">
-                {!publishing && <button className="btn btn-ghost" onClick={() => store.setStep(1)}>Back</button>}
+                {!publishing && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      store.setStep(1)
+                      setExistingCollNameNotice(null)
+                    }}
+                  >
+                    Back
+                  </button>
+                )}
                 {publishing && (
                   <button
                     type="button"
@@ -1605,7 +1660,15 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
               <div className="us-title">{publishedCount} photo{publishedCount !== 1 ? 's' : ''} published</div>
               <div className="us-sub">Added to Library · AI indexed</div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                <button type="button" className="btn btn-ghost btn-with-icon" onClick={() => { store.reset(); store.setStep(1) }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-with-icon"
+                  onClick={() => {
+                    store.reset()
+                    store.setStep(1)
+                    setExistingCollNameNotice(null)
+                  }}
+                >
                   <PlusIcon size={14} />
                   Add more photos
                 </button>

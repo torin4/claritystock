@@ -80,6 +80,7 @@ export default function MyPhotosClient({
   const [bulkCollBusy, setBulkCollBusy] = useState(false)
   const [bulkAssignCollId, setBulkAssignCollId] = useState('')
   const [bulkNewCollName, setBulkNewCollName] = useState('')
+  const [bulkExistingCollNotice, setBulkExistingCollNotice] = useState<string | null>(null)
   const [bulkEditCategory, setBulkEditCategory] = useState<'' | Category>('')
   const [bulkEditNeighborhood, setBulkEditNeighborhood] = useState('')
   const [bulkEditSubarea, setBulkEditSubarea] = useState('')
@@ -267,8 +268,20 @@ export default function MyPhotosClient({
     if (!selectionMode) {
       setBulkAssignCollId('')
       setBulkNewCollName('')
+      setBulkExistingCollNotice(null)
     }
   }, [selectionMode])
+
+  useEffect(() => {
+    if (bulkAssignCollId !== '__new__') return
+    const name = bulkNewCollName.trim()
+    if (!name) return
+    const hit = localCollections.find((c) => c.name.trim().toLowerCase() === name.toLowerCase())
+    if (!hit) return
+    setBulkExistingCollNotice(`A collection named "${hit.name}" already exists — photos will be added there.`)
+    setBulkAssignCollId(hit.id)
+    setBulkNewCollName('')
+  }, [bulkAssignCollId, bulkNewCollName, localCollections])
 
   useEffect(() => {
     if (tab === 'photos' || drillColl) return
@@ -1333,6 +1346,7 @@ export default function MyPhotosClient({
                 className="ui mp-select-bar-coll"
                 value={bulkAssignCollId}
                 onChange={(e) => {
+                  setBulkExistingCollNotice(null)
                   setBulkAssignCollId(e.target.value)
                   if (e.target.value !== '__new__') setBulkNewCollName('')
                 }}
@@ -1387,6 +1401,15 @@ export default function MyPhotosClient({
               >
                 Remove from collection
               </button>
+              {bulkExistingCollNotice ? (
+                <div
+                  className="upload-dup-hint upload-dup-hint--pending"
+                  role="status"
+                  style={{ flexBasis: '100%', width: '100%', marginTop: 6, fontSize: 11 }}
+                >
+                  {bulkExistingCollNotice}
+                </div>
+              ) : null}
             </>
           )}
           {tab !== 'downloads' && (

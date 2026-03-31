@@ -44,6 +44,8 @@ interface UploadActions {
   applySharedMetadataFromCurrentToAll: () => void
   /** Every photo uses the current photo’s new-collection name (clears existing collection picks). */
   applyNewCollectionFromCurrentToAllPhotos: () => void
+  /** Set every photo to this existing collection (clears new-collection name on all). */
+  assignCollectionIdToAll: (collectionId: string) => void
   markReviewed: (i: number) => void
   markPublished: (i: number) => void
   /** Remove one photo from the batch; empty batch returns to step 1. */
@@ -179,6 +181,18 @@ export const useUploadStore = create<UploadState & UploadActions>((set) => ({
         })),
       }
     }),
+
+  assignCollectionIdToAll: (collectionId) =>
+    set((s) => ({
+      files: s.files.map((f) => ({
+        ...f,
+        form: {
+          ...f.form,
+          collection_id: collectionId,
+          new_collection_name: null,
+        },
+      })),
+    })),
 
   markReviewed: (i) =>
     set((s) => {
