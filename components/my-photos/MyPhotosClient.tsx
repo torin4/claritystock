@@ -22,6 +22,7 @@ import { useInView } from '@/lib/hooks/useInView'
 import type { Photo, Collection, User, Category } from '@/lib/types/database.types'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
+import { sortCollectionsByName } from '@/lib/utils/sortCollectionsByName'
 
 const COLL_LONG_PRESS_MS = 520
 const COLL_MOVE_CANCEL_PX = 12
@@ -684,6 +685,11 @@ export default function MyPhotosClient({
     [localCollections],
   )
 
+  const collectionsForSelect = useMemo(
+    () => sortCollectionsByName(localCollections),
+    [localCollections],
+  )
+
   const activePhotoCount = drillColl ? (collectionPhotoCounts.get(drillColl.id) ?? 0) : photoTotal
 
   const noopFavoriteToggle = useCallback(() => {}, [])
@@ -1335,7 +1341,7 @@ export default function MyPhotosClient({
               >
                 <option value="">Add to collection…</option>
                 <option value="__new__">+ Create new collection…</option>
-                {localCollections.map(c => (
+                {collectionsForSelect.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>

@@ -24,6 +24,7 @@ import { publishPhoto, updatePhotosCategoryNeighborhood } from '@/lib/actions/ph
 import { runWithConcurrency } from '@/lib/utils/runWithConcurrency'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import { getOrCreateCollectionByName } from '@/lib/actions/collections.actions'
+import { sortCollectionsByName } from '@/lib/utils/sortCollectionsByName'
 import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
 import type { AiTagResult, PhotoFormValues } from '@/lib/types/database.types'
 
@@ -143,8 +144,9 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
       .from('collections')
       .select('*')
       .eq('created_by', userId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setCollections((data as Collection[]) ?? []))
+      .then(({ data }) =>
+        setCollections(sortCollectionsByName((data as Collection[]) ?? [])),
+      )
   }, [uploadModalOpen, userId])
 
   const loadBulkUpdate = useCallback(async () => {
@@ -362,34 +364,42 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
     store.setStep(2)
     void runDuplicateFingerprint(capped)
 
+    /** Stable per-row id so EXIF/AI callbacks still target the right file after removals reorder indices. */
+    const rowUploadIds = useUploadStore.getState().files.map((f) => f.uploadId)
+    const applyByUploadId = (uploadId: string, fn: (slot: number) => void) => {
+      const slot = useUploadStore.getState().files.findIndex((f) => f.uploadId === uploadId)
+      if (slot !== -1) fn(slot)
+    }
+
     // Parallelize EXIF/geocode + Gemini tagging (bounded to avoid CPU + API spikes).
     const indices = Array.from({ length: capped.length }, (_, i) => i)
     const REVIEW_CONCURRENCY = 2
     await runWithConcurrency(indices, REVIEW_CONCURRENCY, async (i) => {
       if (cancelledRef.current) return
       const file = capped[i]
+      const uploadId = rowUploadIds[i]
       try {
         const gps = await extractGps(file)
-        if (!cancelledRef.current && gps) store.setExif(i, gps)
+        if (!cancelledRef.current && gps) applyByUploadId(uploadId, (slot) => store.setExif(slot, gps))
 
         if (!cancelledRef.current && gps?.lat != null && gps?.lng != null) {
           const neighborhood = await neighborhoodFromCoordinates(gps.lat, gps.lng)
-          if (neighborhood) store.updateForm(i, { neighborhood })
+          if (neighborhood) applyByUploadId(uploadId, (slot) => store.updateForm(slot, { neighborhood }))
         }
       } catch {
         /* ignore per-file EXIF/geocode errors */
       }
 
       if (cancelledRef.current) return
-      store.setAiScanning(i, true)
+      applyByUploadId(uploadId, (slot) => store.setAiScanning(slot, true))
       try {
         const ai = await runAiTaggingOnFile(file, {
           debug: process.env.NEXT_PUBLIC_AI_TAG_DEBUG_UPLOAD === '1',
           debugLabel: 'simple-upload',
         })
-        if (!cancelledRef.current && ai) store.setAi(i, ai)
+        if (!cancelledRef.current && ai) applyByUploadId(uploadId, (slot) => store.setAi(slot, ai))
       } finally {
-        if (!cancelledRef.current) store.setAiScanning(i, false)
+        if (!cancelledRef.current) applyByUploadId(uploadId, (slot) => store.setAiScanning(slot, false))
       }
     })
   }, [store, defaultCollectionId, runDuplicateFingerprint])
@@ -1325,7 +1335,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       title={titleHint}
                       onSelect={() => store.setCurrentIndex(i)}
                       onRemove={() => store.removeFileAt(i)}
-                      disableRemove={publishing || anyAiScanning}
+                      disableRemove={publishing}
                     />
                   )
                 })}
@@ -1359,7 +1369,7 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
-                      disabled={publishing || anyAiScanning}
+                      disabled={publishing}
                       onClick={() => store.removeFileAt(store.currentIndex)}
                     >
                       Remove from upload

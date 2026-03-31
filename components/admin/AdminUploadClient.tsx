@@ -8,6 +8,7 @@ import { uploadPhoto, uploadThumbnail } from '@/lib/utils/storage'
 import { createPhotoDerivatives } from '@/lib/utils/imageThumbnail'
 import { publishPhoto } from '@/lib/actions/photos.actions'
 import { createCollection } from '@/lib/actions/collections.actions'
+import { sortCollectionsByName } from '@/lib/utils/sortCollectionsByName'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Category, PhotoFormValues, AiTagResult, ExifResult } from '@/lib/types/database.types'
 import { PlusIcon } from '@/components/icons/PlusIcon'
@@ -74,8 +75,9 @@ export default function AdminUploadClient({ photographers, embedded = false }: P
       .from('collections')
       .select('id, name')
       .eq('created_by', targetUserId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setCollections((data as { id: string; name: string }[]) ?? []))
+      .then(({ data }) =>
+        setCollections(sortCollectionsByName((data as { id: string; name: string }[]) ?? [])),
+      )
   }, [targetUserId])
 
   const targetLabel = photographers.find(p => p.id === targetUserId)?.name ?? targetUserId
@@ -228,7 +230,7 @@ export default function AdminUploadClient({ photographers, embedded = false }: P
         category: newCollCategory || null,
         ownedByUserId: targetUserId,
       })
-      setCollections(prev => [{ id, name }, ...prev])
+      setCollections(prev => sortCollectionsByName([...prev, { id, name }]))
       setSelectedCollectionId(id)
       setNewCollName('')
       setNewCollCategory('')

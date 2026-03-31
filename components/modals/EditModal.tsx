@@ -6,6 +6,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Photo, Collection, Category } from '@/lib/types/database.types'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
+import { sortCollectionsByName } from '@/lib/utils/sortCollectionsByName'
 
 interface Props {
   userId: string
@@ -40,8 +41,9 @@ export default function EditModal({ userId, onSuccess }: Props) {
       .from('collections')
       .select('*')
       .eq('created_by', userId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setCollections((data as Collection[]) ?? []))
+      .then(({ data }) =>
+        setCollections(sortCollectionsByName((data as Collection[]) ?? [])),
+      )
   }, [userId])
 
   useEffect(() => {
