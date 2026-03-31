@@ -55,6 +55,7 @@ export default function BrowseClient({
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMorePhotos, setHasMorePhotos] = useState(true)
+  const [photosTotal, setPhotosTotal] = useState<number | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [zipBusy, setZipBusy] = useState(false)
@@ -205,12 +206,13 @@ export default function BrowseClient({
     } else {
       setLoading(true)
       setHasMorePhotos(true)
+      setPhotosTotal(null)
     }
     try {
       const supabase = getSupabaseBrowserClient()
       let query = supabase
         .from('photos')
-        .select(PHOTO_CARD_SELECT)
+        .select(PHOTO_CARD_SELECT, { count: 'exact' })
 
       {
         const searchOr = buildPhotosSearchOrClause(search)
@@ -256,8 +258,9 @@ export default function BrowseClient({
         if (ids.length) query = query.not('id', 'in', `(${ids.join(',')})`)
       }
 
-      const { data } = await query.range(offset, offset + BROWSE_PAGE_SIZE - 1)
+      const { data, count } = await query.range(offset, offset + BROWSE_PAGE_SIZE - 1)
       if (ac.signal.aborted) return
+      if (typeof count === 'number') setPhotosTotal(count)
       const photoIds = (data ?? []).map((p: { id: string }) => p.id)
       if (!photoIds.length) {
         if (!ac.signal.aborted) {
@@ -435,7 +438,7 @@ export default function BrowseClient({
           <div className="ph-sub">
             {browseMode === 'collections'
               ? `${filteredCollections.length} collection${filteredCollections.length !== 1 ? 's' : ''} in Library`
-              : `${photos.length} photos in Library`}
+                : `${photosTotal ?? photos.length} photo${(photosTotal ?? photos.length) !== 1 ? 's' : ''} in Library`}
           </div>
         </div>
         <button
