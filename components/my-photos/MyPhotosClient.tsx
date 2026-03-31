@@ -103,11 +103,13 @@ export default function MyPhotosClient({
   const [mergeCollName, setMergeCollName] = useState('')
   const [mergeCollBusy, setMergeCollBusy] = useState(false)
   const [collectionSort, setCollectionSort] = useState<CollectionSort>('newest')
+  const [collectionSearch, setCollectionSearch] = useState('')
   const downloadsLoadedRef = useRef(false)
   const photosRequestSeqRef = useRef(0)
   const { openUpload, openEdit } = useUIStore()
   const libraryPageSize = pageSize || MY_LIBRARY_PAGE_SIZE
   const searchTerm = search.trim()
+  const collectionSearchTerm = collectionSearch.trim()
   const defaultPhotosViewActive = tab === 'photos' && !drillColl && !searchTerm
   const hasMorePhotos = photos.length < photoTotal
 
@@ -161,6 +163,10 @@ export default function MyPhotosClient({
   useEffect(() => {
     if (adminMode && tab === 'downloads') setTab('photos')
   }, [adminMode, tab])
+
+  useEffect(() => {
+    if (tab !== 'collections') setCollectionSearch('')
+  }, [tab])
 
   useEffect(() => {
     if (!selectionMode) return
@@ -751,6 +757,12 @@ export default function MyPhotosClient({
     }
   }, [localCollections, collectionSort])
 
+  const filteredCollectionsForGrid = useMemo(() => {
+    if (!collectionSearchTerm) return sortedCollectionsForGrid
+    const q = collectionSearchTerm.toLowerCase()
+    return sortedCollectionsForGrid.filter(c => c.name.toLowerCase().includes(q))
+  }, [sortedCollectionsForGrid, collectionSearchTerm])
+
   const mergeDefaultName = useMemo(() => {
     const sel = localCollections.filter(c => selectedCollIds.includes(c.id))
     if (sel.length < 2) return ''
@@ -972,7 +984,9 @@ export default function MyPhotosClient({
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-                {localCollections.length} collection{localCollections.length !== 1 ? 's' : ''}
+                {collectionSearchTerm
+                  ? `${filteredCollectionsForGrid.length} of ${localCollections.length} shown`
+                  : `${localCollections.length} collection${localCollections.length !== 1 ? 's' : ''}`}
               </span>
               {localCollections.length > 0 ? (
                 <>
@@ -1006,13 +1020,45 @@ export default function MyPhotosClient({
               </button>
             )}
           </div>
+          {localCollections.length > 0 ? (
+            <div className="mp-toolbar" style={{ marginTop: 0, paddingTop: 0 }}>
+              <div className="si-wrap" style={{ maxWidth: 360, flex: '1 1 220px' }}>
+                <span className="si-icon">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </span>
+                <input
+                  className="si"
+                  placeholder="Search collections…"
+                  value={collectionSearch}
+                  onChange={e => setCollectionSearch(e.target.value)}
+                  disabled={collSelectionMode}
+                  aria-label="Search collections by name"
+                />
+              </div>
+            </div>
+          ) : null}
           {localCollections.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
               No collections yet. Create one with <strong style={{ color: 'var(--text-2)' }}>+ Create collection</strong>, or add one when you add photos{adminMode ? ' for this photographer' : ''}.
             </div>
+          ) : filteredCollectionsForGrid.length === 0 ? (
+            <div className="mp-empty-block">
+              <h3 className="mp-empty-title">No collections match your search</h3>
+              <p className="mp-empty-sub">
+                Nothing matches “{collectionSearchTerm}”. Try another term or clear the search.
+              </p>
+              <div className="mp-empty-actions">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCollectionSearch('')}>
+                  Clear search
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="coll-grid">
-              {sortedCollectionsForGrid.map(coll => (
+              {filteredCollectionsForGrid.map(coll => (
                 <CollectionTile
                   key={coll.id}
                   collection={coll}
@@ -1032,13 +1078,30 @@ export default function MyPhotosClient({
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
+                disabled={!filteredCollectionsForGrid.length}
+                title={
+                  collectionSearchTerm
+                    ? 'Selects every collection currently shown. Change or clear search to include others.'
+                    : undefined
+                }
                 onClick={() => {
-                  const allIds = localCollections.map(c => c.id)
-                  const allSelected = allIds.every(id => selectedCollIds.includes(id))
-                  setSelectedCollIds(allSelected ? [] : allIds)
+                  const visibleIds = filteredCollectionsForGrid.map(c => c.id)
+                  const allVisibleSelected =
+                    visibleIds.length > 0 && visibleIds.every(id => selectedCollIds.includes(id))
+                  setSelectedCollIds(prev => {
+                    if (allVisibleSelected) {
+                      return prev.filter(id => !visibleIds.includes(id))
+                    }
+                    return Array.from(new Set([...prev, ...visibleIds]))
+                  })
                 }}
               >
-                {localCollections.every(c => selectedCollIds.includes(c.id)) ? 'Deselect all' : 'Select all'}
+                {collectionSearchTerm
+                  ? (filteredCollectionsForGrid.length > 0 &&
+                      filteredCollectionsForGrid.every(c => selectedCollIds.includes(c.id))
+                      ? 'Deselect visible'
+                      : 'Select visible')
+                  : (localCollections.every(c => selectedCollIds.includes(c.id)) ? 'Deselect all' : 'Select all')}
               </button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={exitCollectionSelection}>
                 Done
