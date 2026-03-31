@@ -12,7 +12,7 @@ import { PlusIcon } from '@/components/icons/PlusIcon'
 import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { devError } from '@/lib/utils/devLog'
-import { deleteCollection, renameCollection } from '@/lib/actions/collections.actions'
+import { deleteCollection, getOrCreateCollectionByName, renameCollection } from '@/lib/actions/collections.actions'
 import { deletePhotos, updatePhotosCollectionIds, updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
@@ -25,6 +25,8 @@ import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.acti
 
 const COLL_LONG_PRESS_MS = 520
 const COLL_MOVE_CANCEL_PX = 12
+/** Max rows loaded in “add existing photos” (unassigned-only picker). */
+const ORPHAN_PICK_LIMIT = 200
 
 type CollectionSummary = Collection
 
@@ -76,12 +78,18 @@ export default function MyPhotosClient({
   const [removeDownloadsBusy, setRemoveDownloadsBusy] = useState(false)
   const [bulkCollBusy, setBulkCollBusy] = useState(false)
   const [bulkAssignCollId, setBulkAssignCollId] = useState('')
+  const [bulkNewCollName, setBulkNewCollName] = useState('')
   const [bulkEditCategory, setBulkEditCategory] = useState<'' | Category>('')
   const [bulkEditNeighborhood, setBulkEditNeighborhood] = useState('')
   const [bulkEditSubarea, setBulkEditSubarea] = useState('')
   const [bulkEditBusy, setBulkEditBusy] = useState(false)
   const [bulkEditError, setBulkEditError] = useState<string | null>(null)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
+  const [orphanPickerOpen, setOrphanPickerOpen] = useState(false)
+  const [orphanPhotos, setOrphanPhotos] = useState<Photo[]>([])
+  const [orphanLoading, setOrphanLoading] = useState(false)
+  const [orphanSelectedIds, setOrphanSelectedIds] = useState<string[]>([])
+  const [orphanAdding, setOrphanAdding] = useState(false)
   const downloadsLoadedRef = useRef(false)
   const photosRequestSeqRef = useRef(0)
   const { openUpload, openEdit } = useUIStore()
@@ -255,7 +263,10 @@ export default function MyPhotosClient({
   }, [selectedIds, photos, drillColl])
 
   useEffect(() => {
-    if (!selectionMode) setBulkAssignCollId('')
+    if (!selectionMode) {
+      setBulkAssignCollId('')
+      setBulkNewCollName('')
+    }
   }, [selectionMode])
 
   useEffect(() => {
@@ -266,11 +277,30 @@ export default function MyPhotosClient({
   }, [drillColl, tab])
 
   const handleBulkAddToCollection = async () => {
-    if (!selectedIds.length || !bulkAssignCollId || bulkCollBusy) return
+    if (!selectedIds.length || bulkCollBusy) return
+    let targetCollId = bulkAssignCollId
+    if (bulkAssignCollId === '__new__') {
+      const name = bulkNewCollName.trim()
+      if (!name) {
+        alert('Enter a name for the new collection.')
+        return
+      }
+    } else if (!targetCollId) {
+      return
+    }
+
     setBulkCollBusy(true)
     try {
+      if (bulkAssignCollId === '__new__') {
+        const { id } = await getOrCreateCollectionByName({
+          name: bulkNewCollName.trim(),
+          ownerId: adminMode ? userId : undefined,
+        })
+        targetCollId = id
+      }
+
       const collOpts = adminMode ? { photographerId: userId } : undefined
-      const { updated } = await updatePhotosCollectionIds(selectedIds, bulkAssignCollId, collOpts)
+      const { updated } = await updatePhotosCollectionIds(selectedIds, targetCollId, collOpts)
       if (updated < selectedIds.length) {
         alert(
           `Updated ${updated} of ${selectedIds.length} photo(s). ${
@@ -281,11 +311,13 @@ export default function MyPhotosClient({
       setPhotos(prev =>
         prev.map(p =>
           selectedIds.includes(p.id) && p.photographer_id === userId
-            ? { ...p, collection_id: bulkAssignCollId }
+            ? { ...p, collection_id: targetCollId }
             : p,
         ),
       )
       useUIStore.getState().bumpSidebarCollections()
+      setBulkAssignCollId('')
+      setBulkNewCollName('')
       exitSelection()
       await refresh()
       router.refresh()
@@ -424,6 +456,54 @@ export default function MyPhotosClient({
     [libraryPhotographer],
   )
 
+  const openOrphanPicker = useCallback(async () => {
+    if (!drillColl) return
+    setOrphanPickerOpen(true)
+    setOrphanLoading(true)
+    setOrphanSelectedIds([])
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase
+        .from('photos')
+        .select(PHOTO_MY_LIBRARY_CARD_SELECT)
+        .eq('photographer_id', userId)
+        .is('collection_id', null)
+        .order('created_at', { ascending: false })
+        .limit(ORPHAN_PICK_LIMIT)
+      if (error) throw error
+      setOrphanPhotos(mergeLibraryRows((data as Photo[]) ?? []))
+    } catch (e) {
+      devError(e)
+      setOrphanPhotos([])
+      alert(e instanceof Error ? e.message : 'Could not load photos')
+    } finally {
+      setOrphanLoading(false)
+    }
+  }, [drillColl, mergeLibraryRows, userId])
+
+  const closeOrphanPicker = useCallback(() => {
+    if (orphanAdding) return
+    setOrphanPickerOpen(false)
+    setOrphanSelectedIds([])
+    setOrphanPhotos([])
+  }, [orphanAdding])
+
+  const toggleOrphanSelected = useCallback((id: string) => {
+    setOrphanSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    )
+  }, [])
+
+  const toggleAllOrphansVisible = useCallback(() => {
+    setOrphanSelectedIds(prev => {
+      const allIds = orphanPhotos.map(p => p.id)
+      if (!allIds.length) return prev
+      const every = allIds.every(id => prev.includes(id))
+      if (every) return prev.filter(id => !allIds.includes(id))
+      return Array.from(new Set([...prev, ...allIds]))
+    })
+  }, [orphanPhotos])
+
   const fetchPhotosPage = useCallback(async (opts?: { offset?: number; append?: boolean }) => {
     const offset = opts?.offset ?? 0
     const append = opts?.append === true
@@ -473,6 +553,52 @@ export default function MyPhotosClient({
   const refresh = async () => {
     await fetchPhotosPage({ offset: 0 })
   }
+
+  const handleAddOrphansToCollection = useCallback(async () => {
+    if (!drillColl || !orphanSelectedIds.length || orphanAdding) return
+    setOrphanAdding(true)
+    const ids = orphanSelectedIds.slice()
+    const count = ids.length
+    try {
+      const collOpts = adminMode ? { photographerId: userId } : undefined
+      await updatePhotosCollectionIds(ids, drillColl.id, collOpts)
+      setLocalCollections(prev =>
+        prev.map(c =>
+          c.id === drillColl.id
+            ? { ...c, photo_count: (c.photo_count ?? 0) + count }
+            : c,
+        ),
+      )
+      useUIStore.getState().bumpSidebarCollections()
+      setOrphanPickerOpen(false)
+      setOrphanSelectedIds([])
+      setOrphanPhotos([])
+      await fetchPhotosPage({ offset: 0 })
+      router.refresh()
+    } catch (e) {
+      devError(e)
+      alert(e instanceof Error ? e.message : 'Could not add photos')
+    } finally {
+      setOrphanAdding(false)
+    }
+  }, [
+    adminMode,
+    drillColl,
+    fetchPhotosPage,
+    orphanAdding,
+    orphanSelectedIds,
+    router,
+    userId,
+  ])
+
+  useEffect(() => {
+    if (!orphanPickerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeOrphanPicker()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [orphanPickerOpen, closeOrphanPicker])
 
   const loadMorePhotos = async () => {
     if (loadingMorePhotos || !hasMorePhotos) return
@@ -912,6 +1038,15 @@ export default function MyPhotosClient({
                         Add photos to this collection
                       </span>
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void openOrphanPicker()}
+                      disabled={orphanLoading}
+                      title="Pick photos that are not in any collection yet"
+                    >
+                      {orphanLoading ? 'Loading…' : 'Add existing photos'}
+                    </button>
                   </div>
                 </div>
               )
@@ -1072,6 +1207,106 @@ export default function MyPhotosClient({
         }}
       />
 
+      {drillColl && orphanPickerOpen && (
+        <div
+          className="modal-overlay open"
+          onClick={e => { if (e.target === e.currentTarget) closeOrphanPicker() }}
+          role="presentation"
+        >
+          <div
+            className="modal"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="orphan-pick-title"
+            style={{ maxWidth: 520, width: 'calc(100vw - 32px)', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+          >
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, padding: 0 }}>
+              <div className="modal-hdr" style={{ padding: '14px 16px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+                <div id="orphan-pick-title" style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 600 }}>
+                  Add existing photos to “{drillColl.name}”
+                </div>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={closeOrphanPicker}
+                  disabled={orphanAdding}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, padding: '10px 16px 0' }}>
+                Only photos not in any collection are listed. Select the ones you want here.
+              </p>
+              {orphanPhotos.length >= ORPHAN_PICK_LIMIT && (
+                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, padding: '6px 16px 0', fontFamily: 'var(--font-mono)' }}>
+                  Showing the {ORPHAN_PICK_LIMIT} most recent unassigned photos.
+                </p>
+              )}
+              <div style={{ padding: '12px 16px', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!orphanPhotos.length || orphanLoading || orphanAdding}
+                  onClick={toggleAllOrphansVisible}
+                >
+                  {orphanPhotos.length > 0 && orphanPhotos.every(p => orphanSelectedIds.includes(p.id))
+                    ? 'Deselect all'
+                    : 'Select all'}
+                </button>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                  {orphanSelectedIds.length} selected
+                </span>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 8px' }}>
+                {orphanLoading ? (
+                  <p className="mp-empty-sub" style={{ padding: '24px 8px', textAlign: 'center', margin: 0 }}>
+                    Loading photos…
+                  </p>
+                ) : orphanPhotos.length === 0 ? (
+                  <p className="mp-empty-sub" style={{ padding: '24px 8px', textAlign: 'center', margin: 0 }}>
+                    No unassigned photos in this library. Upload new photos or remove some from other collections first.
+                  </p>
+                ) : (
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    {orphanPhotos.map(p => (
+                      <li key={p.id} style={{ marginBottom: 4 }}>
+                        <OrphanPickerRow
+                          photo={p}
+                          selected={orphanSelectedIds.includes(p.id)}
+                          onToggle={() => toggleOrphanSelected(p.id)}
+                          disabled={orphanAdding}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={closeOrphanPicker}
+                  disabled={orphanAdding}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={!orphanSelectedIds.length || orphanAdding}
+                  onClick={() => void handleAddOrphansToCollection()}
+                >
+                  {orphanAdding
+                    ? 'Adding…'
+                    : `Add ${orphanSelectedIds.length} photo${orphanSelectedIds.length !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectionMode && (
         <div className="mp-select-bar">
           <span className="mp-select-bar-count">
@@ -1091,21 +1326,43 @@ export default function MyPhotosClient({
               <select
                 className="ui mp-select-bar-coll"
                 value={bulkAssignCollId}
-                onChange={e => setBulkAssignCollId(e.target.value)}
+                onChange={(e) => {
+                  setBulkAssignCollId(e.target.value)
+                  if (e.target.value !== '__new__') setBulkNewCollName('')
+                }}
                 disabled={bulkCollBusy}
                 aria-label="Collection to add selected photos to"
               >
                 <option value="">Add to collection…</option>
+                <option value="__new__">+ Create new collection…</option>
                 {localCollections.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
               </select>
+              {bulkAssignCollId === '__new__' && (
+                <input
+                  className="ui"
+                  style={{ fontSize: 12, padding: '4px 8px', minWidth: 140, maxWidth: 200 }}
+                  value={bulkNewCollName}
+                  onChange={(e) => setBulkNewCollName(e.target.value)}
+                  placeholder="New collection name"
+                  disabled={bulkCollBusy}
+                  aria-label="New collection name"
+                />
+              )}
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                disabled={!selectedIds.length || !bulkAssignCollId || bulkCollBusy || zipBusy || bulkDeleting}
+                disabled={
+                  !selectedIds.length ||
+                  bulkCollBusy ||
+                  zipBusy ||
+                  bulkDeleting ||
+                  !bulkAssignCollId ||
+                  (bulkAssignCollId === '__new__' && !bulkNewCollName.trim())
+                }
                 onClick={() => void handleBulkAddToCollection()}
               >
                 {bulkCollBusy ? 'Saving…' : 'Add to collection'}
@@ -1200,6 +1457,64 @@ export default function MyPhotosClient({
         </div>
       )}
     </div>
+  )
+}
+
+function OrphanPickerRow({
+  photo,
+  selected,
+  onToggle,
+  disabled,
+}: {
+  photo: Photo
+  selected: boolean
+  onToggle: () => void
+  disabled?: boolean
+}) {
+  const path = photo.thumbnail_path ?? photo.storage_path ?? null
+  const url = useSignedPhotoUrl(path, { enabled: !!path, initialUrl: photo.thumbnail_url ?? null })
+  return (
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 10px',
+        borderRadius: 8,
+        cursor: disabled ? 'default' : 'pointer',
+        background: selected ? 'var(--surface-2)' : 'transparent',
+      }}
+    >
+      <input type="checkbox" checked={selected} onChange={onToggle} disabled={disabled} />
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 6,
+          overflow: 'hidden',
+          flexShrink: 0,
+          background: 'var(--surface-2)',
+        }}
+      >
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        ) : null}
+      </div>
+      <span
+        style={{
+          fontSize: 13,
+          color: 'var(--text-1)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          minWidth: 0,
+          flex: 1,
+        }}
+      >
+        {photo.title?.trim() || 'Untitled'}
+      </span>
+    </label>
   )
 }
 

@@ -1377,10 +1377,10 @@ export default function UploadModal({ userId, onSuccess, defaultCollectionId = n
                       }}
                     >
                       <option value="">No collection</option>
+                      <option value="__new__">+ Create new collection…</option>
                       {collections.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
-                      <option value="__new__">+ Create new collection…</option>
                     </select>
                     {currentForm.new_collection_name !== null && (
                       <>
