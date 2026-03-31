@@ -376,6 +376,14 @@ export default function BrowseClient({
       return true
     })
   }, [collections, category, search])
+  const duplicateCollectionNames = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const c of filteredCollections) {
+      const key = c.name.trim().toLowerCase()
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [filteredCollections])
   const activeCollection = useMemo(
     () => collections.find((c) => c.id === collectionId) ?? null,
     [collections, collectionId],
@@ -458,6 +466,7 @@ export default function BrowseClient({
                   collection={c}
                   photos={c.photos ?? []}
                   active={collectionId === c.id}
+                  showCreator={(duplicateCollectionNames.get(c.name.trim().toLowerCase()) ?? 0) > 1}
                   onClick={() => {
                     setCollection(c.id)
                     setBrowseMode('collections')
@@ -607,15 +616,21 @@ function CollectionTile({
   collection,
   photos,
   active,
+  showCreator,
   onClick,
 }: {
   collection: Collection
   photos: Array<{ storage_path: string | null; thumbnail_path: string | null; thumbnail_url?: string | null }>
   active?: boolean
+  showCreator?: boolean
   onClick: () => void
 }) {
   const topPhotos = photos.slice(0, 3)
   const single = photos.length === 1
+  const creatorLabel =
+    collection.creator?.name?.trim() ||
+    collection.creator?.initials?.trim() ||
+    null
 
   return (
     <div className={`coll-tile${active ? ' active' : ''}`} onClick={onClick}>
@@ -629,7 +644,14 @@ function CollectionTile({
         )}
       </div>
       <div className="coll-ov">
-        <div className="coll-name">{collection.name}</div>
+        <div className="coll-name">
+          {collection.name}
+          {showCreator && creatorLabel ? (
+            <span style={{ opacity: 0.85, marginLeft: 8, fontSize: 11, fontWeight: 600, color: 'var(--text-2)' }}>
+              · {creatorLabel}
+            </span>
+          ) : null}
+        </div>
         <div className="coll-count">{collection.photo_count ?? 0} photo{(collection.photo_count ?? 0) !== 1 ? 's' : ''}</div>
       </div>
     </div>

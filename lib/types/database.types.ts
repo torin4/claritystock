@@ -28,6 +28,8 @@ export interface Collection {
   name: string
   category: Category | null
   created_by: string | null
+  /** Joined in some queries (e.g. Browse collections) for disambiguation. */
+  creator?: Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'> | null
   created_at: string
   photo_count?: number
   photos?: PhotoAsset[]

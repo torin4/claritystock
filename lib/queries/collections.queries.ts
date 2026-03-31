@@ -10,6 +10,11 @@ type CollectionQueryOptions = {
 type CollectionQueryRow = Omit<Collection, 'photo_count' | 'photos'> & {
   photos: { count: number }[] | null
   preview_photos?: PhotoAsset[] | null
+  /**
+   * Supabase join shape can be an array even for 1:1 references depending on select syntax.
+   * Normalize in `mapCollectionRows`.
+   */
+  creator?: Collection['creator'] | Array<NonNullable<Collection['creator']>>
 }
 
 function mapCollectionRows(rows: CollectionQueryRow[]): Collection[] {
@@ -17,11 +22,13 @@ function mapCollectionRows(rows: CollectionQueryRow[]): Collection[] {
     const raw = c.photos?.[0]?.count
     const photo_count = typeof raw === 'number' ? raw : Number(raw ?? 0) || 0
     const previewPhotos = c.preview_photos ?? []
+    const creator = Array.isArray(c.creator) ? (c.creator[0] ?? null) : (c.creator ?? null)
     return {
       id: c.id,
       name: c.name,
       category: c.category,
       created_by: c.created_by,
+      creator,
       created_at: c.created_at,
       photo_count,
       photos: previewPhotos,
@@ -36,7 +43,7 @@ export async function getCollections(supabase: SupabaseClient, options?: Collect
    */
   let query = supabase
     .from('collections')
-    .select('id, name, category, created_by, created_at, photos(count), preview_photos:photos(storage_path, thumbnail_path, created_at)')
+    .select('id, name, category, created_by, created_at, creator:users!created_by(id, name, initials, avatar_url), photos(count), preview_photos:photos(storage_path, thumbnail_path, created_at)')
     .order('created_at', { ascending: false })
     .order('created_at', { ascending: false, foreignTable: 'preview_photos' })
     .limit(3, { foreignTable: 'preview_photos' })
@@ -55,7 +62,7 @@ export async function getCollections(supabase: SupabaseClient, options?: Collect
 
   if (error) throw error
 
-  return mapCollectionRows((data ?? []) as CollectionQueryRow[])
+  return mapCollectionRows((data ?? []) as unknown as CollectionQueryRow[])
 }
 
 export async function getMyCollections(supabase: SupabaseClient, userId: string) {
