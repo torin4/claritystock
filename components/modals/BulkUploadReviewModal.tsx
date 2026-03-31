@@ -8,7 +8,8 @@ import { publishPhotoFromStagingSnapshot } from '@/lib/uploads/processImageForPu
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
-import { updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
+import { updatePhotosCategoryNeighborhood, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
+import { getOrCreateCollectionByName } from '@/lib/actions/collections.actions'
 import type { PhotoFormValues } from '@/lib/types/database.types'
 
 type BulkItemRow = {
@@ -70,6 +71,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
   const [jobPhotographerId, setJobPhotographerId] = useState<string | null>(null)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
+  const [bulkCollectionName, setBulkCollectionName] = useState('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
   const [bulkSubarea, setBulkSubarea] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -128,6 +130,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
+    setBulkCollectionName('')
     setBulkNeighborhood('')
     setBulkSubarea('')
   }, [bulkReviewJobId])
@@ -168,20 +171,33 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const handleBulkApply = async () => {
     const ids = selectedPhotoIds.filter(Boolean)
     if (!ids.length) { setError('Select at least one photo.'); return }
+    const applyCollection = bulkCollectionName.trim().length > 0
     const applyNeigh = bulkNeighborhood.trim().length > 0
     const applySub = bulkSubarea.trim().length > 0
-    if (!applyNeigh && !applySub) {
-      setError('Choose a neighborhood and/or sub-area to apply.')
+    if (!applyCollection && !applyNeigh && !applySub) {
+      setError('Choose a collection and/or neighborhood and/or sub-area to apply.')
       return
     }
     setBulkBusy(true)
     setError(null)
     try {
+      if (applyCollection) {
+        const { id } = await getOrCreateCollectionByName({
+          name: bulkCollectionName.trim(),
+          ownerId: jobPhotographerId ?? undefined,
+        })
+        await updatePhotosCollectionIds(
+          ids,
+          id,
+          jobPhotographerId ? { photographerId: jobPhotographerId } : undefined,
+        )
+      }
       await updatePhotosCategoryNeighborhood(ids, {
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
         ...(applySub ? { subarea: bulkSubarea.trim() } : {}),
         ...(jobPhotographerId ? { photographerId: jobPhotographerId } : {}),
       })
+      setBulkCollectionName('')
       setBulkNeighborhood('')
       setBulkSubarea('')
       await load()
@@ -447,9 +463,20 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                   : 'Select photos above to update'}
               </div>
               <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px', lineHeight: 1.45 }}>
-                Set neighborhood and/or sub-area. Category is set by AI at import; use Edit on a photo to change it. Group headers are ZIP folder names — tags and names stay per image.
+                Set collection and/or location for selected photos. Category is set by AI at import; use Edit on a photo to change it. Group headers are ZIP folder names — tags and names stay per image.
               </p>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
+                <div style={{ flex: '1 1 220px', minWidth: 180 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Collection (optional)</div>
+                  <input
+                    value={bulkCollectionName}
+                    onChange={(e) => setBulkCollectionName(e.target.value)}
+                    placeholder="Type collection name…"
+                    className="ui"
+                    style={{ fontSize: 13, padding: '6px 8px', borderRadius: 6, width: '100%', boxSizing: 'border-box' }}
+                    aria-label="Bulk collection name"
+                  />
+                </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Neighborhood</div>
                   <LocationField
@@ -476,7 +503,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                   disabled={
                     bulkBusy ||
                     selectedPhotoIds.length === 0 ||
-                    (bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
+                    (bulkCollectionName.trim() === '' && bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
                   }
                   onClick={() => void handleBulkApply()}
                 >
@@ -485,19 +512,9 @@ export default function BulkUploadReviewModal({ userId }: Props) {
               </div>
             </>
           )}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={bulkBusy || selectedPhotoIds.length === 0}
-              onClick={() => openEdit(selectedPhotoIds[0])}
-            >
-              Edit selected photo
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={closeBulkReview}>
-              Close
-            </button>
-          </div>
+          <button type="button" className="btn btn-ghost" onClick={closeBulkReview}>
+            Close
+          </button>
         </div>}
       </div>
     </>
