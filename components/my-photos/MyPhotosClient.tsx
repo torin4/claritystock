@@ -1374,6 +1374,7 @@ export default function MyPhotosClient({
                 </select>
               </div>
               <span
+                className="mp-toolbar-count"
                 style={{
                   fontSize: 11,
                   color: 'var(--text-3)',

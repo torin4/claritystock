@@ -141,9 +141,13 @@ function PhotoTile({
     openLightbox(photo.id)
   }
 
+  const locationLabel = [photo.neighborhood, photo.subarea].filter(Boolean).join(', ')
+  const tileHoverTitle = locationLabel ? `${photo.title} — ${locationLabel}` : photo.title
+
   return (
     <div
       className={`ptile${selectionMode ? ' ptile-selecting' : ''}${selected ? ' selected' : ''}`}
+      title={tileHoverTitle}
       style={selectable && !selectionMode ? { touchAction: 'manipulation' } : undefined}
       onClick={handleTileClick}
       onPointerDown={handlePointerDown}
@@ -194,8 +198,8 @@ function PhotoTile({
         <div className="ptile-title">{photo.title}</div>
         <div className="ptile-meta">
           {photo.photographer?.name ?? 'Unknown'}
-          {photo.neighborhood
-            ? ` · ${photo.neighborhood}`
+          {locationLabel
+            ? ` · ${locationLabel}`
             : photo.tags?.includes(PHOTO_TAG_NEEDS_LOCATION)
               ? ' · Needs location'
               : ''}
