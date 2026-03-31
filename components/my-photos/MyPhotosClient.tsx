@@ -29,6 +29,8 @@ const COLL_MOVE_CANCEL_PX = 12
 /** Max rows loaded in “add existing photos” (unassigned-only picker). */
 const ORPHAN_PICK_LIMIT = 200
 
+type CollectionSort = 'name-asc' | 'name-desc' | 'newest' | 'oldest'
+
 type CollectionSummary = Collection
 
 type LibraryPhotographer = Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'>
@@ -92,6 +94,7 @@ export default function MyPhotosClient({
   const [orphanLoading, setOrphanLoading] = useState(false)
   const [orphanSelectedIds, setOrphanSelectedIds] = useState<string[]>([])
   const [orphanAdding, setOrphanAdding] = useState(false)
+  const [collectionSort, setCollectionSort] = useState<CollectionSort>('newest')
   const downloadsLoadedRef = useRef(false)
   const photosRequestSeqRef = useRef(0)
   const { openUpload, openEdit } = useUIStore()
@@ -703,6 +706,29 @@ export default function MyPhotosClient({
     [localCollections],
   )
 
+  const sortedCollectionsForGrid = useMemo(() => {
+    const list = [...localCollections]
+    switch (collectionSort) {
+      case 'name-asc':
+        return list.sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }),
+        )
+      case 'name-desc':
+        return list.sort((a, b) =>
+          b.name.localeCompare(a.name, undefined, { sensitivity: 'base', numeric: true }),
+        )
+      case 'oldest':
+        return list.sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )
+      case 'newest':
+      default:
+        return list.sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        )
+    }
+  }, [localCollections, collectionSort])
+
   const activePhotoCount = drillColl ? (collectionPhotoCounts.get(drillColl.id) ?? 0) : photoTotal
 
   const noopFavoriteToggle = useCallback(() => {}, [])
@@ -866,10 +892,36 @@ export default function MyPhotosClient({
       {/* Collections view */}
       {tab === 'collections' && !drillColl && (
         <div style={{ paddingBottom: collSelectionMode ? 88 : undefined }}>
-          <div className="mp-toolbar" style={{ justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-              {localCollections.length} collection{localCollections.length !== 1 ? 's' : ''}
-            </span>
+          <div
+            className="mp-toolbar"
+            style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+                {localCollections.length} collection{localCollections.length !== 1 ? 's' : ''}
+              </span>
+              {localCollections.length > 0 ? (
+                <>
+                  <label htmlFor="mp-coll-sort" className="sr-only">
+                    Sort collections
+                  </label>
+                  <select
+                    id="mp-coll-sort"
+                    className="ui"
+                    style={{ fontSize: 12, padding: '4px 8px', minWidth: 140, maxWidth: 200 }}
+                    value={collectionSort}
+                    onChange={(e) => setCollectionSort(e.target.value as CollectionSort)}
+                    aria-label="Sort collections"
+                    disabled={collSelectionMode}
+                  >
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="name-asc">Name A–Z</option>
+                    <option value="name-desc">Name Z–A</option>
+                  </select>
+                </>
+              ) : null}
+            </div>
             {!collSelectionMode && (
               <button
                 type="button"
@@ -886,7 +938,7 @@ export default function MyPhotosClient({
             </div>
           ) : (
             <div className="coll-grid">
-              {localCollections.map(coll => (
+              {sortedCollectionsForGrid.map(coll => (
                 <CollectionTile
                   key={coll.id}
                   collection={coll}
