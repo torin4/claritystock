@@ -100,23 +100,28 @@ export async function getOrCreateSignedUrls(
   } : never
 
   if (typeof storage.createSignedUrls === 'function') {
-    const { data, error } = await storage.createSignedUrls(missing, expiresSec)
-    if (!error && data?.length) {
+    // Supabase may cap the number of paths per batch request; chunk to be safe.
+    const chunkSize = 80
+    for (let i = 0; i < missing.length; i += chunkSize) {
+      const chunk = missing.slice(i, i + chunkSize)
+      const { data, error } = await storage.createSignedUrls(chunk, expiresSec)
+      if (error || !data?.length) continue
       for (const entry of data) {
         if (!entry?.path || !entry?.signedUrl) continue
         storeSignedUrl(entry.path, entry.signedUrl, expiresSec)
         result[entry.path] = entry.signedUrl
       }
-      const unresolved = missing.filter((path) => !result[path])
-      if (!unresolved.length) return result
-      const fallback = await Promise.all(
-        unresolved.map(async (path) => [path, await getOrCreateSignedUrl(supabase, path, expiresSec)] as const),
-      )
-      for (const [path, url] of fallback) {
-        if (url) result[path] = url
-      }
-      return result
     }
+
+    const unresolved = missing.filter((path) => !result[path])
+    if (!unresolved.length) return result
+    const fallback = await Promise.all(
+      unresolved.map(async (path) => [path, await getOrCreateSignedUrl(supabase, path, expiresSec)] as const),
+    )
+    for (const [path, url] of fallback) {
+      if (url) result[path] = url
+    }
+    return result
   }
 
   const fallback = await Promise.all(
