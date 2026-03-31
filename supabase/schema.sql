@@ -215,6 +215,7 @@ BEGIN
     'english',
     coalesce(NEW.title, '') || ' ' ||
     coalesce(NEW.neighborhood, '') || ' ' ||
+    coalesce(NEW.subarea, '') || ' ' ||
     coalesce(NEW.description, '') || ' ' ||
     coalesce(array_to_string(NEW.tags, ' '), '')
   );

@@ -128,8 +128,8 @@ export async function renameCollection(id: string, name: string) {
 }
 
 /**
- * Move all photos from several collections into one surviving row, rename it, and rely on DB cleanup
- * (empty collections removed after `collection_id` updates) for the others.
+ * Move all photos from several collections into one surviving row, rename it, and delete the
+ * other merged collections when they have no photos left (belt-and-suspenders with the DB trigger).
  */
 export async function mergeCollections(input: {
   collectionIds: string[]
@@ -176,6 +176,27 @@ export async function mergeCollections(input: {
     .eq('photographer_id', ownerId)
 
   if (moveErr) throw moveErr
+
+  const otherIds = ids.filter((id) => id !== primaryId)
+  if (otherIds.length) {
+    const { data: remainingRows, error: remainingErr } = await supabase
+      .from('photos')
+      .select('collection_id')
+      .in('collection_id', otherIds)
+    if (remainingErr) throw remainingErr
+    const stillOccupied = new Set<string>(
+      (remainingRows ?? [])
+        .map((r) => r.collection_id)
+        .filter((id): id is string => Boolean(id)),
+    )
+    const toDelete = otherIds.filter((id) => !stillOccupied.has(id))
+    if (toDelete.length) {
+      let delQ = supabase.from('collections').delete().in('id', toDelete)
+      if (!admin) delQ = delQ.eq('created_by', user.id)
+      const { error: delErr } = await delQ
+      if (delErr) throw delErr
+    }
+  }
 
   let renameQ = supabase.from('collections').update({ name: mergedName }).eq('id', primaryId)
   if (!admin) renameQ = renameQ.eq('created_by', user.id)

@@ -36,6 +36,10 @@ const ORPHAN_PICK_LIMIT = 200
 
 type CollectionSort = 'name-asc' | 'name-desc' | 'newest' | 'oldest'
 
+type PhotoLibrarySort = 'newest' | 'oldest' | 'title-asc' | 'title-desc'
+
+type PhotoLibraryScope = 'all' | 'orphans'
+
 type CollectionSummary = Collection
 
 type LibraryPhotographer = Pick<User, 'id' | 'name' | 'initials' | 'avatar_url'>
@@ -103,14 +107,23 @@ export default function MyPhotosClient({
   const [mergeCollName, setMergeCollName] = useState('')
   const [mergeCollBusy, setMergeCollBusy] = useState(false)
   const [collectionSort, setCollectionSort] = useState<CollectionSort>('newest')
+  const [photoLibrarySort, setPhotoLibrarySort] = useState<PhotoLibrarySort>('newest')
+  const [photoLibraryScope, setPhotoLibraryScope] = useState<PhotoLibraryScope>('all')
   const [collectionSearch, setCollectionSearch] = useState('')
+  /** Collection IDs that have at least one library photo matching the collection search (FTS: title, location, tags, etc.). */
+  const [collectionSearchPhotoCollIds, setCollectionSearchPhotoCollIds] = useState<string[]>([])
   const downloadsLoadedRef = useRef(false)
   const photosRequestSeqRef = useRef(0)
   const { openUpload, openEdit } = useUIStore()
   const libraryPageSize = pageSize || MY_LIBRARY_PAGE_SIZE
   const searchTerm = search.trim()
   const collectionSearchTerm = collectionSearch.trim()
-  const defaultPhotosViewActive = tab === 'photos' && !drillColl && !searchTerm
+  const defaultPhotosViewActive =
+    tab === 'photos' &&
+    !drillColl &&
+    !searchTerm &&
+    photoLibrarySort === 'newest' &&
+    photoLibraryScope === 'all'
   const hasMorePhotos = photos.length < photoTotal
 
   useEffect(() => {
@@ -569,14 +582,24 @@ export default function MyPhotosClient({
 
       if (drillColl?.id) {
         query = query.eq('collection_id', drillColl.id)
+      } else if (photoLibraryScope === 'orphans') {
+        query = query.is('collection_id', null)
       }
       if (searchTerm) {
         query = query.textSearch('fts', searchTerm, { type: 'websearch' })
       }
 
-      const { data, count, error } = await query
-        .order('created_at', { ascending: false })
-        .range(offset, offset + libraryPageSize - 1)
+      if (photoLibrarySort === 'oldest') {
+        query = query.order('created_at', { ascending: true })
+      } else if (photoLibrarySort === 'title-asc') {
+        query = query.order('title', { ascending: true })
+      } else if (photoLibrarySort === 'title-desc') {
+        query = query.order('title', { ascending: false })
+      } else {
+        query = query.order('created_at', { ascending: false })
+      }
+
+      const { data, count, error } = await query.range(offset, offset + libraryPageSize - 1)
 
       if (error) throw error
       if (requestId !== photosRequestSeqRef.current) return
@@ -593,7 +616,7 @@ export default function MyPhotosClient({
       setPhotosStatus('ready')
       setLoadingMorePhotos(false)
     }
-  }, [drillColl?.id, libraryPageSize, mergeLibraryRows, searchTerm, userId])
+  }, [drillColl?.id, libraryPageSize, mergeLibraryRows, photoLibraryScope, photoLibrarySort, searchTerm, userId])
 
   const refresh = async () => {
     await fetchPhotosPage({ offset: 0 })
@@ -659,6 +682,7 @@ export default function MyPhotosClient({
       p =>
         p.title.toLowerCase().includes(q) ||
         (p.neighborhood ?? '').toLowerCase().includes(q) ||
+        (p.subarea ?? '').toLowerCase().includes(q) ||
         (p.photographer?.name ?? '').toLowerCase().includes(q),
     )
   }, [downloadedPhotos, searchTerm])
@@ -722,7 +746,7 @@ export default function MyPhotosClient({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [defaultPhotosViewActive, drillColl, fetchPhotosPage, searchTerm, tab])
+  }, [defaultPhotosViewActive, drillColl, fetchPhotosPage, photoLibraryScope, photoLibrarySort, searchTerm, tab])
 
   const collectionPhotoCounts = useMemo(
     () => new Map(localCollections.map((collection) => [collection.id, collection.photo_count ?? 0])),
@@ -757,11 +781,54 @@ export default function MyPhotosClient({
     }
   }, [localCollections, collectionSort])
 
+  useEffect(() => {
+    if (tab !== 'collections' || !collectionSearchTerm) {
+      setCollectionSearchPhotoCollIds([])
+      return
+    }
+    let cancelled = false
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const supabase = getSupabaseBrowserClient()
+          const { data, error } = await supabase
+            .from('photos')
+            .select('collection_id')
+            .eq('photographer_id', userId)
+            .not('collection_id', 'is', null)
+            .textSearch('fts', collectionSearchTerm, { type: 'websearch' })
+            .limit(5000)
+          if (error) throw error
+          if (cancelled) return
+          const ids = Array.from(
+            new Set(
+              (data ?? [])
+                .map((row: { collection_id: string | null }) => row.collection_id)
+                .filter((id): id is string => Boolean(id)),
+            ),
+          )
+          setCollectionSearchPhotoCollIds(ids)
+        } catch (e) {
+          devError(e)
+          if (!cancelled) setCollectionSearchPhotoCollIds([])
+        }
+      })()
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [collectionSearchTerm, tab, userId])
+
   const filteredCollectionsForGrid = useMemo(() => {
     if (!collectionSearchTerm) return sortedCollectionsForGrid
     const q = collectionSearchTerm.toLowerCase()
-    return sortedCollectionsForGrid.filter(c => c.name.toLowerCase().includes(q))
-  }, [sortedCollectionsForGrid, collectionSearchTerm])
+    const nameHits = new Set(
+      sortedCollectionsForGrid.filter(c => c.name.toLowerCase().includes(q)).map(c => c.id),
+    )
+    const union = new Set<string>([...Array.from(nameHits), ...collectionSearchPhotoCollIds])
+    return sortedCollectionsForGrid.filter(c => union.has(c.id))
+  }, [collectionSearchPhotoCollIds, collectionSearchTerm, sortedCollectionsForGrid])
 
   const mergeDefaultName = useMemo(() => {
     const sel = localCollections.filter(c => selectedCollIds.includes(c.id))
@@ -980,14 +1047,53 @@ export default function MyPhotosClient({
         <div style={{ paddingBottom: collSelectionMode ? 88 : undefined }}>
           <div
             className="mp-toolbar"
-            style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 12,
+              width: '100%',
+            }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-                {collectionSearchTerm
-                  ? `${filteredCollectionsForGrid.length} of ${localCollections.length} shown`
-                  : `${localCollections.length} collection${localCollections.length !== 1 ? 's' : ''}`}
-              </span>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--text-3)',
+                fontFamily: 'var(--font-mono)',
+                flexShrink: 0,
+              }}
+            >
+              {collectionSearchTerm
+                ? `${filteredCollectionsForGrid.length} of ${localCollections.length} shown`
+                : `${localCollections.length} collection${localCollections.length !== 1 ? 's' : ''}`}
+            </span>
+            {localCollections.length > 0 ? (
+              <div className="si-wrap" style={{ flex: '1 1 220px', minWidth: 160, maxWidth: 480 }}>
+                <span className="si-icon">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </span>
+                <input
+                  className="si"
+                  placeholder="Search by name or location…"
+                  value={collectionSearch}
+                  onChange={e => setCollectionSearch(e.target.value)}
+                  disabled={collSelectionMode}
+                  aria-label="Search collections by name"
+                />
+              </div>
+            ) : null}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginLeft: 'auto',
+                flexWrap: 'wrap',
+              }}
+            >
               {localCollections.length > 0 ? (
                 <>
                   <label htmlFor="mp-coll-sort" className="sr-only">
@@ -1009,37 +1115,17 @@ export default function MyPhotosClient({
                   </select>
                 </>
               ) : null}
+              {!collSelectionMode && (
+                <button
+                  type="button"
+                  className="coll-create-text"
+                  onClick={() => setCreateCollOpen(true)}
+                >
+                  + Create collection
+                </button>
+              )}
             </div>
-            {!collSelectionMode && (
-              <button
-                type="button"
-                className="coll-create-text"
-                onClick={() => setCreateCollOpen(true)}
-              >
-                + Create collection
-              </button>
-            )}
           </div>
-          {localCollections.length > 0 ? (
-            <div className="mp-toolbar" style={{ marginTop: 0, paddingTop: 0 }}>
-              <div className="si-wrap" style={{ maxWidth: 360, flex: '1 1 220px' }}>
-                <span className="si-icon">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                    <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.5"/>
-                    <path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </span>
-                <input
-                  className="si"
-                  placeholder="Search collections…"
-                  value={collectionSearch}
-                  onChange={e => setCollectionSearch(e.target.value)}
-                  disabled={collSelectionMode}
-                  aria-label="Search collections by name"
-                />
-              </div>
-            </div>
-          ) : null}
           {localCollections.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
               No collections yet. Create one with <strong style={{ color: 'var(--text-2)' }}>+ Create collection</strong>, or add one when you add photos{adminMode ? ' for this photographer' : ''}.
@@ -1196,24 +1282,96 @@ export default function MyPhotosClient({
           )}
 
           {/* Toolbar */}
-          <div className="mp-toolbar">
-            <div className="si-wrap" style={{ maxWidth: 280 }}>
+          <div
+            className="mp-toolbar"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 12,
+              width: '100%',
+            }}
+          >
+            <div className="si-wrap" style={{ flex: '1 1 240px', minWidth: 180, maxWidth: 520 }}>
               <span className="si-icon">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.5"/>
                   <path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
               </span>
               <input
                 className="si"
-                placeholder={adminMode ? 'Search photos…' : 'Search your photos…'}
+                placeholder={
+                  adminMode
+                    ? 'Search photos (title, location)…'
+                    : 'Search your photos (title, location)…'
+                }
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                disabled={selectionMode}
+                aria-label={adminMode ? 'Search photos' : 'Search your photos'}
               />
             </div>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
-              {photosStatus === 'loading' ? '…' : `${photoTotal} photos`}
-            </span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginLeft: 'auto',
+                flexWrap: 'wrap',
+              }}
+            >
+              {!drillColl && tab === 'photos' && (
+                <>
+                  <label htmlFor="mp-photo-scope" className="sr-only">
+                    Library filter
+                  </label>
+                  <select
+                    id="mp-photo-scope"
+                    className="ui"
+                    style={{ fontSize: 12, padding: '4px 8px', minWidth: 120, maxWidth: 220 }}
+                    value={photoLibraryScope}
+                    onChange={(e) => setPhotoLibraryScope(e.target.value as PhotoLibraryScope)}
+                    aria-label="Filter photos by collection assignment"
+                    disabled={selectionMode}
+                  >
+                    <option value="all">All photos</option>
+                    <option value="orphans">No collection</option>
+                  </select>
+                </>
+              )}
+              <label htmlFor="mp-photo-sort" className="sr-only">
+                Sort photos
+              </label>
+              <select
+                id="mp-photo-sort"
+                className="ui"
+                style={{ fontSize: 12, padding: '4px 8px', minWidth: 140, maxWidth: 200 }}
+                value={photoLibrarySort}
+                onChange={(e) => setPhotoLibrarySort(e.target.value as PhotoLibrarySort)}
+                aria-label="Sort photos"
+                disabled={selectionMode}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="title-asc">Title A–Z</option>
+                <option value="title-desc">Title Z–A</option>
+              </select>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-3)',
+                  fontFamily: 'var(--font-mono)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {photosStatus === 'loading'
+                  ? '…'
+                  : !drillColl && photoLibraryScope === 'orphans'
+                    ? `${photoTotal} without a collection`
+                    : `${photoTotal} photos`}
+              </span>
+            </div>
           </div>
 
           {/* Grid or empty states */}
@@ -1273,10 +1431,41 @@ export default function MyPhotosClient({
               searchTerm ? (
                 <div className="mp-empty-block">
                   <h3 className="mp-empty-title">No photos match your search</h3>
-                  <p className="mp-empty-sub">Try another term or clear the search box.</p>
+                  <p className="mp-empty-sub">
+                    {photoLibraryScope === 'orphans'
+                      ? 'Nothing matches in photos that are not in a collection. Try another term, show all photos, or clear the search.'
+                      : 'Try another term or clear the search box.'}
+                  </p>
                   <div className="mp-empty-actions">
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch('')}>
                       Clear search
+                    </button>
+                    {photoLibraryScope === 'orphans' && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setPhotoLibraryScope('all')}
+                      >
+                        Show all photos
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : photoLibraryScope === 'orphans' ? (
+                <div className="mp-empty-block">
+                  <h3 className="mp-empty-title">No photos without a collection</h3>
+                  <p className="mp-empty-sub">
+                    {adminMode
+                      ? 'Every photo in this library is assigned to a collection, or there are no photos yet.'
+                      : 'Every photo is in a collection. Upload new photos or remove some from a collection to see them here.'}
+                  </p>
+                  <div className="mp-empty-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setPhotoLibraryScope('all')}
+                    >
+                      Show all photos
                     </button>
                   </div>
                 </div>
