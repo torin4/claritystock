@@ -5,8 +5,6 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { getOrCreateSignedUrls, peekCachedSignedUrl } from '@/lib/utils/signedUrlCache'
 import type { Photo } from '@/lib/types/database.types'
 
-const GRID_TRANSFORM = { width: 1200, quality: 80 }
-
 interface Props {
   photos: Photo[]
   userId: string
@@ -49,7 +47,8 @@ export default function PhotoGrid({
       Array.from(
         new Set(
           photos
-            .map((photo) => photo.display_path ?? photo.storage_path)
+            // Use stored thumbnails (no on-the-fly transforms) to avoid Supabase transform quotas.
+            .map((photo) => photo.thumbnail_path ?? photo.storage_path)
             .filter((path): path is string => Boolean(path)),
         ),
       ).join('\n'),
@@ -62,11 +61,11 @@ export default function PhotoGrid({
   const selectedSet = useMemo(() => new Set(selectedIds ?? []), [selectedIds])
 
   // Only use transformed URLs — never fall back to server-provided thumbnail_url
-  // which lacks the transform and would show low-res images.
+  // which may not exist for client-fetched rows.
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       displayPaths
-        .map((path) => [path, peekCachedSignedUrl(path, GRID_TRANSFORM)] as const)
+        .map((path) => [path, peekCachedSignedUrl(path)] as const)
         .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
     ),
   )
@@ -85,7 +84,7 @@ export default function PhotoGrid({
     const next: Record<string, string> = {}
     const missing: string[] = []
     for (const path of displayPaths) {
-      const known = peekCachedSignedUrl(path, GRID_TRANSFORM) ?? signedUrlsRef.current[path]
+      const known = peekCachedSignedUrl(path) ?? signedUrlsRef.current[path]
       if (known) {
         next[path] = known
       } else {
@@ -99,7 +98,7 @@ export default function PhotoGrid({
     let cancelled = false
     ;(async () => {
       const supabase = getSupabaseBrowserClient()
-      const urls = await getOrCreateSignedUrls(supabase, missing, 3600, GRID_TRANSFORM)
+      const urls = await getOrCreateSignedUrls(supabase, missing, 3600)
       if (cancelled) return
       setSignedUrls((prev) => ({ ...prev, ...urls }))
     })()
@@ -133,7 +132,7 @@ export default function PhotoGrid({
           key={photo.id}
           photo={photo}
           userId={userId}
-          imageUrl={signedUrls[photo.display_path ?? photo.storage_path ?? ''] ?? null}
+          imageUrl={signedUrls[photo.thumbnail_path ?? photo.storage_path ?? ''] ?? null}
           onFavoriteToggle={onFavoriteToggle}
           onDownload={onDownload}
           showEdit={showEdit}
