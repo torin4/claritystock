@@ -471,7 +471,7 @@ export default function MyPhotosClient({
         .order('created_at', { ascending: false })
         .limit(ORPHAN_PICK_LIMIT)
       if (error) throw error
-      setOrphanPhotos(mergeLibraryRows((data as Photo[]) ?? []))
+      setOrphanPhotos(mergeLibraryRows((data as Photo[]) ?? []) as Photo[])
     } catch (e) {
       devError(e)
       setOrphanPhotos([])
