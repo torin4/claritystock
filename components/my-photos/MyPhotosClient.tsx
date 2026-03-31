@@ -12,7 +12,12 @@ import { PlusIcon } from '@/components/icons/PlusIcon'
 import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { devError } from '@/lib/utils/devLog'
-import { deleteCollection, getOrCreateCollectionByName, renameCollection } from '@/lib/actions/collections.actions'
+import {
+  deleteCollection,
+  getOrCreateCollectionByName,
+  mergeCollections,
+  renameCollection,
+} from '@/lib/actions/collections.actions'
 import { deletePhotos, updatePhotosCollectionIds, updatePhotosCategoryNeighborhood } from '@/lib/actions/photos.actions'
 import { downloadPhotosZip, ZIP_DOWNLOAD_MAX_PHOTOS } from '@/lib/photos/zipDownload'
 import { removeMyDownloads } from '@/lib/actions/downloads.actions'
@@ -94,6 +99,9 @@ export default function MyPhotosClient({
   const [orphanLoading, setOrphanLoading] = useState(false)
   const [orphanSelectedIds, setOrphanSelectedIds] = useState<string[]>([])
   const [orphanAdding, setOrphanAdding] = useState(false)
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [mergeCollName, setMergeCollName] = useState('')
+  const [mergeCollBusy, setMergeCollBusy] = useState(false)
   const [collectionSort, setCollectionSort] = useState<CollectionSort>('newest')
   const downloadsLoadedRef = useRef(false)
   const photosRequestSeqRef = useRef(0)
@@ -142,6 +150,8 @@ export default function MyPhotosClient({
   const exitCollectionSelection = useCallback(() => {
     setCollSelectionMode(false)
     setSelectedCollIds([])
+    setMergeModalOpen(false)
+    setMergeCollName('')
   }, [])
 
   useEffect(() => {
@@ -169,6 +179,18 @@ export default function MyPhotosClient({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [collSelectionMode, exitCollectionSelection])
+
+  useEffect(() => {
+    if (!mergeModalOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !mergeCollBusy) {
+        setMergeModalOpen(false)
+        setMergeCollName('')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mergeModalOpen, mergeCollBusy])
 
   const handleBulkEditApply = async () => {
     if (!selectedIds.length) return
@@ -729,6 +751,13 @@ export default function MyPhotosClient({
     }
   }, [localCollections, collectionSort])
 
+  const mergeDefaultName = useMemo(() => {
+    const sel = localCollections.filter(c => selectedCollIds.includes(c.id))
+    if (sel.length < 2) return ''
+    const [first] = sortCollectionsByName(sel)
+    return first?.name ?? ''
+  }, [localCollections, selectedCollIds])
+
   const activePhotoCount = drillColl ? (collectionPhotoCounts.get(drillColl.id) ?? 0) : photoTotal
 
   const noopFavoriteToggle = useCallback(() => {}, [])
@@ -796,6 +825,51 @@ export default function MyPhotosClient({
       alert(e instanceof Error ? e.message : 'Could not delete collections')
     } finally {
       setDeletingColls(false)
+    }
+  }
+
+  const handleMergeSelectedCollections = async () => {
+    const name = mergeCollName.trim()
+    const collectionIds = [...selectedCollIds]
+    if (!name || collectionIds.length < 2 || mergeCollBusy) return
+    setMergeCollBusy(true)
+    try {
+      const totalPhotos = collectionIds.reduce(
+        (acc, id) => acc + (localCollections.find(c => c.id === id)?.photo_count ?? 0),
+        0,
+      )
+      const { mergedCollectionId } = await mergeCollections({
+        collectionIds,
+        mergedName: name,
+        ...(adminMode ? { photographerId: userId } : {}),
+      })
+      useUIStore.getState().bumpSidebarCollections()
+      setLocalCollections(prev =>
+        prev
+          .filter(c => !collectionIds.includes(c.id) || c.id === mergedCollectionId)
+          .map(c =>
+            c.id === mergedCollectionId
+              ? { ...c, name, photo_count: totalPhotos }
+              : c,
+          ),
+      )
+      if (drillColl && collectionIds.includes(drillColl.id)) {
+        if (drillColl.id === mergedCollectionId) {
+          setDrillColl({ ...drillColl, name, photo_count: totalPhotos })
+        } else {
+          setDrillColl(null)
+          setTab('collections')
+        }
+      }
+      setMergeModalOpen(false)
+      setMergeCollName('')
+      exitCollectionSelection()
+      router.refresh()
+    } catch (e) {
+      devError(e)
+      alert(e instanceof Error ? e.message : 'Could not merge collections')
+    } finally {
+      setMergeCollBusy(false)
     }
   }
 
@@ -968,6 +1042,17 @@ export default function MyPhotosClient({
               </button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={exitCollectionSelection}>
                 Done
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={selectedCollIds.length < 2 || deletingColls || mergeCollBusy}
+                onClick={() => {
+                  setMergeCollName(mergeDefaultName)
+                  setMergeModalOpen(true)
+                }}
+              >
+                Merge…
               </button>
               <button
                 type="button"
@@ -1277,6 +1362,84 @@ export default function MyPhotosClient({
           router.refresh()
         }}
       />
+
+      {mergeModalOpen && (
+        <div
+          className="modal-overlay open"
+          onClick={e => {
+            if (e.target === e.currentTarget && !mergeCollBusy) {
+              setMergeModalOpen(false)
+              setMergeCollName('')
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            className="modal"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="merge-coll-title"
+            aria-modal="true"
+          >
+            <div className="modal-body">
+              <div className="modal-hdr">
+                <div id="merge-coll-title" style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 600 }}>
+                  Merge {selectedCollIds.length} collections
+                </div>
+                <button
+                  type="button"
+                  className="modal-close"
+                  disabled={mergeCollBusy}
+                  aria-label="Close"
+                  onClick={() => {
+                    setMergeModalOpen(false)
+                    setMergeCollName('')
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5, margin: '0 0 14px' }}>
+                All photos from the selected collections move into one collection. Other collection names are removed
+                (empty collections are deleted automatically).
+              </p>
+              <div className="modal-field">
+                <div className="modal-lbl">Name for merged collection</div>
+                <input
+                  className="ui"
+                  value={mergeCollName}
+                  onChange={e => setMergeCollName(e.target.value)}
+                  placeholder="Collection name"
+                  disabled={mergeCollBusy}
+                  autoFocus
+                  aria-label="Merged collection name"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={mergeCollBusy}
+                  onClick={() => {
+                    setMergeModalOpen(false)
+                    setMergeCollName('')
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={mergeCollBusy || !mergeCollName.trim()}
+                  onClick={() => void handleMergeSelectedCollections()}
+                >
+                  {mergeCollBusy ? 'Merging…' : 'Merge collections'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {drillColl && orphanPickerOpen && (
         <div

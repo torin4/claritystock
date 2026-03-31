@@ -126,3 +126,64 @@ export async function renameCollection(id: string, name: string) {
   revalidatePath('/my-photos')
   revalidatePath('/admin/libraries')
 }
+
+/**
+ * Move all photos from several collections into one surviving row, rename it, and rely on DB cleanup
+ * (empty collections removed after `collection_id` updates) for the others.
+ */
+export async function mergeCollections(input: {
+  collectionIds: string[]
+  mergedName: string
+  /** Admin library: these collections belong to this photographer. */
+  photographerId?: string
+}) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+  const admin = await isUserAdmin(supabase, user.id)
+  const ownerId = admin && input.photographerId ? input.photographerId : user.id
+  if (!admin && input.photographerId && input.photographerId !== user.id) {
+    throw new Error('Unauthorized')
+  }
+
+  const ids = Array.from(new Set(input.collectionIds.filter(Boolean)))
+  if (ids.length < 2) throw new Error('Select at least two collections to merge')
+
+  const mergedName = input.mergedName.trim()
+  if (!mergedName) throw new Error('Name is required')
+
+  const { data: rows, error: fetchErr } = await supabase
+    .from('collections')
+    .select('id, created_at, created_by')
+    .in('id', ids)
+
+  if (fetchErr) throw fetchErr
+  if (!rows || rows.length !== ids.length) throw new Error('One or more collections were not found')
+
+  for (const r of rows) {
+    if (r.created_by !== ownerId) throw new Error('Invalid collection')
+  }
+
+  const sorted = [...rows].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  )
+  const primaryId = sorted[0]!.id
+
+  const { error: moveErr } = await supabase
+    .from('photos')
+    .update({ collection_id: primaryId })
+    .in('collection_id', ids)
+    .eq('photographer_id', ownerId)
+
+  if (moveErr) throw moveErr
+
+  let renameQ = supabase.from('collections').update({ name: mergedName }).eq('id', primaryId)
+  if (!admin) renameQ = renameQ.eq('created_by', user.id)
+  const { error: renameErr } = await renameQ
+  if (renameErr) throw renameErr
+
+  revalidatePath('/')
+  revalidatePath('/my-photos')
+  revalidatePath('/admin/libraries')
+  return { mergedCollectionId: primaryId }
+}
