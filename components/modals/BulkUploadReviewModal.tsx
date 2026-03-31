@@ -10,7 +10,8 @@ import LocationField from '@/components/neighborhoods/LocationField'
 import { getNeighborhoodCanonicalLabels } from '@/lib/actions/neighborhoods.actions'
 import { updatePhotosCategoryNeighborhood, updatePhotosCollectionIds } from '@/lib/actions/photos.actions'
 import { getOrCreateCollectionByName } from '@/lib/actions/collections.actions'
-import type { PhotoFormValues } from '@/lib/types/database.types'
+import { sortCollectionsByName } from '@/lib/utils/sortCollectionsByName'
+import type { Collection, PhotoFormValues } from '@/lib/types/database.types'
 
 type BulkItemRow = {
   id: string
@@ -71,7 +72,6 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
   const [jobPhotographerId, setJobPhotographerId] = useState<string | null>(null)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
-  const [bulkCollectionName, setBulkCollectionName] = useState('')
   const [bulkNeighborhood, setBulkNeighborhood] = useState('')
   const [bulkSubarea, setBulkSubarea] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -79,11 +79,34 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [allSetDismissed, setAllSetDismissed] = useState(false)
 
+  const [collections, setCollections] = useState<Collection[]>([])
+  const [folderCollectionOverride, setFolderCollectionOverride] = useState<Record<string, { id: string | null; name: string | null }>>({})
+  const [folderEditOpen, setFolderEditOpen] = useState(false)
+  const [folderEditKey, setFolderEditKey] = useState<string>('')
+  const [folderEditMode, setFolderEditMode] = useState<'existing' | 'new' | 'none'>('existing')
+  const [folderEditExistingId, setFolderEditExistingId] = useState<string>('')
+  const [folderEditNewName, setFolderEditNewName] = useState<string>('')
+
   useEffect(() => {
     getNeighborhoodCanonicalLabels()
       .then(setLocationLabels)
       .catch(() => setLocationLabels([]))
   }, [])
+
+  useEffect(() => {
+    if (!bulkReviewJobId) return
+    const ownerId = jobPhotographerId ?? userId
+    const supabase = getSupabaseBrowserClient()
+    let cancelled = false
+    void supabase
+      .from('collections')
+      .select('*')
+      .eq('created_by', ownerId)
+      .then(({ data }) => {
+        if (!cancelled) setCollections(sortCollectionsByName((data as Collection[]) ?? []))
+      })
+    return () => { cancelled = true }
+  }, [bulkReviewJobId, jobPhotographerId, userId])
 
   const load = useCallback(async () => {
     if (!bulkReviewJobId) return
@@ -130,9 +153,14 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    setBulkCollectionName('')
     setBulkNeighborhood('')
     setBulkSubarea('')
+    setFolderCollectionOverride({})
+    setFolderEditOpen(false)
+    setFolderEditKey('')
+    setFolderEditMode('existing')
+    setFolderEditExistingId('')
+    setFolderEditNewName('')
   }, [bulkReviewJobId])
 
   const selectedSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds])
@@ -171,33 +199,20 @@ export default function BulkUploadReviewModal({ userId }: Props) {
   const handleBulkApply = async () => {
     const ids = selectedPhotoIds.filter(Boolean)
     if (!ids.length) { setError('Select at least one photo.'); return }
-    const applyCollection = bulkCollectionName.trim().length > 0
     const applyNeigh = bulkNeighborhood.trim().length > 0
     const applySub = bulkSubarea.trim().length > 0
-    if (!applyCollection && !applyNeigh && !applySub) {
-      setError('Choose a collection and/or neighborhood and/or sub-area to apply.')
+    if (!applyNeigh && !applySub) {
+      setError('Choose a neighborhood and/or sub-area to apply.')
       return
     }
     setBulkBusy(true)
     setError(null)
     try {
-      if (applyCollection) {
-        const { id } = await getOrCreateCollectionByName({
-          name: bulkCollectionName.trim(),
-          ownerId: jobPhotographerId ?? undefined,
-        })
-        await updatePhotosCollectionIds(
-          ids,
-          id,
-          jobPhotographerId ? { photographerId: jobPhotographerId } : undefined,
-        )
-      }
       await updatePhotosCategoryNeighborhood(ids, {
         ...(applyNeigh ? { neighborhood: bulkNeighborhood.trim() } : {}),
         ...(applySub ? { subarea: bulkSubarea.trim() } : {}),
         ...(jobPhotographerId ? { photographerId: jobPhotographerId } : {}),
       })
-      setBulkCollectionName('')
       setBulkNeighborhood('')
       setBulkSubarea('')
       await load()
@@ -205,6 +220,101 @@ export default function BulkUploadReviewModal({ userId }: Props) {
       setSelectedPhotoIds([])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk update failed')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const openFolderEditor = (folderKey: string) => {
+    const override = folderCollectionOverride[folderKey]
+    const inferredName = folderKey.trim()
+    if (override?.id === null) {
+      setFolderEditMode('none')
+      setFolderEditExistingId('')
+      setFolderEditNewName('')
+    } else if (override?.id) {
+      setFolderEditMode('existing')
+      setFolderEditExistingId(override.id)
+      setFolderEditNewName('')
+    } else if (override?.name) {
+      const hit = collections.find((c) => c.name.trim().toLowerCase() === override.name!.trim().toLowerCase())
+      if (hit) {
+        setFolderEditMode('existing')
+        setFolderEditExistingId(hit.id)
+        setFolderEditNewName('')
+      } else {
+        setFolderEditMode('new')
+        setFolderEditExistingId('')
+        setFolderEditNewName(override.name)
+      }
+    } else {
+      const hit = inferredName
+        ? collections.find((c) => c.name.trim().toLowerCase() === inferredName.toLowerCase())
+        : null
+      if (hit) {
+        setFolderEditMode('existing')
+        setFolderEditExistingId(hit.id)
+        setFolderEditNewName('')
+      } else if (folderKey.trim().length > 0) {
+        setFolderEditMode('new')
+        setFolderEditExistingId('')
+        setFolderEditNewName(folderKey)
+      } else {
+        setFolderEditMode('none')
+        setFolderEditExistingId('')
+        setFolderEditNewName('')
+      }
+    }
+    setFolderEditKey(folderKey)
+    setFolderEditOpen(true)
+    setError(null)
+  }
+
+  const applyFolderCollection = async (folderKey: string, photoIds: string[]) => {
+    const unique = Array.from(new Set(photoIds)).filter(Boolean)
+    if (!unique.length) return
+
+    setBulkBusy(true)
+    setError(null)
+    try {
+      let targetId: string | null = null
+      let targetName: string | null = null
+
+      if (folderEditMode === 'none') {
+        targetId = null
+        targetName = null
+      } else if (folderEditMode === 'existing') {
+        const id = folderEditExistingId || null
+        if (!id) throw new Error('Choose an existing collection')
+        const c = collections.find((x) => x.id === id)
+        if (!c) throw new Error('Collection not found')
+        targetId = c.id
+        targetName = c.name
+      } else {
+        const name = folderEditNewName.trim()
+        if (!name) throw new Error('Enter a new collection name')
+        const { id } = await getOrCreateCollectionByName({
+          name,
+          ownerId: jobPhotographerId ?? undefined,
+        })
+        targetId = id
+        targetName = name
+      }
+
+      await updatePhotosCollectionIds(
+        unique,
+        targetId,
+        jobPhotographerId ? { photographerId: jobPhotographerId } : undefined,
+      )
+      useUIStore.getState().bumpSidebarCollections()
+
+      setFolderCollectionOverride((prev) => ({
+        ...prev,
+        [folderKey]: { id: targetId, name: targetName },
+      }))
+      setFolderEditOpen(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update collection')
     } finally {
       setBulkBusy(false)
     }
@@ -431,12 +541,31 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                     setSelectedPhotoIds((prev) => Array.from(new Set([...prev, ...groupPhotoIds])))
                   }
                 }
+                const override = folderCollectionOverride[folder]
+                const headerLabel =
+                  override?.id === null
+                    ? 'No collection'
+                    : (override?.name ?? (folder || 'No collection'))
                 return (
                   <div key={folder || '__root__'} style={{ marginBottom: 4 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0 6px', borderBottom: '1px solid var(--border)' }}>
                       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.05em', flex: 1 }}>
-                        {folder || 'No collection'}
+                        {headerLabel}
+                        {override && folder && override.name && override.name.trim().toLowerCase() !== folder.trim().toLowerCase()
+                          ? <span style={{ fontWeight: 400, color: 'var(--text-3)', textTransform: 'none', letterSpacing: 0, marginLeft: 8 }}>({folder})</span>
+                          : null}
                       </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 11 }}
+                        disabled={bulkBusy}
+                        onClick={(e) => { e.stopPropagation(); openFolderEditor(folder) }}
+                        aria-label="Edit group collection"
+                        title="Change collection for this group"
+                      >
+                        ✎
+                      </button>
                       <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={toggleGroup}>
                         {allGroupChecked ? 'Deselect group' : 'Select group'}
                       </button>
@@ -463,20 +592,9 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                   : 'Select photos above to update'}
               </div>
               <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px', lineHeight: 1.45 }}>
-                Set collection and/or location for selected photos. Category is set by AI at import; use Edit on a photo to change it. Group headers are ZIP folder names — tags and names stay per image.
+                Set neighborhood and/or sub-area for selected photos. Use the ✎ icon on a group to change its collection. Category is set by AI at import; use Edit on a photo to change it.
               </p>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
-                <div style={{ flex: '1 1 220px', minWidth: 180 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Collection (optional)</div>
-                  <input
-                    value={bulkCollectionName}
-                    onChange={(e) => setBulkCollectionName(e.target.value)}
-                    placeholder="Type collection name…"
-                    className="ui"
-                    style={{ fontSize: 13, padding: '6px 8px', borderRadius: 6, width: '100%', boxSizing: 'border-box' }}
-                    aria-label="Bulk collection name"
-                  />
-                </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Neighborhood</div>
                   <LocationField
@@ -503,7 +621,7 @@ export default function BulkUploadReviewModal({ userId }: Props) {
                   disabled={
                     bulkBusy ||
                     selectedPhotoIds.length === 0 ||
-                    (bulkCollectionName.trim() === '' && bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
+                    (bulkNeighborhood.trim() === '' && bulkSubarea.trim() === '')
                   }
                   onClick={() => void handleBulkApply()}
                 >
@@ -516,6 +634,102 @@ export default function BulkUploadReviewModal({ userId }: Props) {
             Close
           </button>
         </div>}
+
+        {/* Per-folder collection editor */}
+        {folderEditOpen && (
+          <div
+            className="modal-overlay open"
+            onClick={(e) => { if (e.target === e.currentTarget && !bulkBusy) setFolderEditOpen(false) }}
+            style={{ position: 'fixed', inset: 0, zIndex: 60 }}
+          >
+            <div
+              className="modal"
+              style={{ maxWidth: 520, width: 'calc(100% - 32px)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-body">
+                <div className="modal-hdr">
+                  <div style={{ fontFamily: 'var(--font-head)', fontSize: 16, fontWeight: 700 }}>
+                    Change collection
+                  </div>
+                  <button className="modal-close" disabled={bulkBusy} onClick={() => setFolderEditOpen(false)}>✕</button>
+                </div>
+
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+                  Group: <span style={{ fontFamily: 'var(--font-mono)' }}>{folderEditKey || 'ZIP root (no collection)'}</span>
+                </div>
+
+                <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="radio"
+                      checked={folderEditMode === 'existing'}
+                      onChange={() => setFolderEditMode('existing')}
+                      disabled={bulkBusy}
+                    />
+                    <span style={{ fontSize: 13 }}>Use existing collection</span>
+                  </label>
+                  <select
+                    className="ui"
+                    value={folderEditExistingId}
+                    onChange={(e) => setFolderEditExistingId(e.target.value)}
+                    disabled={bulkBusy || folderEditMode !== 'existing'}
+                  >
+                    <option value="">Select…</option>
+                    {collections.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                    <input
+                      type="radio"
+                      checked={folderEditMode === 'new'}
+                      onChange={() => setFolderEditMode('new')}
+                      disabled={bulkBusy}
+                    />
+                    <span style={{ fontSize: 13 }}>Create (or reuse) by name</span>
+                  </label>
+                  <input
+                    className="ui"
+                    value={folderEditNewName}
+                    onChange={(e) => setFolderEditNewName(e.target.value)}
+                    placeholder="New collection name…"
+                    disabled={bulkBusy || folderEditMode !== 'new'}
+                  />
+
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                    <input
+                      type="radio"
+                      checked={folderEditMode === 'none'}
+                      onChange={() => setFolderEditMode('none')}
+                      disabled={bulkBusy}
+                    />
+                    <span style={{ fontSize: 13 }}>No collection</span>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+                  <button type="button" className="btn btn-ghost" disabled={bulkBusy} onClick={() => setFolderEditOpen(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={bulkBusy}
+                    onClick={() => {
+                      const group = byCollection.find(([k]) => k === folderEditKey)
+                      const photoIds = (group?.[1] ?? []).map((i) => i.photo_id as string)
+                      void applyFolderCollection(folderEditKey, photoIds)
+                    }}
+                  >
+                    {bulkBusy ? 'Applying…' : 'Apply'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )

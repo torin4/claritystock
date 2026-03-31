@@ -1522,6 +1522,7 @@ export default function MyPhotosClient({
               onDownload={handleDownloadRecorded}
               showEdit
               onEdit={openEdit}
+              groupBySubarea={Boolean(drillColl?.id)}
               selectable
               selectionMode={selectionMode}
               selectedIds={selectedIds}

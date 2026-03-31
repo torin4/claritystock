@@ -538,6 +538,7 @@ export default function BrowseClient({
               userId={userId}
               onFavoriteToggle={handleFavoriteToggle}
               onDownload={handleDownload}
+              groupBySubarea={Boolean(collectionId)}
               selectable
               selectionMode={selectionMode}
               selectedIds={selectedIds}

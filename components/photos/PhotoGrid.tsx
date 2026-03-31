@@ -22,6 +22,10 @@ interface Props {
   selectedIds?: string[]
   onBeginSelection?: (photoId: string) => void
   onToggleSelected?: (photoId: string) => void
+  /** Collection drill: group photos by `subarea` with section headers. */
+  groupBySubarea?: boolean
+  /** Section title for photos missing `subarea`. */
+  emptySubareaLabel?: string
 }
 
 export default function PhotoGrid({
@@ -37,6 +41,8 @@ export default function PhotoGrid({
   selectedIds,
   onBeginSelection,
   onToggleSelected,
+  groupBySubarea,
+  emptySubareaLabel = 'No sub-location',
 }: Props) {
   const displayPathsKey = useMemo(
     () =>
@@ -103,9 +109,26 @@ export default function PhotoGrid({
     }
   }, [displayPaths])
 
-  return (
+  const bySubarea = useMemo(() => {
+    if (!groupBySubarea) return null
+    const map = new Map<string, Photo[]>()
+    for (const p of photos) {
+      const key = (p.subarea ?? '').trim()
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(p)
+    }
+    const keys = Array.from(map.keys()).sort((a, b) => a.localeCompare(b))
+    // Keep empty first so "No sub-location" is easy to find.
+    if (keys.includes('')) {
+      const rest = keys.filter((k) => k !== '')
+      return { keys: ['', ...rest], map }
+    }
+    return { keys, map }
+  }, [groupBySubarea, photos])
+
+  const renderTiles = (list: Photo[]) => (
     <div className={`photo-grid${selectionMode ? ' photo-grid-selecting' : ''}`}>
-      {photos.map(photo => (
+      {list.map(photo => (
         <PhotoTile
           key={photo.id}
           photo={photo}
@@ -124,5 +147,38 @@ export default function PhotoGrid({
         />
       ))}
     </div>
+  )
+
+  if (bySubarea) {
+    return (
+      <div style={{ display: 'grid', gap: 18 }}>
+        {bySubarea.keys.map((k) => {
+          const label = k ? k : emptySubareaLabel
+          const list = bySubarea.map.get(k) ?? []
+          if (!list.length) return null
+          return (
+            <section key={k || '__none__'}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: 'var(--text-2)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 10,
+                }}
+              >
+                {label}
+              </div>
+              {renderTiles(list)}
+            </section>
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    renderTiles(photos)
   )
 }
