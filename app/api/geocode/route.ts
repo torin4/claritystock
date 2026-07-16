@@ -55,7 +55,11 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { lat, lng } = await request.json()
-  if (!lat || !lng) return NextResponse.json({ neighborhood: null, subarea: null })
+  const latNum = Number(lat)
+  const lngNum = Number(lng)
+  if (Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+    return NextResponse.json({ neighborhood: null, subarea: null })
+  }
 
-  return geocodeLatLng(Number(lat), Number(lng))
+  return geocodeLatLng(latNum, lngNum)
 }

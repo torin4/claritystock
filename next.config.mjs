@@ -10,6 +10,28 @@ const nextConfig = {
     ],
   },
   /**
+   * Baseline security headers. Kept conservative so nothing breaks: no CSP here
+   * because the UI relies on inline styles — add a CSP with hashed/nonce'd styles
+   * as a follow-up if you want frame-ancestors/script locking.
+   */
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+        ],
+      },
+    ]
+  },
+  /**
    * Dev reliability: native FS watchers often break when the repo lives under
    * iCloud-synced folders (e.g. ~/Documents). Webpack then stops seeing edits,
    * so the app looks "bricked" until you restart `next dev`.
