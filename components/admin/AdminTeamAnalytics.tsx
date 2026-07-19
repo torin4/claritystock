@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useSignedPhotoUrl } from '@/lib/hooks/useSignedPhotoUrl'
 import type { UsageAlertConfig } from '@/lib/admin/usageAlert'
 import AdminPennyJarBandit from '@/components/admin/AdminPennyJarBandit'
+import AdminRoleSelect from '@/components/admin/AdminRoleSelect'
 import type { AdminAnalyticsRangeData } from '@/lib/queries/admin.queries'
 import type { AdminUserRow, UsageLedgerRow } from '@/lib/types/database.types'
 
@@ -24,6 +25,7 @@ interface Props {
   teamSummary: { memberCount: number; adminCount: number }
   usageLedger: UsageLedgerRow[]
   usageAlert: UsageAlertConfig
+  currentUserId: string
 }
 
 export default function AdminTeamAnalytics({
@@ -33,6 +35,7 @@ export default function AdminTeamAnalytics({
   teamSummary,
   usageLedger,
   usageAlert,
+  currentUserId,
 }: Props) {
   const [range, setRange] = useState<RangeKey>('all')
   const active = range === 'all' ? allTime : thisMonth
@@ -406,8 +409,12 @@ export default function AdminTeamAnalytics({
                   userRows.map(u => (
                     <tr key={u.id}>
                       <td>{u.name ?? u.initials ?? u.id.slice(0, 8)}</td>
-                      <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-3)', textTransform: 'capitalize' }}>
-                        {u.role}
+                      <td>
+                        <AdminRoleSelect
+                          userId={u.id}
+                          currentRole={u.role}
+                          isSelf={u.id === currentUserId}
+                        />
                       </td>
                       <td style={{ fontFamily: 'var(--font-mono)' }}>{u.libraryPhotos}</td>
                       <td style={{ color: 'var(--text-3)', fontSize: 12 }}>

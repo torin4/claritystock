@@ -1,5 +1,6 @@
 import { isAdminRole } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
+import { getServerUser } from '@/lib/supabase/request-context'
 import AdminTeamAnalytics from '@/components/admin/AdminTeamAnalytics'
 import { getUsageAlertConfig } from '@/lib/admin/usageAlert'
 import {
@@ -11,7 +12,8 @@ import {
 
 export default async function AdminPage() {
   const supabase = await createClient()
-  const [allTime, thisMonth, userRows] = await Promise.all([
+  const [currentUser, allTime, thisMonth, userRows] = await Promise.all([
+    getServerUser(),
     getAdminAnalyticsAllTime(supabase),
     getAdminAnalyticsThisMonth(supabase),
     getAdminUsersWithPhotoCounts(supabase),
@@ -31,6 +33,7 @@ export default async function AdminPage() {
         teamSummary={teamSummary}
         usageLedger={usageLedger}
         usageAlert={usageAlert}
+        currentUserId={currentUser?.id ?? ''}
       />
     </div>
   )

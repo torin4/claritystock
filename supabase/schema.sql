@@ -1218,6 +1218,56 @@ REVOKE ALL ON FUNCTION public.get_admin_user_roster() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_admin_user_roster() TO authenticated;
 
 -- ---------------------------------------------------------------------------
+-- RPC — admin: change another member's role (promote/demote)
+-- ---------------------------------------------------------------------------
+-- RLS `users_update` only allows self-updates and the `users_guard_role` trigger
+-- blocks non-admin role changes, so admins manage roles through this SECURITY
+-- DEFINER RPC. Guardrails: caller must be admin · valid role only · cannot change
+-- your own role · cannot remove the last remaining admin.
+
+CREATE OR REPLACE FUNCTION public.admin_set_user_role(p_target uuid, p_new_role text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_current_role text;
+BEGIN
+  IF auth.uid() IS NULL OR NOT (SELECT public.is_admin()) THEN
+    RAISE EXCEPTION 'Only admins may change roles' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_new_role NOT IN ('admin', 'photographer') THEN
+    RAISE EXCEPTION 'Invalid role: %', p_new_role USING ERRCODE = '22023';
+  END IF;
+
+  IF p_target = auth.uid() THEN
+    RAISE EXCEPTION 'You cannot change your own role' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT role INTO v_current_role FROM public.users WHERE id = p_target;
+  IF v_current_role IS NULL THEN
+    RAISE EXCEPTION 'User not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_current_role = p_new_role THEN
+    RETURN;
+  END IF;
+
+  IF v_current_role = 'admin' AND p_new_role <> 'admin'
+     AND (SELECT count(*) FROM public.users WHERE role = 'admin') <= 1 THEN
+    RAISE EXCEPTION 'Cannot remove the last admin' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE public.users SET role = p_new_role WHERE id = p_target;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_set_user_role(uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.admin_set_user_role(uuid, text) TO authenticated;
+
+-- ---------------------------------------------------------------------------
 -- RPC — recent collections for nav (all users’ collections, by last activity)
 -- ---------------------------------------------------------------------------
 
