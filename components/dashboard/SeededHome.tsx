@@ -78,7 +78,7 @@ export default function SeededHome({ userId, myPhotos, missingLocation, uncollec
         <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, background: C.card }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 15px', borderBottom: `1px solid ${C.border}` }}>
             <span style={{ fontSize: 12.5, fontWeight: 600 }}>{allDone ? 'You’re all set' : 'Get your photos pulled into projects'}</span>
-            <span style={{ fontFamily: C.mono, fontSize: 11, color: allDone ? C.accent : C.t3 }}>{allDone ? 'done' : `${doneCount} of ${items.length} done`}</span>
+            {!allDone && <span style={{ fontFamily: C.mono, fontSize: 11, color: C.t3 }}>{doneCount} of {items.length} done</span>}
           </div>
           {allDone ? (
             <div style={{ padding: '16px 15px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
