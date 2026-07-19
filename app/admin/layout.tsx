@@ -20,7 +20,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>role = &apos;admin&apos;</code>{' '}
           on your row in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>public.users</code> in Supabase.
         </p>
-        <Link href="/" className="ni active" style={{ width: 'auto', display: 'inline-flex' }}>
+        <Link href="/browse" className="ni active" style={{ width: 'auto', display: 'inline-flex' }}>
           Back to Browse
         </Link>
       </div>

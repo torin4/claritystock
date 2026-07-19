@@ -41,7 +41,7 @@ export default function BrandTitle({ size = 'sidebar', layout = 'inline', stackW
     const stackLogo = logoDimensions(STACK_BRAND.img)
     return (
       <Link
-        href="/"
+        href="/dashboard"
         style={{
           display: 'flex',
           flexDirection: 'column',

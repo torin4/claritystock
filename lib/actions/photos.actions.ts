@@ -306,7 +306,7 @@ export async function deleteAllMyPhotos() {
 
   revalidatePath('/')
   revalidatePath('/my-photos')
-  revalidatePath('/insights')
+  revalidatePath('/dashboard')
   return { deleted: photos.length }
 }
 
@@ -353,7 +353,7 @@ export async function deletePhotos(ids: string[]) {
 
   revalidatePath('/')
   revalidatePath('/my-photos')
-  revalidatePath('/insights')
+  revalidatePath('/dashboard')
   revalidatePath('/admin/libraries')
   return { deleted: photos.length }
 }
