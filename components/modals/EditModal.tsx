@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useUIStore } from '@/stores/ui.store'
 import { updatePhoto, deletePhoto } from '@/lib/actions/photos.actions'
+import { getOrCreateCollectionByName } from '@/lib/actions/collections.actions'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Photo, Collection, Category } from '@/lib/types/database.types'
 import LocationField from '@/components/neighborhoods/LocationField'
@@ -28,6 +29,9 @@ export default function EditModal({ userId, onSuccess }: Props) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [locationLabels, setLocationLabels] = useState<string[]>([])
+  const [creatingColl, setCreatingColl] = useState(false)
+  const [newCollName, setNewCollName] = useState('')
+  const [collBusy, setCollBusy] = useState(false)
 
   useEffect(() => {
     getNeighborhoodCanonicalLabels()
@@ -101,6 +105,28 @@ export default function EditModal({ userId, onSuccess }: Props) {
     }
   }
 
+  /** Create (or reuse) a collection by name, then select it. Saved with the photo on Save. */
+  const handleCreateCollection = async () => {
+    const name = newCollName.trim()
+    if (!name || collBusy) return
+    setCollBusy(true)
+    try {
+      const { id } = await getOrCreateCollectionByName({ name })
+      setCollections((prev) =>
+        prev.some((c) => c.id === id)
+          ? prev
+          : sortCollectionsByName([...prev, { id, name } as unknown as Collection]),
+      )
+      setCollectionId(id)
+      setNewCollName('')
+      setCreatingColl(false)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not create collection')
+    } finally {
+      setCollBusy(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!photo || !confirm('Remove this photo from the library?')) return
     setDeleting(true)
@@ -170,20 +196,55 @@ export default function EditModal({ userId, onSuccess }: Props) {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              {photo?.collection_id ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  style={{ marginTop: 8, padding: 0, fontSize: 11 }}
-                  onClick={() => {
-                    if (!confirm('Remove this photo from its collection? It stays in your library.')) return
-                    void handleRemoveFromCollection()
-                  }}
-                  disabled={saving}
-                >
-                  Remove from collection
-                </button>
-              ) : null}
+              {creatingColl ? (
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <input
+                    className="ui"
+                    autoFocus
+                    value={newCollName}
+                    onChange={e => setNewCollName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); void handleCreateCollection() }
+                      if (e.key === 'Escape') { setCreatingColl(false); setNewCollName('') }
+                    }}
+                    placeholder="New collection name"
+                    style={{ flex: 1 }}
+                    disabled={collBusy}
+                  />
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleCreateCollection()} disabled={collBusy || !newCollName.trim()}>
+                    {collBusy ? '…' : 'Create'}
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setCreatingColl(false); setNewCollName('') }} disabled={collBusy}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 14, marginTop: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: 0, fontSize: 11 }}
+                    onClick={() => setCreatingColl(true)}
+                    disabled={saving}
+                  >
+                    + New collection
+                  </button>
+                  {photo?.collection_id ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: 0, fontSize: 11 }}
+                      onClick={() => {
+                        if (!confirm('Remove this photo from its collection? It stays in your library.')) return
+                        void handleRemoveFromCollection()
+                      }}
+                      disabled={saving}
+                    >
+                      Remove from collection
+                    </button>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
 

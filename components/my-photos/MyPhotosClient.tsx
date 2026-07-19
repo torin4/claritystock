@@ -1491,26 +1491,32 @@ export default function MyPhotosClient({
                   </div>
                 </div>
               ) : (
-                <div className="mp-empty-block">
-                  <h3 className="mp-empty-title">{adminMode ? 'No photos in this library yet' : 'No photos in your library yet'}</h3>
-                  <p className="mp-empty-sub">{adminMode ? 'Upload photos for this photographer to see them here.' : 'Upload photos to see them here and organize them into collections.'}</p>
-                  <div className="mp-empty-actions">
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm btn-with-icon ph-header-upload-btn"
-                      onClick={() => openUpload()}
-                      title="Add photos"
-                    >
-                      <span className="flex md:hidden items-center justify-center">
-                        <PhotoAddIcon size={18} />
-                        <span className="sr-only">Add photos</span>
-                      </span>
-                      <span className="hidden md:inline-flex items-center gap-1.5">
-                        <PlusIcon size={15} />
-                        Add Photos
-                      </span>
-                    </button>
-                  </div>
+                <div className="mp-empty-block" style={{ paddingTop: 32 }}>
+                  <button
+                    type="button"
+                    onClick={() => openUpload()}
+                    title="Add photos"
+                    style={{
+                      display: 'block', width: '100%', maxWidth: 520, margin: '0 auto',
+                      border: '1.5px dashed var(--accent, #5fdf9a)', borderRadius: 16,
+                      background: 'transparent', padding: '30px 22px 26px', cursor: 'pointer', textAlign: 'center',
+                    }}
+                  >
+                    <span style={{ width: 46, height: 46, margin: '0 auto', borderRadius: 12, background: 'rgba(95,223,154,0.10)', border: '1px solid var(--accent, #5fdf9a)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent, #5fdf9a)' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </span>
+                    <h3 className="mp-empty-title" style={{ marginTop: 14 }}>
+                      {adminMode ? 'No photos in this library yet' : 'Your first upload makes the whole library better'}
+                    </h3>
+                    <p className="mp-empty-sub" style={{ maxWidth: '42ch', margin: '6px auto 0' }}>
+                      {adminMode
+                        ? 'Upload photos for this photographer to see them here.'
+                        : 'The library is only as powerful as what’s in it — add your work and the whole team can find, use, and credit it.'}
+                    </p>
+                    <span style={{ display: 'inline-block', marginTop: 16, background: 'linear-gradient(180deg,#6ee8a2,#3cbd77)', color: '#062012', fontWeight: 700, fontSize: 14, padding: '10px 18px', borderRadius: 10 }}>
+                      Add {adminMode ? 'photos' : 'your first photos'}
+                    </span>
+                  </button>
                 </div>
               )
             )
