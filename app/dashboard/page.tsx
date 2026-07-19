@@ -3,9 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { getServerUser, getServerProfile } from '@/lib/supabase/request-context'
 import { isAdminRole } from '@/lib/auth/roles'
 import { getAdminAnalyticsAllTime, getAdminAnalyticsThisMonth } from '@/lib/queries/admin.queries'
-import { getPhotographerHomeData } from '@/lib/dashboard/photographerHome'
+import { getPhotographerHomeData, getPhotographerHomeState, getLibraryTotals } from '@/lib/dashboard/photographerHome'
 import InsightsClient from '@/components/insights/InsightsClient'
 import AdminHome from '@/components/dashboard/AdminHome'
+import EmptyHome from '@/components/dashboard/EmptyHome'
+import SeededHome from '@/components/dashboard/SeededHome'
 
 /** Auth + role gate every request; Home is user-specific, never cache it. */
 export const dynamic = 'force-dynamic'
@@ -39,8 +41,26 @@ export default async function DashboardPage() {
     )
   }
 
-  // ---- Photographer Home (Thriving) — absorbs Insights ----
-  // Empty (0 photos) and Seeded (0 uses) states land in Phase 2.
+  // ---- Photographer Home — empty → seeded → thriving ----
+  const state = await getPhotographerHomeState(supabase, user.id)
+
+  if (state.kind === 'empty') {
+    const totals = await getLibraryTotals(supabase)
+    return <EmptyHome userId={user.id} totals={totals} greetingName={profile?.name ?? ''} />
+  }
+
+  if (state.kind === 'seeded') {
+    return (
+      <SeededHome
+        userId={user.id}
+        myPhotos={state.myPhotos}
+        missingLocation={state.missingLocation}
+        greetingName={profile?.name ?? ''}
+      />
+    )
+  }
+
+  // Thriving — absorbs Insights.
   const data = await getPhotographerHomeData(supabase, user.id)
   return (
     <InsightsClient
