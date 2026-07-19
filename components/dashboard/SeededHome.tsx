@@ -10,6 +10,8 @@ interface Props {
   myPhotos: number
   /** Photos of theirs with no `neighborhood` — the primary discoverability gap. */
   missingLocation: number
+  /** Photos of theirs not in any collection. */
+  uncollected: number
   greetingName?: string
 }
 
@@ -28,7 +30,7 @@ const C = {
  * discoverability — the path to a first use — and set the expectation that
  * impact shows up as teammates start pulling their work.
  */
-export default function SeededHome({ userId, myPhotos, missingLocation, greetingName }: Props) {
+export default function SeededHome({ userId, myPhotos, missingLocation, uncollected, greetingName }: Props) {
   const router = useRouter()
   const { openUpload } = useUIStore()
   const firstName = greetingName?.trim().split(/\s+/)[0]
@@ -41,7 +43,11 @@ export default function SeededHome({ userId, myPhotos, missingLocation, greeting
       done: missingLocation === 0,
       action: missingLocation > 0 ? { href: '/my-photos', text: 'add →' } : undefined,
     },
-    { label: 'Group photos into a collection', done: false, action: { href: '/my-photos', text: 'organize →' } },
+    {
+      label: uncollected > 0 ? `Group ${uncollected} ${uncollected === 1 ? 'photo' : 'photos'} into a collection` : 'Grouped into collections',
+      done: uncollected === 0,
+      action: uncollected > 0 ? { href: '/my-photos', text: 'organize →' } : undefined,
+    },
   ]
   const doneCount = items.filter((i) => i.done).length
 

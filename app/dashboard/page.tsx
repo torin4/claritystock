@@ -34,7 +34,7 @@ async function renderPhotographerHome(supabase: SupabaseClient, userId: string, 
     return <EmptyHome userId={userId} totals={totals} greetingName={name} />
   }
   if (state.kind === 'seeded') {
-    return <SeededHome userId={userId} myPhotos={state.myPhotos} missingLocation={state.missingLocation} greetingName={name} />
+    return <SeededHome userId={userId} myPhotos={state.myPhotos} missingLocation={state.missingLocation} uncollected={state.uncollected} greetingName={name} />
   }
 
   const [data, attention] = await Promise.all([

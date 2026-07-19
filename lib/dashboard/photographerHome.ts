@@ -5,7 +5,7 @@ import { utcThisMonthStartIso } from '@/lib/utils/utcMonth'
 
 export type PhotographerHomeState =
   | { kind: 'empty' }
-  | { kind: 'seeded'; myPhotos: number; missingLocation: number }
+  | { kind: 'seeded'; myPhotos: number; missingLocation: number; uncollected: number }
   | { kind: 'thriving' }
 
 /**
@@ -19,14 +19,17 @@ export async function getPhotographerHomeState(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<PhotographerHomeState> {
-  const [photosRes, usedRes, missingLocRes] = await Promise.all([
+  const [photosRes, usedRes, missingLocRes, uncollectedRes] = await Promise.all([
     supabase.from('photos').select('id', { count: 'exact', head: true }).eq('photographer_id', userId),
     supabase.from('photos').select('id', { count: 'exact', head: true }).eq('photographer_id', userId).gt('downloads_count', 0),
     supabase.from('photos').select('id', { count: 'exact', head: true }).eq('photographer_id', userId).is('neighborhood', null),
+    supabase.from('photos').select('id', { count: 'exact', head: true }).eq('photographer_id', userId).is('collection_id', null),
   ])
   const myPhotos = photosRes.count ?? 0
   if (myPhotos === 0) return { kind: 'empty' }
-  if ((usedRes.count ?? 0) === 0) return { kind: 'seeded', myPhotos, missingLocation: missingLocRes.count ?? 0 }
+  if ((usedRes.count ?? 0) === 0) {
+    return { kind: 'seeded', myPhotos, missingLocation: missingLocRes.count ?? 0, uncollected: uncollectedRes.count ?? 0 }
+  }
   return { kind: 'thriving' }
 }
 
