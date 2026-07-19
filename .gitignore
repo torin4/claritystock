@@ -32,3 +32,9 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# AI tooling (local config)
+.claude/
+.agents/
+.goose/
+.windsurf/

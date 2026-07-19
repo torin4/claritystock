@@ -333,11 +333,18 @@ export async function getAdminPhotographerImpact(supabase: SupabaseClient): Prom
 
 /** Roster + library photo counts per user (for admin table). */
 export async function getAdminUsersWithPhotoCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
-  const { data: users, error: uErr } = await supabase
-    .from('users')
-    .select('id, name, initials, role, created_at, email')
-    .order('name', { ascending: true, nullsFirst: false })
+  // `email` is not client-readable (column GRANT); the roster comes from an
+  // admin-only SECURITY DEFINER RPC that re-checks is_admin() server-side.
+  const { data: rosterData, error: uErr } = await supabase.rpc('get_admin_user_roster')
   if (uErr) throw uErr
+  const users = (rosterData ?? []) as Array<{
+    id: string
+    name: string | null
+    initials: string | null
+    role: string
+    created_at: string
+    email: string | null
+  }>
 
   const photos: { photographer_id: string | null }[] = []
   let from = 0
@@ -360,13 +367,13 @@ export async function getAdminUsersWithPhotoCounts(supabase: SupabaseClient): Pr
     byPhotographer.set(pid, (byPhotographer.get(pid) ?? 0) + 1)
   }
 
-  return (users ?? []).map(u => ({
+  return users.map(u => ({
     id: u.id,
     name: u.name,
     initials: u.initials,
     role: u.role,
     created_at: u.created_at,
-    email: (u as { email?: string | null }).email ?? null,
+    email: u.email ?? null,
     libraryPhotos: byPhotographer.get(u.id) ?? 0,
   }))
 }

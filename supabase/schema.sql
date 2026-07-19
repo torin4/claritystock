@@ -305,6 +305,36 @@ CREATE POLICY "users_update"
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
 
+-- Block role self-escalation: RLS cannot scope columns, so a client could PATCH
+-- `role = 'admin'` on its own row (users_update permits it) and gain admin.
+-- Guard the column with a trigger — only an existing admin may change any role.
+CREATE OR REPLACE FUNCTION public.prevent_role_self_escalation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role AND NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Only admins may change a user role' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS users_guard_role ON public.users;
+CREATE TRIGGER users_guard_role
+  BEFORE UPDATE ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_role_self_escalation();
+
+-- Keep workspace email out of reach of regular clients. name/initials/avatar stay
+-- readable for attribution; email is admin-only (via get_admin_user_roster()).
+-- NOTE: new public.users columns must be added to this GRANT list to be client-readable.
+REVOKE SELECT ON public.users FROM authenticated;
+GRANT SELECT (id, name, initials, role, avatar_url, created_at, hide_own_photos_in_browse)
+  ON public.users TO authenticated;
+
 -- ---------------------------------------------------------------------------
 -- RLS POLICIES — user_google_credentials
 -- ---------------------------------------------------------------------------
@@ -1153,6 +1183,39 @@ $$;
 
 REVOKE ALL ON FUNCTION public.get_top_photo_download_counts_since(timestamptz, int) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_top_photo_download_counts_since(timestamptz, int) TO authenticated;
+
+-- ---------------------------------------------------------------------------
+-- RPC — admin: user roster including email (email is not client-readable)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.get_admin_user_roster()
+RETURNS TABLE (
+  id uuid,
+  name text,
+  initials text,
+  role text,
+  created_at timestamptz,
+  email text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL OR NOT (SELECT public.is_admin()) THEN
+    RAISE EXCEPTION 'not authorized' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT u.id, u.name, u.initials, u.role, u.created_at, u.email
+  FROM public.users u
+  ORDER BY u.name ASC NULLS LAST;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_admin_user_roster() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_admin_user_roster() TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- RPC — recent collections for nav (all users’ collections, by last activity)
