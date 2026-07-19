@@ -31,6 +31,8 @@ interface Props {
   thisMonth: InsightsRangeBundle
   topContributors: TopContributor[]
   userId: string
+  /** When set, the header greets the photographer by name (Home framing) instead of the "Insights" title. */
+  greetingName?: string
 }
 
 type RangeKey = 'all' | 'month'
@@ -43,12 +45,16 @@ const AVATAR_COLORS = [
   { bg: '#1a2832', text: '#6ab4c4' },
 ]
 
-export default function InsightsClient({ allTime, thisMonth, topContributors, userId }: Props) {
+export default function InsightsClient({ allTime, thisMonth, topContributors, userId, greetingName }: Props) {
   const router = useRouter()
   const { openUpload } = useUIStore()
   const [range, setRange] = useState<RangeKey>('all')
   const active = range === 'all' ? allTime : thisMonth
   const { stats, topPhotos, downloadsByUser } = active
+
+  // Home framing: greet by name and lead with this month's impact.
+  const firstName = greetingName?.trim().split(/\s+/)[0] ?? ''
+  const usesThisMonth = thisMonth.stats.totalDownloads
 
   const heroCandidate = topPhotos[0] ?? null
   /** Leaderboard is sorted by downloads_count (all-time totals or uses in the selected month). */
@@ -64,10 +70,13 @@ export default function InsightsClient({ allTime, thisMonth, topContributors, us
       {/* Page header */}
       <div className="ph">
         <div>
-          <div className="ph-title">Insights</div>
+          <div className="ph-title">{greetingName ? `Welcome back${firstName ? `, ${firstName}` : ''}` : 'Insights'}</div>
           <div className="ph-sub">
-            Your library contribution ·{' '}
-            {range === 'all' ? 'Lifetime totals below' : 'Current UTC month only'}
+            {greetingName
+              ? usesThisMonth > 0
+                ? `Your photos were used ${usesThisMonth} ${usesThisMonth === 1 ? 'time' : 'times'} this month`
+                : 'Your library contribution at a glance'
+              : <>Your library contribution · {range === 'all' ? 'Lifetime totals below' : 'Current UTC month only'}</>}
           </div>
           <div className="browse-mode-row" style={{ marginTop: 10, borderBottom: 'none' }}>
             <button

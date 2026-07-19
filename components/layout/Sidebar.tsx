@@ -13,6 +13,14 @@ import { isAdminRole } from '@/lib/auth/roles'
 import type { RecentNavItem } from '@/lib/navigation/recentNav'
 
 // SVG icons as components
+function HomeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2 6 7 2l5 4v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M5.5 13V8.5h3V13" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    </svg>
+  )
+}
 function BrowseIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -28,14 +36,6 @@ function MyPhotosIcon() {
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
       <rect x="1" y="1" width="8" height="12" rx="1" stroke="currentColor" strokeWidth="1.3"/>
       <rect x="4" y="1" width="9" height="9" rx="1" stroke="currentColor" strokeWidth="1.3"/>
-    </svg>
-  )
-}
-function InsightsIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.3"/>
-      <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.3"/>
     </svg>
   )
 }
@@ -184,12 +184,12 @@ export default function Sidebar({
 
   /** Keep Admin under Library so it stays visible when Recents fills the scroll area. */
   const navItems: NavItem[] = [
-    { href: '/', label: 'Browse', icon: <BrowseIcon /> },
+    { href: '/dashboard', label: 'Home', icon: <HomeIcon /> },
+    { href: '/browse', label: 'Browse', icon: <BrowseIcon /> },
     ...(isAdminRole(userRole) ? [{ href: '/admin', label: 'Admin', icon: <AdminIcon /> }] as NavItem[] : []),
   ]
   const mySpaceItems: NavItem[] = [
     { href: '/my-photos', label: 'My Photos', icon: <MyPhotosIcon /> },
-    { href: '/insights', label: 'Insights', icon: <InsightsIcon /> },
   ]
 
   const isActive = (href: string) =>
