@@ -56,7 +56,11 @@ export default function SettingsPanel({
   const handleLogout = async () => {
     const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
-    router.push('/login')
+    // Hard navigation, not router.push: the sidebar lives in the root layout,
+    // which is NOT re-rendered on a soft navigation — so it would linger after
+    // logout. A full page load re-runs the server layout with the cleared session
+    // cookies (getServerUser() → null → no sidebar) and tears down client state.
+    window.location.assign('/login')
   }
 
   return (
@@ -368,7 +372,8 @@ export default function SettingsPanel({
                         const supabase = getSupabaseBrowserClient()
                         await supabase.auth.signOut()
                         closeSettings()
-                        router.push('/login')
+                        // Hard navigation so the root layout re-renders without the sidebar.
+                        window.location.assign('/login')
                       } catch (e) {
                         devError(e)
                         alert(e instanceof Error ? e.message : 'Could not delete account')
