@@ -36,7 +36,7 @@ export default function EmptyHome({ userId, totals, greetingName }: Props) {
     <div style={{ minHeight: '100vh', padding: '28px 22px 60px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
         <div style={{ fontFamily: C.mono, fontSize: 12, letterSpacing: '.04em', color: C.accent }}>
-          Welcome to Clarity Stock{firstName ? `, ${firstName}` : ''} 👋
+          Welcome to Clarity Stock{firstName ? `, ${firstName}` : ''}
         </div>
         <h1 style={{ fontSize: 'clamp(23px, 3.4vw, 32px)', fontWeight: 800, letterSpacing: '-.02em', margin: '12px 0 0', lineHeight: 1.12, textWrap: 'balance' } as React.CSSProperties}>
           Your first upload makes the whole library better.
@@ -56,7 +56,9 @@ export default function EmptyHome({ userId, totals, greetingName }: Props) {
             padding: '30px 22px 26px', cursor: 'pointer', textAlign: 'center',
           }}
         >
-          <div style={{ width: 46, height: 46, margin: '0 auto', borderRadius: 12, background: 'rgba(95,223,154,0.10)', border: `1px solid ${C.accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, fontSize: 22 }}>↑</div>
+          <div style={{ width: 46, height: 46, margin: '0 auto', borderRadius: 12, background: 'rgba(95,223,154,0.10)', border: `1px solid ${C.accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </div>
           <div style={{ fontSize: 14.5, marginTop: 14, color: C.t1 }}>
             Drag your photos here, or <span style={{ color: C.accent, textDecoration: 'underline', textUnderlineOffset: 2 }}>browse your files</span>
           </div>
@@ -100,8 +102,9 @@ export default function EmptyHome({ userId, totals, greetingName }: Props) {
 function LockCard({ title, sub }: { title: string; sub: string }) {
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, background: C.card, padding: 14, position: 'relative' }}>
-      <span style={{ position: 'absolute', top: 10, right: 10, fontFamily: C.mono, fontSize: 9, letterSpacing: '.06em', textTransform: 'uppercase', color: C.t3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 7px' }}>
-        🔒 locked
+      <span style={{ position: 'absolute', top: 10, right: 10, display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: C.mono, fontSize: 9, letterSpacing: '.06em', textTransform: 'uppercase', color: C.t3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 7px' }}>
+        <svg width="9" height="9" viewBox="0 0 14 14" fill="none" aria-hidden><rect x="2.7" y="6.2" width="8.6" height="5.6" rx="1" stroke="currentColor" strokeWidth="1.3" /><path d="M4.6 6.2V4.7a2.4 2.4 0 0 1 4.8 0v1.5" stroke="currentColor" strokeWidth="1.3" /></svg>
+        locked
       </span>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.t1 }}>{title}</div>
       <div style={{ fontSize: 11.5, color: C.t3, marginTop: 3 }}>{sub}</div>

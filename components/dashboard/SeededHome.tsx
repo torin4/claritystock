@@ -76,7 +76,9 @@ export default function SeededHome({ userId, myPhotos, missingLocation, greeting
           <div style={{ padding: '4px 15px 10px' }}>
             {items.map((it, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: i < items.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 12.5, color: it.done ? C.t1 : C.t2 }}>
-                <span style={{ width: 16, height: 16, borderRadius: 5, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: it.done ? '#062012' : 'transparent', background: it.done ? C.accent : 'transparent', border: it.done ? `1px solid ${C.accent}` : `1.5px solid ${C.border}` }}>✓</span>
+                <span style={{ width: 16, height: 16, borderRadius: 5, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.done ? C.accent : 'transparent', border: it.done ? `1px solid ${C.accent}` : `1.5px solid ${C.border}` }}>
+                  {it.done && <svg width="10" height="10" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M2.6 7.4l3 3 5.8-6.8" stroke="#062012" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                </span>
                 <span>{it.label}</span>
                 {it.action && <Link href={it.action.href} style={{ marginLeft: 'auto', fontFamily: C.mono, fontSize: 11, color: C.accent, textDecoration: 'none' }}>{it.action.text}</Link>}
               </div>
@@ -88,7 +90,9 @@ export default function SeededHome({ userId, myPhotos, missingLocation, greeting
         <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, background: C.card }}>
           <div style={{ padding: '13px 15px', borderBottom: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 600 }}>Who’s using your photos</div>
           <div style={{ textAlign: 'center', padding: '26px 16px' }}>
-            <div style={{ fontSize: 26 }}>🌱</div>
+            <div style={{ display: 'flex', justifyContent: 'center', color: C.accent }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M3 17l5-5 4 4 8-8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /><path d="M15 8h5v5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </div>
             <div style={{ fontSize: 13, color: C.t2, marginTop: 8 }}>No uses yet — that’s normal on day one.</div>
             <div style={{ fontFamily: C.mono, fontSize: 11, color: C.t3, marginTop: 6 }}>The more discoverable your shots, the faster this fills up.</div>
           </div>
