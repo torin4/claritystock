@@ -50,6 +50,7 @@ export default function SeededHome({ userId, myPhotos, missingLocation, uncollec
     },
   ]
   const doneCount = items.filter((i) => i.done).length
+  const allDone = doneCount === items.length
 
   return (
     <div style={{ minHeight: '100vh', padding: '20px 22px 40px' }}>
@@ -73,23 +74,35 @@ export default function SeededHome({ userId, myPhotos, missingLocation, uncollec
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginTop: 14 }}>
-        {/* Get discovered checklist */}
+        {/* Get discovered checklist — auto-collapses to a confirmation when complete */}
         <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, background: C.card }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 15px', borderBottom: `1px solid ${C.border}` }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600 }}>Get your photos pulled into projects</span>
-            <span style={{ fontFamily: C.mono, fontSize: 11, color: C.t3 }}>{doneCount} of {items.length} done</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>{allDone ? 'You’re all set' : 'Get your photos pulled into projects'}</span>
+            <span style={{ fontFamily: C.mono, fontSize: 11, color: allDone ? C.accent : C.t3 }}>{allDone ? 'done' : `${doneCount} of ${items.length} done`}</span>
           </div>
-          <div style={{ padding: '4px 15px 10px' }}>
-            {items.map((it, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: i < items.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 12.5, color: it.done ? C.t1 : C.t2 }}>
-                <span style={{ width: 16, height: 16, borderRadius: 5, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.done ? C.accent : 'transparent', border: it.done ? `1px solid ${C.accent}` : `1.5px solid ${C.border}` }}>
-                  {it.done && <svg width="10" height="10" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M2.6 7.4l3 3 5.8-6.8" stroke="#062012" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                </span>
-                <span>{it.label}</span>
-                {it.action && <Link href={it.action.href} style={{ marginLeft: 'auto', fontFamily: C.mono, fontSize: 11, color: C.accent, textDecoration: 'none' }}>{it.action.text}</Link>}
+          {allDone ? (
+            <div style={{ padding: '16px 15px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.accent }}>
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M2.6 7.4l3 3 5.8-6.8" stroke="#062012" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.t1 }}>Your photos are discoverable.</div>
+                <div style={{ fontSize: 12.5, color: C.t2, marginTop: 3 }}>Nothing left to do — uses will show up here as teammates start pulling your work.</div>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div style={{ padding: '4px 15px 10px' }}>
+              {items.map((it, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: i < items.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 12.5, color: it.done ? C.t1 : C.t2 }}>
+                  <span style={{ width: 16, height: 16, borderRadius: 5, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.done ? C.accent : 'transparent', border: it.done ? `1px solid ${C.accent}` : `1.5px solid ${C.border}` }}>
+                    {it.done && <svg width="10" height="10" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M2.6 7.4l3 3 5.8-6.8" stroke="#062012" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                  </span>
+                  <span>{it.label}</span>
+                  {it.action && <Link href={it.action.href} style={{ marginLeft: 'auto', fontFamily: C.mono, fontSize: 11, color: C.accent, textDecoration: 'none' }}>{it.action.text}</Link>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Impact pending */}
