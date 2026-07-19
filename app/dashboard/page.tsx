@@ -3,17 +3,19 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { getServerUser, getServerProfile } from '@/lib/supabase/request-context'
 import { isAdminRole } from '@/lib/auth/roles'
-import { getAdminAnalyticsAllTime, getAdminAnalyticsThisMonth } from '@/lib/queries/admin.queries'
+import { getAdminAnalyticsAllTime, getAdminAnalyticsThisMonth, getAdminUsersWithPhotoCounts } from '@/lib/queries/admin.queries'
 import {
   getPhotographerHomeData,
   getPhotographerHomeState,
   getLibraryTotals,
 } from '@/lib/dashboard/photographerHome'
+import { getPhotographerAttention, getAdminAttention } from '@/lib/queries/dashboard.queries'
 import InsightsClient from '@/components/insights/InsightsClient'
 import AdminHome from '@/components/dashboard/AdminHome'
 import EmptyHome from '@/components/dashboard/EmptyHome'
 import SeededHome from '@/components/dashboard/SeededHome'
 import DashboardViewToggle from '@/components/dashboard/DashboardViewToggle'
+import type { AttentionItem } from '@/components/dashboard/NeedsAttentionCard'
 
 /** Auth + role gate every request; Home is user-specific, never cache it. */
 export const dynamic = 'force-dynamic'
@@ -35,7 +37,14 @@ async function renderPhotographerHome(supabase: SupabaseClient, userId: string, 
     return <SeededHome userId={userId} myPhotos={state.myPhotos} missingLocation={state.missingLocation} greetingName={name} />
   }
 
-  const data = await getPhotographerHomeData(supabase, userId)
+  const [data, attention] = await Promise.all([
+    getPhotographerHomeData(supabase, userId),
+    getPhotographerAttention(supabase, userId),
+  ])
+  const attentionItems: AttentionItem[] = [
+    { count: attention.missingLocation, badge: 'meta', tone: 'warn', href: '/my-photos', cta: 'add →', label: `${attention.missingLocation} of your photos missing a location` },
+    { count: attention.uncollected, badge: 'organize', tone: 'info', href: '/my-photos', cta: 'organize →', label: `${attention.uncollected} photos not in a collection` },
+  ]
   return (
     <InsightsClient
       allTime={data.allTime}
@@ -43,6 +52,7 @@ async function renderPhotographerHome(supabase: SupabaseClient, userId: string, 
       topContributors={data.topContributors}
       userId={userId}
       greetingName={name}
+      attentionItems={attentionItems}
     />
   )
 }
@@ -72,12 +82,18 @@ export default async function DashboardPage({
 
   // Admin, default "Team" view — pulse + stewardship launchpad, with the toggle.
   if (isAdmin) {
-    const [allTime, thisMonth, membersRes, myPhotosRes] = await Promise.all([
+    const [allTime, thisMonth, userRows, myPhotosRes] = await Promise.all([
       getAdminAnalyticsAllTime(supabase),
       getAdminAnalyticsThisMonth(supabase),
-      supabase.from('users').select('id', { count: 'exact', head: true }),
+      getAdminUsersWithPhotoCounts(supabase),
       supabase.from('photos').select('id', { count: 'exact', head: true }).eq('photographer_id', user.id),
     ])
+    const attention = await getAdminAttention(supabase, userRows)
+    const attentionItems: AttentionItem[] = [
+      { count: attention.idleMembers, badge: 'members', tone: 'crit', href: '/admin', cta: 'view →', label: `${attention.idleMembers} ${attention.idleMembers === 1 ? 'member has' : 'members have'} joined but never uploaded` },
+      { count: attention.libraryMissingLocation, badge: 'meta', tone: 'warn', href: '/admin/libraries', cta: 'review →', label: `${attention.libraryMissingLocation} library photos missing a location` },
+      { count: attention.failedBulkJobs, badge: 'upload', tone: 'info', href: '/admin', cta: 'view →', label: `${attention.failedBulkJobs} bulk ${attention.failedBulkJobs === 1 ? 'upload' : 'uploads'} failed` },
+    ]
     return (
       <>
         <DashboardViewToggle active="team" />
@@ -86,11 +102,12 @@ export default async function DashboardPage({
           teamStats={{
             libraryPhotos: allTime.stats.totalPhotos,
             usesThisMonth: thisMonth.stats.totalDownloads,
-            members: membersRes.count ?? 0,
+            members: userRows.length,
             newThisMonth: thisMonth.stats.totalPhotos,
           }}
           contributors={thisMonth.photographerImpact}
           myPhotos={myPhotosRes.count ?? 0}
+          attentionItems={attentionItems}
         />
       </>
     )

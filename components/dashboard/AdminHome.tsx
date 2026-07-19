@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { PhotographerImpact } from '@/lib/types/database.types'
+import NeedsAttentionCard, { type AttentionItem } from '@/components/dashboard/NeedsAttentionCard'
 
 interface Props {
   greetingName: string
@@ -12,6 +13,7 @@ interface Props {
   contributors: PhotographerImpact[]
   /** The admin's own photo count — Clarity admins shoot too. */
   myPhotos: number
+  attentionItems: AttentionItem[]
 }
 
 const num: React.CSSProperties = { fontVariantNumeric: 'tabular-nums' }
@@ -39,7 +41,7 @@ function StatTile({ value, label }: { value: number; label: string }) {
  * that links into the full /admin analytics section (which keeps its own subnav,
  * roster/role management, ledger and exports) rather than absorbing it.
  */
-export default function AdminHome({ greetingName, teamStats, contributors, myPhotos }: Props) {
+export default function AdminHome({ greetingName, teamStats, contributors, myPhotos, attentionItems }: Props) {
   const firstName = greetingName.trim().split(/\s+/)[0]
   const uses = teamStats.usesThisMonth
 
@@ -66,6 +68,9 @@ export default function AdminHome({ greetingName, teamStats, contributors, myPho
       </div>
 
       <div style={{ padding: '16px 20px', display: 'grid', gap: 'var(--gap)' }}>
+        {/* Needs attention — renders nothing when the library is clean */}
+        <NeedsAttentionCard items={attentionItems} />
+
         {/* Top contributors */}
         <div className="admin-card">
           <div className="admin-card__header">Top contributors this month</div>

@@ -7,6 +7,7 @@ import { useInView } from '@/lib/hooks/useInView'
 import UploadModal from '@/components/modals/UploadModal'
 import { PlusIcon } from '@/components/icons/PlusIcon'
 import { PhotoAddIcon } from '@/components/icons/PhotoAddIcon'
+import NeedsAttentionCard, { type AttentionItem } from '@/components/dashboard/NeedsAttentionCard'
 import type { InsightsStats, DownloadByUser, TopContributor } from '@/lib/types/database.types'
 
 interface TopPhoto {
@@ -33,6 +34,8 @@ interface Props {
   userId: string
   /** When set, the header greets the photographer by name (Home framing) instead of the "Insights" title. */
   greetingName?: string
+  /** Home "needs attention" rows; the card hides itself when empty. */
+  attentionItems?: AttentionItem[]
 }
 
 type RangeKey = 'all' | 'month'
@@ -45,7 +48,7 @@ const AVATAR_COLORS = [
   { bg: '#1a2832', text: '#6ab4c4' },
 ]
 
-export default function InsightsClient({ allTime, thisMonth, topContributors, userId, greetingName }: Props) {
+export default function InsightsClient({ allTime, thisMonth, topContributors, userId, greetingName, attentionItems }: Props) {
   const router = useRouter()
   const { openUpload } = useUIStore()
   const [range, setRange] = useState<RangeKey>('all')
@@ -131,6 +134,12 @@ export default function InsightsClient({ allTime, thisMonth, topContributors, us
           label={range === 'all' ? 'Your favorites' : 'Favorites added'}
         />
       </div>
+
+      {attentionItems && attentionItems.length > 0 && (
+        <div style={{ padding: '16px 20px 0' }}>
+          <NeedsAttentionCard items={attentionItems} />
+        </div>
+      )}
 
       {/* Hero: top photo when there are downloads; otherwise explain empty state */}
       <div
