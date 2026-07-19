@@ -28,7 +28,7 @@ const link: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 12
 function StatTile({ value, label }: { value: number; label: string }) {
   return (
     <div className="stat-card" style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '14px 15px', background: 'var(--surface, transparent)' }}>
-      <div style={{ ...num, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' }}>{value.toLocaleString()}</div>
+      <div style={{ ...num, fontSize: 'clamp(20px, 4.5vw, 26px)', fontWeight: 700, letterSpacing: '-0.02em' }}>{value.toLocaleString()}</div>
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginTop: 3 }}>
         {label}
       </div>
@@ -60,7 +60,7 @@ export default function AdminHome({ greetingName, teamStats, contributors, myPho
       </div>
 
       {/* Team pulse */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--gap)', padding: '16px 20px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--gap)', padding: '16px 20px 0' }}>
         <StatTile value={teamStats.libraryPhotos} label="Photos in library" />
         <StatTile value={teamStats.usesThisMonth} label="Uses this month" />
         <StatTile value={teamStats.members} label="Team members" />
