@@ -423,6 +423,10 @@ export default function AdminTeamAnalytics({
                               month: 'short',
                               day: 'numeric',
                               year: 'numeric',
+                              // Fixed zone so server (UTC) and client (local TZ)
+                              // render the same day — otherwise dates near
+                              // midnight mismatch and trigger a hydration error.
+                              timeZone: 'UTC',
                             })
                           : '—'}
                       </td>
