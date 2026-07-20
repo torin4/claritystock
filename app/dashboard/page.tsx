@@ -60,7 +60,7 @@ async function renderPhotographerHome(supabase: SupabaseClient, userId: string, 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: SearchParams | Promise<SearchParams>
+  searchParams: Promise<SearchParams>
 }) {
   const sp = await Promise.resolve(searchParams)
   const user = await getServerUser()

@@ -10,9 +10,9 @@ import { devError } from '@/lib/utils/devLog'
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { jobId: string } },
+  { params }: { params: Promise<{ jobId: string }> },
 ) {
-  const jobId = params.jobId
+  const { jobId } = await params
   if (!jobId || !/^[0-9a-f-]{36}$/i.test(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
