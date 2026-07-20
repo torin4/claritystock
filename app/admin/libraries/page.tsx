@@ -17,7 +17,7 @@ export default async function AdminLibrariesPage({
   searchParams,
 }: {
   /** Next.js 15+ may pass a Promise; normalize for both versions. */
-  searchParams: LibrariesSearchParams | Promise<LibrariesSearchParams>
+  searchParams: Promise<LibrariesSearchParams>
 }) {
   const sp = await Promise.resolve(searchParams)
   const supabase = await createClient()

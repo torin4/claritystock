@@ -1,9 +1,10 @@
-export default function ErrorPage({
+export default async function ErrorPage({
   searchParams,
 }: {
-  searchParams: { reason?: string }
+  searchParams: Promise<{ reason?: string }>
 }) {
-  const isDomain = searchParams.reason === 'domain'
+  const { reason } = await searchParams
+  const isDomain = reason === 'domain'
   return (
     <div style={{
       minHeight: '100vh',
