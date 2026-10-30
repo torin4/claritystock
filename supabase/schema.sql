@@ -77,13 +77,41 @@ CREATE INDEX IF NOT EXISTS photos_content_hash_idx
 ALTER TABLE public.photos
   ADD COLUMN IF NOT EXISTS source_app text,
   ADD COLUMN IF NOT EXISTS source_ref text,
-  ADD COLUMN IF NOT EXISTS sent_by_email text,
   ADD COLUMN IF NOT EXISTS consent_text text,
   ADD COLUMN IF NOT EXISTS consented_at timestamptz;
 
 CREATE UNIQUE INDEX IF NOT EXISTS photos_source_app_source_ref_key
   ON public.photos (source_app, source_ref)
   WHERE source_ref IS NOT NULL;
+
+-- Consent and provenance are fixed once written: only an admin may change them.
+-- RLS lets an owner update their own photo row with no column scoping, so guard
+-- the columns with a trigger (same pattern as users_guard_role). Inserts are not
+-- affected; the ingest route only ever inserts these columns.
+CREATE OR REPLACE FUNCTION public.prevent_photo_provenance_edit()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF (
+    NEW.source_app IS DISTINCT FROM OLD.source_app
+    OR NEW.source_ref IS DISTINCT FROM OLD.source_ref
+    OR NEW.consent_text IS DISTINCT FROM OLD.consent_text
+    OR NEW.consented_at IS DISTINCT FROM OLD.consented_at
+  ) AND NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Only admins may change photo provenance or consent' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS photos_guard_provenance ON public.photos;
+CREATE TRIGGER photos_guard_provenance
+  BEFORE UPDATE ON public.photos
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_photo_provenance_edit();
 
 ALTER TABLE public.photos
   DROP CONSTRAINT IF EXISTS photos_storage_paths_under_photographer;

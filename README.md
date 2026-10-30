@@ -10,4 +10,4 @@ Env vars:
 - `INGEST_IMAGE_HOSTS`: comma-separated exact hostnames `image_url` may use (https only). Empty means every download is refused.
 - Also uses `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` and `ALLOWED_EMAIL_DOMAIN`.
 
-Before switching AF2 on, apply `supabase/migrations/20261030120000_photos_ingest_provenance.sql` to the Supabase project. It adds the provenance columns (`source_app`, `source_ref`, `sent_by_email`, `consent_text`, `consented_at`) and the unique index the endpoint relies on for idempotency.
+Before switching AF2 on, apply `supabase/migrations/20261030120000_photos_ingest_provenance.sql` to the Supabase project. It adds the provenance columns (`source_app`, `source_ref`, `consent_text`, `consented_at`), the unique index the endpoint relies on for idempotency, and a trigger that lets only admins change those columns afterwards.

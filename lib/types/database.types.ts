@@ -58,7 +58,6 @@ export interface Photo {
   source_app?: string | null
   /** Sender's idempotency key, unique per source_app */
   source_ref?: string | null
-  sent_by_email?: string | null
   consent_text?: string | null
   consented_at?: string | null
   downloads_count: number

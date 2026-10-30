@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fallbackTagPayload, tagImage, type TagPayload } from '@/lib/ai/tagImage'
+import { withNeedsLocationTag } from '@/lib/constants/photoTags'
 import { createServerDerivatives, detectImageMime } from '@/lib/ingest/derivatives'
 import { fetchIngestImage } from '@/lib/ingest/fetchImage'
 import { isAllowedImageUrl, parseIngestImageHosts } from '@/lib/ingest/imageHosts'
@@ -240,16 +241,17 @@ export async function POST(request: NextRequest) {
     // 6. Same tagger as the upload flow; soft fallback on failure.
     const ai = await tagForIngest(derivatives.aiTag)
 
-    // 7. Insert with provenance.
+    // 7. Insert with provenance. No resolved neighborhood -> needs-location, as bulk ZIP publish does.
+    const neighborhood = await resolveNeighborhood(supabase, body.neighborhood)
     const row = {
       title: ai.title,
-      tags: ai.tags,
+      tags: withNeedsLocationTag(ai.tags, neighborhood),
       category: ai.category,
       description: ai.description || null,
       photographer_id: photographerId,
       collection_id: null,
       captured_date: body.captured_date,
-      neighborhood: await resolveNeighborhood(supabase, body.neighborhood),
+      neighborhood,
       subarea: body.subarea,
       lat: body.lat,
       lng: body.lng,
@@ -261,7 +263,6 @@ export async function POST(request: NextRequest) {
       downloads_count: 0,
       source_app: body.source_app,
       source_ref: body.source_ref,
-      sent_by_email: body.photographer_email,
       consent_text: body.consent_text,
       consented_at: body.consented_at,
     }
