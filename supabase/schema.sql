@@ -73,6 +73,18 @@ CREATE INDEX IF NOT EXISTS photos_content_hash_idx
   ON public.photos (content_hash)
   WHERE content_hash IS NOT NULL;
 
+-- Ingest provenance (migrations/20261030120000_photos_ingest_provenance.sql)
+ALTER TABLE public.photos
+  ADD COLUMN IF NOT EXISTS source_app text,
+  ADD COLUMN IF NOT EXISTS source_ref text,
+  ADD COLUMN IF NOT EXISTS sent_by_email text,
+  ADD COLUMN IF NOT EXISTS consent_text text,
+  ADD COLUMN IF NOT EXISTS consented_at timestamptz;
+
+CREATE UNIQUE INDEX IF NOT EXISTS photos_source_app_source_ref_key
+  ON public.photos (source_app, source_ref)
+  WHERE source_ref IS NOT NULL;
+
 ALTER TABLE public.photos
   DROP CONSTRAINT IF EXISTS photos_storage_paths_under_photographer;
 

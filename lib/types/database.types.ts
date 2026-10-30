@@ -54,6 +54,13 @@ export interface Photo {
   display_path?: string | null
   /** SHA-256 hex of original file; used for exact duplicate detection */
   content_hash?: string | null
+  /** Ingest provenance: sending app (e.g. 'af2'); null for in-app uploads */
+  source_app?: string | null
+  /** Sender's idempotency key, unique per source_app */
+  source_ref?: string | null
+  sent_by_email?: string | null
+  consent_text?: string | null
+  consented_at?: string | null
   downloads_count: number
   created_at: string
   // Joined fields
