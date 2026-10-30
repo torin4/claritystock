@@ -11,7 +11,7 @@ import { ingestSecretFor, verifyIngestSignature } from '@/lib/ingest/signature'
 import { validateIngestBody, type IngestPhotoBody } from '@/lib/ingest/validateBody'
 import { resolveNeighborhoodToCanonical } from '@/lib/neighborhoods/canonical'
 import { createServiceClient } from '@/lib/supabase/service'
-import { devError, devWarn } from '@/lib/utils/devLog'
+import { devWarn } from '@/lib/utils/devLog'
 
 /**
  * Server-to-server photo ingest (contract v1, see README "Ingest API").
@@ -31,6 +31,13 @@ const ORIGINAL_EXT_BY_MIME: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/tiff': 'tif',
+}
+
+const ORIGINAL_EXT_ALIASES: Record<string, string[]> = {
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/webp': ['webp'],
+  'image/tiff': ['tif', 'tiff'],
 }
 
 type ExistingPhoto = { id: string }
@@ -56,10 +63,16 @@ function storageStem(): string {
   return `${Date.now()}-${randomBytes(6).toString('hex')}`
 }
 
-/** Original keeps its filename extension when it is a plain short token, as uploadPhoto does. */
+/** Original keeps its filename extension (as uploadPhoto does) only when it names the sniffed format. */
 function originalExt(filename: string, mime: string): string {
   const fromName = filename.includes('.') ? filename.split('.').pop()?.toLowerCase() : undefined
-  return fromName && /^[a-z0-9]{1,5}$/.test(fromName) ? fromName : ORIGINAL_EXT_BY_MIME[mime]
+  const sameFormat = fromName && ORIGINAL_EXT_ALIASES[mime]?.includes(fromName)
+  return sameFormat ? fromName : ORIGINAL_EXT_BY_MIME[mime]
+}
+
+/** Server-side failure log. devLog is silent in production, and nobody watches this endpoint live. */
+function logFailure(message: string, detail: Record<string, unknown>) {
+  console.error(`[api/ingest/photos] ${message}`, detail)
 }
 
 async function findBySourceRef(
@@ -104,7 +117,7 @@ async function resolvePhotographerId(supabase: SupabaseClient, email: string): P
       r.email?.toLowerCase() === email.toLowerCase() && emailDomain(r.email) === ALLOWED_DOMAIN,
   )
   if (rows.length !== 1) {
-    if (rows.length > 1) devWarn('[api/ingest/photos] multiple users share one email; refusing to pick')
+    if (rows.length > 1) logFailure('multiple users share one email; refusing to pick', {})
     return null
   }
   return rows[0].id as string
@@ -125,7 +138,7 @@ async function resolveNeighborhood(supabase: SupabaseClient, input: string | nul
 async function tagForIngest(aiTagJpeg: Buffer): Promise<TagPayload> {
   const key = process.env.GEMINI_API_KEY?.trim()
   if (!key) {
-    devWarn('[api/ingest/photos] GEMINI_API_KEY is not set; using fallback tags')
+    logFailure('GEMINI_API_KEY is not set; using fallback tags', {})
     const { title, tags, category, description } = fallbackTagPayload()
     return { title, tags, category, description }
   }
@@ -137,7 +150,7 @@ async function tagForIngest(aiTagJpeg: Buffer): Promise<TagPayload> {
 async function removeUploaded(supabase: SupabaseClient, paths: string[]) {
   if (!paths.length) return
   const { error } = await supabase.storage.from('photos').remove(paths)
-  if (error) devWarn('[api/ingest/photos] cleanup of uploaded objects failed', error.message)
+  if (error) logFailure('cleanup of uploaded objects failed', { paths, error: error.message })
 }
 
 export async function POST(request: NextRequest) {
@@ -200,7 +213,7 @@ export async function POST(request: NextRequest) {
       if (fetched.kind === 'unsupported_type') {
         return NextResponse.json({ error: 'unsupported_image_type', field: 'image_url' }, { status: 422 })
       }
-      devWarn('[api/ingest/photos] image download failed', { source_ref: body.source_ref })
+      logFailure('image download failed', { source_ref: body.source_ref })
       return NextResponse.json({ error: 'image_fetch_failed' }, { status: 502 })
     }
     const original = fetched.bytes
@@ -213,7 +226,7 @@ export async function POST(request: NextRequest) {
     const sameBytes = await findByContentHash(supabase, contentHash)
     if (sameBytes) return exists(request, sameBytes.id)
 
-    // 5. Derivatives (same presets as the browser upload) under the photographer's prefix.
+    // 5. Derivatives (same presets as the browser upload).
     let derivatives: Awaited<ReturnType<typeof createServerDerivatives>>
     try {
       derivatives = await createServerDerivatives(original)
@@ -221,6 +234,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'unsupported_image_type', field: 'image_url' }, { status: 422 })
     }
 
+    // 6. Same tagger as the upload flow; soft fallback on failure. Runs before any
+    // upload so a timeout in the Gemini fallback chain leaves no orphaned objects.
+    const ai = await tagForIngest(derivatives.aiTag)
+    const neighborhood = await resolveNeighborhood(supabase, body.neighborhood)
+
+    // 7. Store original/display/thumbnail under the photographer's prefix.
     const stem = storageStem()
     const storagePath = `${photographerId}/${stem}.${originalExt(body.filename, mime)}`
     const displayPath = `${photographerId}/display/${stem}.jpg`
@@ -238,11 +257,7 @@ export async function POST(request: NextRequest) {
       uploaded.push(o.path)
     }
 
-    // 6. Same tagger as the upload flow; soft fallback on failure.
-    const ai = await tagForIngest(derivatives.aiTag)
-
-    // 7. Insert with provenance. No resolved neighborhood -> needs-location, as bulk ZIP publish does.
-    const neighborhood = await resolveNeighborhood(supabase, body.neighborhood)
+    // 8. Insert with provenance. No resolved neighborhood -> needs-location, as bulk ZIP publish does.
     const row = {
       title: ai.title,
       tags: withNeedsLocationTag(ai.tags, neighborhood),
@@ -278,7 +293,7 @@ export async function POST(request: NextRequest) {
       throw insertErr
     }
 
-    // 8. Created. Same cache paths publishPhoto revalidates.
+    // 9. Created. Same cache paths publishPhoto revalidates.
     revalidatePath('/')
     revalidatePath('/my-photos')
     revalidatePath('/admin')
@@ -289,7 +304,10 @@ export async function POST(request: NextRequest) {
     )
   } catch (e) {
     await removeUploaded(supabase, uploaded)
-    devError('[api/ingest/photos] ingest failed', { source_ref: body.source_ref }, e instanceof Error ? e.message : e)
+    logFailure('ingest failed', {
+      source_ref: body.source_ref,
+      error: e instanceof Error ? e.message : (e as { message?: unknown })?.message ?? String(e),
+    })
     return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }

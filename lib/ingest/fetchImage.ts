@@ -1,7 +1,20 @@
 /** Same cap as the private `photos` bucket. */
 export const INGEST_MAX_IMAGE_BYTES = 50 * 1024 * 1024
 
-const ALLOWED_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/tiff'])
+/**
+ * Response types worth downloading. The real format is sniffed from the bytes
+ * afterwards; octet-stream (or no type) is let through because AF1-imported S3
+ * objects were stored as `application/octet-stream`.
+ */
+const ALLOWED_CONTENT_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/tiff',
+  'application/octet-stream',
+  'binary/octet-stream',
+  '',
+])
 
 export type FetchImageResult =
   | { ok: true; bytes: Buffer }
