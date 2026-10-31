@@ -1,20 +1,20 @@
-type DerivativeOptions = {
+export type DerivativeOptions = {
   maxDimension: number
   quality: number
 }
 
-const THUMBNAIL_OPTIONS: DerivativeOptions = {
+export const THUMBNAIL_OPTIONS: DerivativeOptions = {
   maxDimension: 1200,
   quality: 0.80,
 }
 
-const DISPLAY_OPTIONS: DerivativeOptions = {
+export const DISPLAY_OPTIONS: DerivativeOptions = {
   maxDimension: 1920,
   quality: 0.86,
 }
 
 /** Small enough for JSON POST limits (e.g. Vercel ~4.5MB) while keeping vision detail. */
-const AI_TAG_OPTIONS: DerivativeOptions = {
+export const AI_TAG_OPTIONS: DerivativeOptions = {
   maxDimension: 1280,
   quality: 0.78,
 }

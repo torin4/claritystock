@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "eslint .",
     "backfill:display": "node --env-file=.env scripts/backfill-display-images.mjs",
-    "backfill:content-hash": "node --env-file=.env scripts/backfill-content-hash.mjs"
+    "backfill:content-hash": "node --env-file=.env scripts/backfill-content-hash.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
@@ -22,6 +23,7 @@
     "next": "16.2.10",
     "react": "^18",
     "react-dom": "^18",
+    "sharp": "^0.34.5",
     "zustand": "^5.0.3"
   },
   "engines": {
@@ -38,6 +40,7 @@
     "eslint-config-next": "16.2.10",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

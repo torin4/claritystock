@@ -3,7 +3,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env'
 import { devError } from '@/lib/utils/devLog'
 
-const PUBLIC_PATHS = ['/login', '/auth/callback', '/error']
+/**
+ * `/api/ingest/` is server-to-server and guarded by its per-source HMAC, not a
+ * session. The matcher below already skips `/api/*`; listing it here keeps it
+ * public if the matcher ever starts covering API routes.
+ */
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/error', '/api/ingest/']
 
 export async function middleware(request: NextRequest) {
   let supabaseUrl: string

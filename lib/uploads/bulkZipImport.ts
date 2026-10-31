@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { PHOTO_TAG_NEEDS_LOCATION } from '@/lib/constants/photoTags'
+import { withNeedsLocationTag } from '@/lib/constants/photoTags'
 import {
   formDefaultsFromAi,
   MAX_UPLOAD_BYTES,
@@ -83,9 +83,7 @@ export async function buildFormForBulkFile(
   const title = (fromAi.title ?? file.name.replace(/\.[^.]+$/, '')).trim() || 'Untitled'
   const category = (fromAi.category ?? 'neighborhood') as Category
   const baseTags = [...(fromAi.tags ?? ai?.tags ?? [])]
-  const tagsWithout = baseTags.filter((t) => t !== PHOTO_TAG_NEEDS_LOCATION)
-  const hasLocation = Boolean(neighborhood?.trim())
-  const tags = hasLocation ? tagsWithout : [...tagsWithout, PHOTO_TAG_NEEDS_LOCATION]
+  const tags = withNeedsLocationTag(baseTags, neighborhood)
   return {
     title,
     category,
