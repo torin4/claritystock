@@ -1,7 +1,7 @@
 # Gemini Integration Skill — Clarity Stock
 
 ## Model
-Always use `gemini-2.0-flash` for photo tagging. Do not use Gemini 1.5, Gemini Pro, or any other variant unless explicitly specified.
+Photo tagging goes through `tagImage()` in `lib/ai/tagImage.ts`, which tries `DEFAULT_VISION_MODELS` in order: `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-flash-lite` (verified 2026-11-10). Do not hardcode another model id elsewhere. `gemini-2.0-flash` and all Gemini 1.5 ids are retired and return 404. Google retires ids regularly, so check https://ai.google.dev/gemini-api/docs/deprecations before changing the chain. `GEMINI_VISION_MODEL` puts one id at the front of the chain.
 
 ## Package
 ```bash
@@ -20,7 +20,7 @@ if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is required')
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 
-export const geminiFlash = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+export const geminiFlash = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' })
 ```
 
 **Rules:**
@@ -135,7 +135,7 @@ async function safeTagPhoto(base64: string, mimeType: string): Promise<GeminiTag
 
 ## Cost Management
 
-- `gemini-2.0-flash` is cheap but not free — don't call it more than once per photo
+- `gemini-3.8-flash` is cheap but not free — don't call it more than once per photo
 - Cache results: store the Gemini output in the `photos` table immediately, never re-tag
 - Don't call Gemini for thumbnail previews or re-uploads of the same photo
 - Batch: process photos sequentially not in parallel to avoid rate limits
