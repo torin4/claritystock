@@ -47,7 +47,7 @@ There are two account types: **Photographer** and **Admin**. The admin panel wil
 | Database | Supabase (Postgres) |
 | Auth | Supabase Auth |
 | File Storage | Supabase Storage |
-| AI Tagging | Gemini Vision (`gemini-2.0-flash`) |
+| AI Tagging | Gemini Vision (`gemini-3.8-flash`, with fallbacks in `lib/ai/tagImage.ts`) |
 | GPS Extraction | `exifr` (client-side) |
 | Reverse Geocoding | Google Maps Geocoding API |
 | Styling | Tailwind CSS + shadcn/ui (match existing design system exactly) |
@@ -191,7 +191,8 @@ const data = await res.json()
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+// Model ids are retired over time; the live fallback chain is DEFAULT_VISION_MODELS in lib/ai/tagImage.ts
+const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' })
 
 const prompt = `You are a real estate photography assistant for a luxury Pacific Northwest property library.
 

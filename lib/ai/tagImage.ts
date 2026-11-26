@@ -101,14 +101,17 @@ The image immediately after this text is the **only** photo to title, tag, and c
 
 export type GenMode = 'plain' | 'json' | 'json_schema'
 
-/** Vision-capable models for Google AI Studio; IDs change — set GEMINI_VISION_MODEL to one that works for your key. */
+/**
+ * Vision-capable models for Google AI Studio, newest first. Each was verified
+ * against this prompt and schema with a live call on 2026-11-10. IDs get
+ * retired (see https://ai.google.dev/gemini-api/docs/deprecations ), and a
+ * fully dead chain fails silently into the soft fallback, so re-verify when
+ * that page changes. Set GEMINI_VISION_MODEL to try a specific id first.
+ */
 const DEFAULT_VISION_MODELS = [
-  'gemini-2.5-flash',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
   'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-002',
-  'gemini-1.5-flash-8b',
 ] as const
 
 function visionModelCandidates(): string[] {
